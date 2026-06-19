@@ -192,9 +192,6 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
             if (!hasMutation && stepNumber < 12) {
               return { toolChoice: { type: "tool", toolName: "write_file" }, activeTools: ["write_file"] };
             }
-            if (hasMutation) {
-              return { activeTools: ["list_files", "read_file"] };
-            }
             return undefined;
           },
           stopWhen: stepCountIs(50),
