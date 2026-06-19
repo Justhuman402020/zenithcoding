@@ -88,10 +88,12 @@ function ProjectEditor() {
   const [attachments, setAttachments] = useState<{ name: string; mediaType: string; url: string }[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
+  const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  tokenRef.current = token;
 
   // load project + files + history + token
   useEffect(() => {
@@ -189,15 +191,15 @@ function ProjectEditor() {
       new DefaultChatTransport({
         api: "/api/public/chat",
         headers: () => ({
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(tokenRef.current ? { Authorization: `Bearer ${tokenRef.current}` } : {}),
           "x-project-id": projectId,
         }),
       }),
-    [token, projectId],
+    [projectId],
   );
 
   const { messages, sendMessage, status } = useChat({
-    id: projectId,
+    id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
     onError: (err) => toast.error(err.message),
