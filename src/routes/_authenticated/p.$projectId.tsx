@@ -5,6 +5,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -27,6 +38,9 @@ import {
   Paperclip,
   Camera,
   X,
+  Globe,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -131,6 +145,20 @@ function languageOf(path: string): string {
   }
 }
 
+function suggestSlug(name: string, projectId: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  if (base.length >= 3) return base;
+  return `site-${projectId.slice(0, 6)}`;
+}
+
+function normalizeSlug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}
+
 function ProjectEditor() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
@@ -142,6 +170,13 @@ function ProjectEditor() {
   const [previewKey, setPreviewKey] = useState(0);
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("chat");
+
+  // publish state
+  const [published, setPublished] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [slugDraft, setSlugDraft] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   // chat state
   const [input, setInput] = useState("");
@@ -161,7 +196,7 @@ function ProjectEditor() {
   useEffect(() => {
     (async () => {
       const [{ data: proj }, { data: fileData }, { data: msgs }, { data: sess }] = await Promise.all([
-        supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
+        supabase.from("projects").select("name,published,slug").eq("id", projectId).maybeSingle(),
         supabase.from("files").select("id,path,content").eq("project_id", projectId).order("path"),
         supabase.from("chat_messages").select("id,role,content,created_at").eq("project_id", projectId).order("created_at"),
         supabase.auth.getSession(),
@@ -172,6 +207,10 @@ function ProjectEditor() {
         return;
       }
       setProjectName(proj.name);
+      setPublished(!!(proj as any).published);
+      const existingSlug = (proj as any).slug ?? "";
+      setSlug(existingSlug);
+      setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
       const list = (fileData ?? []) as ProjectFile[];
       setFiles(list);
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
@@ -333,6 +372,65 @@ function ProjectEditor() {
     setAttachments((cur) => [...cur, ...reads].slice(0, 4));
   }
 
+  const publicUrl = useMemo(() => {
+    if (typeof window === "undefined" || !slug) return "";
+    return `${window.location.origin}/s/${slug}`;
+  }, [slug]);
+
+  async function handlePublish() {
+    const cleanSlug = normalizeSlug(slugDraft);
+    if (cleanSlug.length < 3) {
+      toast.error("URL name must be at least 3 characters (letters, numbers, dashes)");
+      return;
+    }
+    setPublishing(true);
+    // Check slug availability (only if it changed)
+    if (cleanSlug !== slug) {
+      const { data: clash } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("slug", cleanSlug)
+        .neq("id", projectId)
+        .maybeSingle();
+      if (clash) {
+        setPublishing(false);
+        toast.error("That URL name is taken. Try another one.");
+        return;
+      }
+    }
+    const { error } = await supabase
+      .from("projects")
+      .update({ slug: cleanSlug, published: true })
+      .eq("id", projectId);
+    setPublishing(false);
+    if (error) return toast.error(error.message);
+    setSlug(cleanSlug);
+    setPublished(true);
+    toast.success("Site published");
+  }
+
+  async function handleUnpublish() {
+    setPublishing(true);
+    const { error } = await supabase
+      .from("projects")
+      .update({ published: false })
+      .eq("id", projectId);
+    setPublishing(false);
+    if (error) return toast.error(error.message);
+    setPublished(false);
+    toast.success("Site unpublished");
+  }
+
+  async function copyPublicUrl() {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Could not copy");
+    }
+  }
+
   // persist assistant messages when they complete
   const lastPersistedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -375,6 +473,16 @@ function ProjectEditor() {
             <RefreshCw className="h-4 w-4" />
           </Button>
         )}
+        <Button
+          size="sm"
+          variant={published ? "secondary" : "default"}
+          onClick={() => setPublishOpen(true)}
+          className="h-9 gap-1.5"
+          title={published ? "Manage published site" : "Publish this site"}
+        >
+          <Globe className="h-4 w-4" />
+          <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
+        </Button>
       </header>
 
       {/* Tabs */}
@@ -613,6 +721,91 @@ function ProjectEditor() {
           </div>
         )}
       </div>
+
+      <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              {published ? "Your site is live" : "Publish your site"}
+            </DialogTitle>
+            <DialogDescription>
+              {published
+                ? "Anyone with the link can view your site. Update it any time."
+                : "Pick a URL name and we'll publish your project to the public web."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="slug">URL name</Label>
+              <div className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 focus-within:ring-2 focus-within:ring-ring">
+                <span className="text-xs text-muted-foreground select-none">/s/</span>
+                <Input
+                  id="slug"
+                  value={slugDraft}
+                  onChange={(e) => setSlugDraft(normalizeSlug(e.target.value))}
+                  placeholder="my-cool-site"
+                  className="border-0 bg-transparent px-0 focus-visible:ring-0 h-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Letters, numbers and dashes — 3 to 40 characters.
+              </p>
+            </div>
+
+            {published && publicUrl && (
+              <div className="space-y-1.5">
+                <Label>Public link</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 truncate rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+                    {publicUrl}
+                  </div>
+                  <Button type="button" size="icon" variant="outline" onClick={copyPublicUrl} className="h-9 w-9 shrink-0" title="Copy link">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-accent shrink-0"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-border bg-card/40 p-3 text-xs text-muted-foreground">
+              <strong className="text-foreground">Custom domain?</strong> Coming soon — for now every published site lives at{" "}
+              <code className="bg-muted px-1 py-0.5 rounded">/s/your-name</code> on this app's domain.
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            {published && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUnpublish}
+                disabled={publishing}
+              >
+                Unpublish
+              </Button>
+            )}
+            <Button type="button" onClick={handlePublish} disabled={publishing}>
+              {publishing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : published ? (
+                "Update"
+              ) : (
+                "Publish"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
