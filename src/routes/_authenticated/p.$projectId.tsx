@@ -295,25 +295,27 @@ function ProjectEditor() {
 
   // build preview srcDoc
   const previewDoc = useMemo(() => {
-    const indexHtml = files.find((f) => f.path === "index.html")?.content;
-    if (!indexHtml) return "<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem'>No <code>index.html</code> yet. Ask the AI to create one.</body></html>";
-    const fileMap = new Map(files.map((f) => [f.path, f.content]));
+    const fileMap = new Map(files.map((f) => [normalizeAssetPath(f.path), f.content]));
+    const currentPath = fileMap.has(normalizeAssetPath(previewPath)) ? normalizeAssetPath(previewPath) : "index.html";
+    const currentHtml = fileMap.get(currentPath);
+    if (!currentHtml) return "<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem'>No <code>index.html</code> yet. Ask the AI to create one.</body></html>";
     // inline <link href="x.css"> and <script src="x.js">
-    let html = indexHtml.replace(/<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g, (m, href) => {
+    let html = currentHtml.replace(/<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g, (m, href) => {
       if (/^(https?:)?\/\//i.test(href) || href.startsWith("data:") || href.startsWith("#")) return m;
-      const css = fileMap.get(normalizeAssetPath(href));
+      const css = fileMap.get(resolveProjectPath(href, currentPath));
       if (css == null) return m;
       return `<style data-from="${href}">${css}</style>`;
     });
     html = html.replace(/<script\s+([^>]*?)src=["']([^"']+)["']([^>]*)>\s*<\/script>/g, (m, pre, src, post) => {
       if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:") || src.startsWith("#")) return m;
-      const js = fileMap.get(normalizeAssetPath(src));
+      const js = fileMap.get(resolveProjectPath(src, currentPath));
       if (js == null) return m;
       const attrs = `${pre}${post}`.trim();
       return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
     });
-    return html;
-  }, [files]);
+    const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
+    return html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
+  }, [files, previewPath]);
 
   const transport = useMemo(
     () =>
