@@ -24,6 +24,9 @@ import {
   FileSearch,
   FileX2,
   ListTree,
+  Paperclip,
+  Camera,
+  X,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -82,10 +85,13 @@ function ProjectEditor() {
 
   // chat state
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<{ name: string; mediaType: string; url: string }[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // load project + files + history + token
   useEffect(() => {
@@ -181,7 +187,7 @@ function ProjectEditor() {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: "/api/chat",
+        api: "/api/public/chat",
         headers: () => ({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           "x-project-id": projectId,
@@ -218,9 +224,11 @@ function ProjectEditor() {
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || isStreaming || !token) return;
+    if ((!text && attachments.length === 0) || isStreaming || !token) return;
     setInput("");
-    await sendMessage({ text });
+    const files = attachments.map((a) => ({ type: "file" as const, mediaType: a.mediaType, url: a.url, filename: a.name }));
+    setAttachments([]);
+    await sendMessage({ text: text || "(see attached image)", files });
     // persist user message
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
@@ -231,6 +239,23 @@ function ProjectEditor() {
         content: text,
       });
     }
+  }
+
+  async function onPickFiles(list: FileList | null) {
+    if (!list) return;
+    const arr = Array.from(list).slice(0, 4);
+    const reads = await Promise.all(
+      arr.map(
+        (f) =>
+          new Promise<{ name: string; mediaType: string; url: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: f.name, mediaType: f.type || "image/png", url: reader.result as string });
+            reader.onerror = reject;
+            reader.readAsDataURL(f);
+          }),
+      ),
+    );
+    setAttachments((cur) => [...cur, ...reads].slice(0, 4));
   }
 
   // persist assistant messages when they complete
