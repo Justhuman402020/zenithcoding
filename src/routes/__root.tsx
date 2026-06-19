@@ -77,16 +77,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Forge — AI Coding Workspace" },
+      { title: "Zenith.Coding" },
       { name: "description", content: "Your personal AI-powered coding workspace. Build apps with a chat." },
       { name: "theme-color", content: "#7c3aed" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: "Forge" },
-      { property: "og:title", content: "Forge — AI Coding Workspace" },
+      { property: "og:title", content: "Zenith.Coding" },
       { property: "og:description", content: "Your personal AI-powered coding workspace. Build apps with a chat." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Zenith.Coding" },
+      { name: "twitter:description", content: "Your personal AI-powered coding workspace. Build apps with a chat." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d8c760d5-cd86-4ab2-9df1-8b5d7c99c21e" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d8c760d5-cd86-4ab2-9df1-8b5d7c99c21e" },
     ],
     links: [
       {
