@@ -238,7 +238,7 @@ function ProjectEditor() {
         </div>
       </header>
 
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1">
         {/* Files */}
         <ResizablePanel defaultSize={16} minSize={10} className="bg-sidebar">
           <div className="h-full flex flex-col">
@@ -283,7 +283,7 @@ function ProjectEditor() {
 
         {/* Chat + Editor */}
         <ResizablePanel defaultSize={50} minSize={30}>
-          <ResizablePanelGroup direction="vertical">
+          <ResizablePanelGroup orientation="vertical">
             <ResizablePanel defaultSize={55} minSize={20}>
               {activeFile ? (
                 <Editor
