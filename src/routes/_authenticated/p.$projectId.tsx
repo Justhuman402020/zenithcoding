@@ -407,8 +407,47 @@ function ProjectEditor() {
                 </div>
               )}
             </div>
-            <form onSubmit={handleSend} className="p-3 border-t border-border flex gap-2 items-end bg-card/40">
-              <Textarea
+            <form onSubmit={handleSend} className="p-3 border-t border-border bg-card/40 space-y-2">
+              {attachments.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto">
+                  {attachments.map((a, i) => (
+                    <div key={i} className="relative shrink-0">
+                      <img src={a.url} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((cur) => cur.filter((_, j) => j !== i))}
+                        className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 items-end">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
+                />
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image">
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo">
+                  <Camera className="h-4 w-4" />
+                </Button>
+                <Textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -422,10 +461,11 @@ function ProjectEditor() {
                 disabled={!token}
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
-              />
-              <Button type="submit" size="icon" className="h-11 w-11 shrink-0" disabled={!input.trim() || !token || isStreaming}>
-                {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
+                />
+                <Button type="submit" size="icon" className="h-11 w-11 shrink-0" disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}>
+                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
             </form>
           </div>
         )}
