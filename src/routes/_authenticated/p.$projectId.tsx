@@ -145,6 +145,20 @@ function languageOf(path: string): string {
   }
 }
 
+function suggestSlug(name: string, projectId: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  if (base.length >= 3) return base;
+  return `site-${projectId.slice(0, 6)}`;
+}
+
+function normalizeSlug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}
+
 function ProjectEditor() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
