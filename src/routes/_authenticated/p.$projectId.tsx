@@ -160,7 +160,7 @@ function normalizeSlug(s: string): string {
 }
 
 function normalizeAssetPath(path: string): string {
-  return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/, "/");
+  return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
 }
 
 function ProjectEditor() {
