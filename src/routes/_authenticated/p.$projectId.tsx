@@ -372,6 +372,65 @@ function ProjectEditor() {
     setAttachments((cur) => [...cur, ...reads].slice(0, 4));
   }
 
+  const publicUrl = useMemo(() => {
+    if (typeof window === "undefined" || !slug) return "";
+    return `${window.location.origin}/s/${slug}`;
+  }, [slug]);
+
+  async function handlePublish() {
+    const cleanSlug = normalizeSlug(slugDraft);
+    if (cleanSlug.length < 3) {
+      toast.error("URL name must be at least 3 characters (letters, numbers, dashes)");
+      return;
+    }
+    setPublishing(true);
+    // Check slug availability (only if it changed)
+    if (cleanSlug !== slug) {
+      const { data: clash } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("slug", cleanSlug)
+        .neq("id", projectId)
+        .maybeSingle();
+      if (clash) {
+        setPublishing(false);
+        toast.error("That URL name is taken. Try another one.");
+        return;
+      }
+    }
+    const { error } = await supabase
+      .from("projects")
+      .update({ slug: cleanSlug, published: true })
+      .eq("id", projectId);
+    setPublishing(false);
+    if (error) return toast.error(error.message);
+    setSlug(cleanSlug);
+    setPublished(true);
+    toast.success("Site published");
+  }
+
+  async function handleUnpublish() {
+    setPublishing(true);
+    const { error } = await supabase
+      .from("projects")
+      .update({ published: false })
+      .eq("id", projectId);
+    setPublishing(false);
+    if (error) return toast.error(error.message);
+    setPublished(false);
+    toast.success("Site unpublished");
+  }
+
+  async function copyPublicUrl() {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Could not copy");
+    }
+  }
+
   // persist assistant messages when they complete
   const lastPersistedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
