@@ -11,7 +11,8 @@ export const Route = createFileRoute("/api/public/chat")({
         const auth = request.headers.get("authorization") ?? "";
         const token = auth.replace(/^Bearer\s+/i, "");
         const projectId = request.headers.get("x-project-id");
-        if (!token) return new Response("Unauthorized", { status: 401 });
+        console.log("[chat] POST", { hasToken: !!token, projectId });
+        if (!token) return new Response("Unauthorized: missing token", { status: 401 });
         if (!projectId) return new Response("Missing project", { status: 400 });
 
         const lovableKey = process.env.LOVABLE_API_KEY;
@@ -25,7 +26,10 @@ export const Route = createFileRoute("/api/public/chat")({
         });
 
         const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
-        if (userErr || !userRes.user) return new Response("Unauthorized", { status: 401 });
+        if (userErr || !userRes.user) {
+          console.log("[chat] getUser failed", userErr?.message);
+          return new Response(`Unauthorized: ${userErr?.message ?? "no user"}`, { status: 401 });
+        }
         const userId = userRes.user.id;
 
         // confirm project belongs to user
