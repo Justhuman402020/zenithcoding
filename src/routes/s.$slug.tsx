@@ -44,7 +44,7 @@ export const Route = createFileRoute("/s/$slug")({
         // Inline <link href="..."> CSS and <script src="..."> JS from project files
         let html = indexHtml.replace(
           /<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g,
-          (m, href) => {
+          (m: string, href: string) => {
             const css = map.get(href);
             if (css == null) return m;
             return `<style data-from="${href}">${css}</style>`;
@@ -52,7 +52,7 @@ export const Route = createFileRoute("/s/$slug")({
         );
         html = html.replace(
           /<script\s+([^>]*?)src=["']([^"']+)["']([^>]*)>\s*<\/script>/g,
-          (m, pre, src, post) => {
+          (m: string, pre: string, src: string, post: string) => {
             const js = map.get(src);
             if (js == null) return m;
             const typeAttr = /type=/.test(pre + post) ? "" : ' type="text/javascript"';
