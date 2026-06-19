@@ -560,6 +560,17 @@ function ProjectEditor() {
         </Button>
         <Button
           size="sm"
+          variant="ghost"
+          onClick={revertToLastStable}
+          disabled={reverting}
+          className="h-9 gap-1.5"
+          title="Undo the most recent build and restore the previous version"
+        >
+          {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+          <span className="hidden xs:inline text-xs">Revert</span>
+        </Button>
+        <Button
+          size="sm"
           variant={published ? "secondary" : "default"}
           onClick={() => setPublishOpen(true)}
           className="h-9 gap-1.5"
