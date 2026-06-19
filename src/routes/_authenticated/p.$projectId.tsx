@@ -183,11 +183,13 @@ function ProjectEditor() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
+  const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const refreshedToolResultsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
@@ -317,6 +319,24 @@ function ProjectEditor() {
   });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    let shouldRefresh = false;
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (typeof part.type !== "string" || !part.type.startsWith("tool-")) continue;
+        const toolPart = part as any;
+        const toolName = toolPart.type.replace("tool-", "");
+        const key = `${message.id}:${toolName}:${toolPart.toolCallId ?? toolPart.input?.path ?? "tool"}`;
+        if (toolPart.state !== "output-available" || refreshedToolResultsRef.current.has(key)) continue;
+        refreshedToolResultsRef.current.add(key);
+        if (toolName === "write_file" || toolName === "delete_file") shouldRefresh = true;
+      }
+    }
+    if (!shouldRefresh) return;
+    refreshFiles();
+    setPreviewKey((k) => k + 1);
+  }, [messages]);
 
   // auto-scroll chat
   useEffect(() => {
