@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 
-type WriteResult = { ok: boolean; path: string; bytes: number } | { ok: false; path: string; error: string };
+type WriteResult = { ok: true; path: string; bytes: number } | { ok: false; path: string; error: string };
 
 function getToolOutput(result: unknown) {
   if (!result || typeof result !== "object") return undefined;
