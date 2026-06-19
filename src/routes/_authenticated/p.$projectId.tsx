@@ -4,12 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  ResizablePanel,
-  ResizablePanelGroup,
-  ResizableHandle,
-} from "@/components/ui/resizable";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -19,8 +14,16 @@ import {
   Send,
   Sparkles,
   Trash2,
-  Play,
   Loader2,
+  MessageSquare,
+  Eye,
+  Code2,
+  CheckCircle2,
+  Pencil,
+  FilePlus2,
+  FileSearch,
+  FileX2,
+  ListTree,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -31,6 +34,25 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 });
 
 type ProjectFile = { id: string; path: string; content: string };
+
+type TabKey = "chat" | "preview" | "code";
+
+function toolLabel(toolName: string, input: any, state: string) {
+  const verbing = state === "output-available" ? "done" : "active";
+  const path = input?.path as string | undefined;
+  switch (toolName) {
+    case "write_file":
+      return { icon: verbing === "done" ? CheckCircle2 : Pencil, label: verbing === "done" ? `Updated ${path ?? "file"}` : `Editing ${path ?? "file"}…` };
+    case "read_file":
+      return { icon: FileSearch, label: verbing === "done" ? `Read ${path ?? "file"}` : `Reading ${path ?? "file"}…` };
+    case "delete_file":
+      return { icon: FileX2, label: verbing === "done" ? `Deleted ${path ?? "file"}` : `Deleting ${path ?? "file"}…` };
+    case "list_files":
+      return { icon: ListTree, label: verbing === "done" ? "Listed files" : "Listing files…" };
+    default:
+      return { icon: Sparkles, label: toolName };
+  }
+}
 
 function languageOf(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -56,11 +78,14 @@ function ProjectEditor() {
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [previewKey, setPreviewKey] = useState(0);
   const [token, setToken] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabKey>("chat");
 
   // chat state
   const [input, setInput] = useState("");
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // load project + files + history + token
   useEffect(() => {
@@ -174,10 +199,21 @@ function ProjectEditor() {
       // AI may have written files via tools
       refreshFiles();
       setPreviewKey((k) => k + 1);
+      setTimeout(() => inputRef.current?.focus(), 50);
     },
   });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  // auto-scroll chat
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, isStreaming]);
+
+  // keep input focused
+  useEffect(() => {
+    if (chatReady) inputRef.current?.focus();
+  }, [chatReady, tab]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -222,173 +258,217 @@ function ProjectEditor() {
   }, [messages, isStreaming, projectId]);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-background">
-      <header className="h-12 border-b border-border flex items-center px-3 gap-3 shrink-0">
-        <Link to="/" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
-            <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
+    <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
+      {/* Header */}
+      <header className="h-14 border-b border-border flex items-center px-3 gap-2 shrink-0">
+        <Link to="/" className="p-2 -ml-2 text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0" style={{ background: "var(--gradient-primary)" }}>
+            <Sparkles className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-sm font-medium">{projectName}</span>
+          <span className="text-sm font-semibold truncate">{projectName}</span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setPreviewKey((k) => k + 1)}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Reload preview
+        {tab === "preview" && (
+          <Button size="sm" variant="ghost" onClick={() => setPreviewKey((k) => k + 1)} className="h-9">
+            <RefreshCw className="h-4 w-4" />
           </Button>
-        </div>
+        )}
       </header>
 
-      <ResizablePanelGroup orientation="horizontal" className="flex-1">
-        {/* Files */}
-        <ResizablePanel defaultSize={16} minSize={10} className="bg-sidebar">
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Files</span>
-              <button onClick={createFile} className="p-1 rounded hover:bg-accent" aria-label="New file">
+      {/* Tabs */}
+      <nav className="flex border-b border-border shrink-0 bg-card/40">
+        {([
+          { k: "chat", label: "Chat", icon: MessageSquare },
+          { k: "preview", label: "Preview", icon: Eye },
+          { k: "code", label: "Code", icon: Code2 },
+        ] as const).map(({ k, label, icon: Icon }) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors border-b-2 ${
+              tab === k
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Tab content */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {tab === "chat" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              {chatReady && messages.length === 0 && (
+                <div className="text-center py-12 space-y-3">
+                  <div className="h-12 w-12 mx-auto rounded-xl flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
+                    <Sparkles className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  <h2 className="text-base font-semibold">What do you want to build?</h2>
+                  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                    Describe your idea and I'll create it. You'll see the changes live in the Preview tab.
+                  </p>
+                  <div className="grid gap-2 max-w-xs mx-auto pt-2">
+                    {[
+                      "Make a landing page for a coffee shop",
+                      "Build a todo list app",
+                      "Create a portfolio site",
+                    ].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setInput(s)}
+                        className="text-left text-sm px-3 py-2 rounded-lg border border-border hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.map((m) => {
+                const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+                const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
+                return (
+                  <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
+                    <div
+                      className={
+                        m.role === "user"
+                          ? "rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] bg-primary text-primary-foreground text-sm whitespace-pre-wrap"
+                          : "max-w-full text-sm space-y-2 w-full"
+                      }
+                    >
+                      {toolParts.length > 0 && (
+                        <div className="space-y-1.5">
+                          {toolParts.map((t, i) => {
+                            const name = t.type.replace("tool-", "");
+                            const { icon: Icon, label } = toolLabel(name, t.input, t.state);
+                            const active = t.state !== "output-available";
+                            return (
+                              <div
+                                key={i}
+                                className="flex items-center gap-2 text-xs rounded-lg border border-border bg-card/60 px-3 py-2"
+                              >
+                                {active ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                                ) : (
+                                  <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+                                )}
+                                <span className="truncate">{label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {m.role === "assistant"
+                        ? text && (
+                            <div className="prose prose-invert prose-sm max-w-none break-words">
+                              <ReactMarkdown>{text}</ReactMarkdown>
+                            </div>
+                          )
+                        : <span>{text}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {isStreaming && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  <span>Working…</span>
+                </div>
+              )}
+            </div>
+            <form onSubmit={handleSend} className="p-3 border-t border-border flex gap-2 items-end bg-card/40">
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e as any);
+                  }
+                }}
+                placeholder="Ask Forge to build…"
+                disabled={!token}
+                rows={1}
+                className="resize-none min-h-[44px] max-h-32 text-base"
+              />
+              <Button type="submit" size="icon" className="h-11 w-11 shrink-0" disabled={!input.trim() || !token || isStreaming}>
+                {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </form>
+          </div>
+        )}
+
+        {tab === "preview" && (
+          <iframe
+            key={previewKey}
+            title="preview"
+            sandbox="allow-scripts allow-forms allow-modals"
+            className="flex-1 bg-white w-full"
+            srcDoc={previewDoc}
+          />
+        )}
+
+        {tab === "code" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/40 shrink-0">
+              {loadingFiles ? (
+                <span className="px-3 py-2 text-xs text-muted-foreground">Loading…</span>
+              ) : files.length === 0 ? (
+                <span className="px-3 py-2 text-xs text-muted-foreground">No files yet — ask Forge to create one</span>
+              ) : (
+                files.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setActivePath(f.path)}
+                    className={`group flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 ${
+                      activePath === f.path
+                        ? "border-primary text-foreground"
+                        : "border-transparent text-muted-foreground"
+                    }`}
+                  >
+                    <FileIcon className="h-3 w-3" />
+                    {f.path}
+                    <Trash2
+                      onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
+                      className="h-3 w-3 ml-1 opacity-40 hover:opacity-100 hover:text-destructive"
+                    />
+                  </button>
+                ))
+              )}
+              <button onClick={createFile} className="px-3 py-2 text-xs text-primary shrink-0">
                 <FilePlus className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto py-1">
-              {loadingFiles ? (
-                <div className="px-3 py-2 text-xs text-muted-foreground">Loading…</div>
-              ) : files.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-muted-foreground">No files yet</div>
-              ) : (
-                files.map((f) => (
-                  <div
-                    key={f.id}
-                    className={`group flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer hover:bg-accent/40 ${
-                      activePath === f.path ? "bg-accent/60 text-foreground" : "text-muted-foreground"
-                    }`}
-                    onClick={() => setActivePath(f.path)}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{f.path}</span>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive"
-                      aria-label="delete"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </ResizablePanel>
-        <ResizableHandle />
-
-        {/* Chat + Editor */}
-        <ResizablePanel defaultSize={50} minSize={30}>
-          <ResizablePanelGroup orientation="vertical">
-            <ResizablePanel defaultSize={55} minSize={20}>
-              {activeFile ? (
-                <Editor
-                  height="100%"
-                  theme="vs-dark"
-                  path={activeFile.path}
-                  language={languageOf(activeFile.path)}
-                  value={activeFile.content}
-                  onChange={(v) => saveActive(v ?? "")}
-                  options={{
-                    fontSize: 13,
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: "on",
-                  }}
-                />
-              ) : (
-                <div className="h-full grid place-items-center text-sm text-muted-foreground">
-                  Select a file to edit
-                </div>
-              )}
-            </ResizablePanel>
-            <ResizableHandle />
-            <ResizablePanel defaultSize={45} minSize={20} className="flex flex-col bg-card">
-              <div className="px-3 py-2 border-b border-border flex items-center gap-2">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">AI Chat</span>
+            {activeFile ? (
+              <Editor
+                height="100%"
+                theme="vs-dark"
+                path={activeFile.path}
+                language={languageOf(activeFile.path)}
+                value={activeFile.content}
+                onChange={(v) => saveActive(v ?? "")}
+                options={{
+                  fontSize: 13,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                }}
+              />
+            ) : (
+              <div className="h-full grid place-items-center text-sm text-muted-foreground p-6 text-center">
+                Select a file above to view or edit its code
               </div>
-              <div className="flex-1 overflow-auto p-4 space-y-4">
-                {chatReady && messages.length === 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    Ask the AI to build something. It can create, read and edit files in this project.
-                  </div>
-                )}
-                {messages.map((m) => {
-                  const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
-                  const tools = m.parts.filter((p): p is Extract<typeof p, { type: `tool-${string}` }> => p.type.startsWith("tool-"));
-                  return (
-                    <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
-                      <div
-                        className={
-                          m.role === "user"
-                            ? "rounded-lg px-3 py-2 max-w-[85%] bg-primary text-primary-foreground text-sm"
-                            : "max-w-full text-sm space-y-2"
-                        }
-                      >
-                        {tools.length > 0 && (
-                          <div className="space-y-1">
-                            {tools.map((t, i) => (
-                              <div key={i} className="text-xs rounded border border-border bg-background/40 px-2 py-1 text-muted-foreground">
-                                <span className="text-primary">⚡</span> {t.type.replace("tool-", "")}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {m.role === "assistant" ? (
-                          <div className="prose prose-invert prose-sm max-w-none">
-                            <ReactMarkdown>{text}</ReactMarkdown>
-                          </div>
-                        ) : (
-                          <span>{text}</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {isStreaming && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking…
-                  </div>
-                )}
-              </div>
-              <form onSubmit={handleSend} className="p-3 border-t border-border flex gap-2">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask the AI to build, edit, or explain…"
-                  disabled={!token || isStreaming}
-                />
-                <Button type="submit" size="icon" disabled={!input.trim() || !token || isStreaming}>
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </ResizablePanel>
-        <ResizableHandle />
-
-        {/* Preview */}
-        <ResizablePanel defaultSize={34} minSize={20}>
-          <div className="h-full flex flex-col bg-background">
-            <div className="px-3 py-2 border-b border-border flex items-center gap-2">
-              <Play className="h-3.5 w-3.5 text-primary" />
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Preview</span>
-            </div>
-            <iframe
-              key={previewKey}
-              title="preview"
-              sandbox="allow-scripts allow-forms allow-modals"
-              className="flex-1 bg-white"
-              srcDoc={previewDoc}
-            />
+            )}
           </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        )}
+      </div>
     </div>
   );
 }
