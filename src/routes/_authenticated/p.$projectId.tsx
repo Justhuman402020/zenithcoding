@@ -317,6 +317,31 @@ function ProjectEditor() {
     return html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
   }, [files, previewPath]);
 
+  useEffect(() => {
+    const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
+    if (files.length > 0 && !available.has(normalizeAssetPath(previewPath)) && available.has("index.html")) {
+      setPreviewPath("index.html");
+    }
+  }, [files, previewPath]);
+
+  useEffect(() => {
+    function onPreviewMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; path?: string } | undefined;
+      if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
+      const targetPath = resolveProjectPath(data.path, previewPath);
+      const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
+      const finalPath = available.has(targetPath) ? targetPath : available.has(`${targetPath}.html`) ? `${targetPath}.html` : null;
+      if (!finalPath) {
+        toast.error(`${targetPath} was not created yet`);
+        return;
+      }
+      setPreviewPath(finalPath);
+      setPreviewKey((key) => key + 1);
+    }
+    window.addEventListener("message", onPreviewMessage);
+    return () => window.removeEventListener("message", onPreviewMessage);
+  }, [files, previewPath]);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
