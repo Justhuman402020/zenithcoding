@@ -5,10 +5,25 @@ function normalizeAssetPath(path: string): string {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
 }
 
+function resolveProjectPath(path: string, fromPath = "index.html"): string {
+  const raw = path.trim().split("#")[0].split("?")[0];
+  if (!raw || raw === "/") return "index.html";
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(raw)) return raw;
+  if (raw.startsWith("/")) return normalizeAssetPath(raw);
+  const baseDir = fromPath.includes("/") ? `${fromPath.split("/").slice(0, -1).join("/")}/` : "";
+  const parts: string[] = [];
+  for (const part of `${baseDir}${raw}`.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/") || "index.html";
+}
+
 export const Route = createFileRoute("/s/$slug")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ params, request }) => {
         const url = process.env.SUPABASE_URL;
         const key = process.env.SUPABASE_PUBLISHABLE_KEY;
         if (!url || !key) return new Response("Server not configured", { status: 500 });
@@ -36,9 +51,11 @@ export const Route = createFileRoute("/s/$slug")({
           .select("path,content")
           .eq("project_id", project.id);
 
-        const map = new Map((files ?? []).map((f) => [f.path, f.content]));
-        const indexHtml = map.get("index.html");
-        if (!indexHtml) {
+        const map = new Map((files ?? []).map((f) => [normalizeAssetPath(f.path), f.content]));
+        const requestedPage = resolveProjectPath(new URL(request.url).searchParams.get("page") ?? "index.html");
+        const currentPath = map.has(requestedPage) ? requestedPage : "index.html";
+        const currentHtml = map.get(currentPath);
+        if (!currentHtml) {
           return new Response(emptyHtml(project.name), {
             status: 200,
             headers: { "content-type": "text/html; charset=utf-8" },
@@ -46,11 +63,11 @@ export const Route = createFileRoute("/s/$slug")({
         }
 
         // Inline <link href="..."> CSS and <script src="..."> JS from project files
-        let html = indexHtml.replace(
+        let html = currentHtml.replace(
           /<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g,
           (m: string, href: string) => {
             if (/^(https?:)?\/\//i.test(href) || href.startsWith("data:") || href.startsWith("#")) return m;
-            const css = map.get(normalizeAssetPath(href));
+            const css = map.get(resolveProjectPath(href, currentPath));
             if (css == null) return m;
             return `<style data-from="${href}">${css}</style>`;
           },
@@ -59,12 +76,14 @@ export const Route = createFileRoute("/s/$slug")({
           /<script\s+([^>]*?)src=["']([^"']+)["']([^>]*)>\s*<\/script>/g,
           (m: string, pre: string, src: string, post: string) => {
             if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:") || src.startsWith("#")) return m;
-            const js = map.get(normalizeAssetPath(src));
+            const js = map.get(resolveProjectPath(src, currentPath));
             if (js == null) return m;
             const attrs = `${pre}${post}`.trim();
             return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
           },
         );
+        const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    window.location.href = '/s/${escapeJs(params.slug)}?page=' + encodeURIComponent(href);\n  });\n})();\n<\/script>`;
+        html = html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
 
         return new Response(html, {
           status: 200,
@@ -89,5 +108,11 @@ function emptyHtml(name: string) {
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
+}
+
+function escapeJs(s: string) {
+  return s.replace(/[\\'"\n\r<>&]/g, (c) =>
+    ({ "\\": "\\\\", "'": "\\'", '"': '\\"', "\n": "\\n", "\r": "\\r", "<": "\\u003c", ">": "\\u003e", "&": "\\u0026" })[c]!,
   );
 }

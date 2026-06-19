@@ -164,6 +164,24 @@ function normalizeAssetPath(path: string): string {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
 }
 
+function isExternalNavigationTarget(path: string): boolean {
+  return /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(path.trim());
+}
+
+function resolveProjectPath(path: string, fromPath = "index.html"): string {
+  const raw = path.trim().split("#")[0].split("?")[0];
+  if (!raw || raw === "/") return "index.html";
+  if (raw.startsWith("/")) return normalizeAssetPath(raw);
+  const baseDir = fromPath.includes("/") ? `${fromPath.split("/").slice(0, -1).join("/")}/` : "";
+  const parts: string[] = [];
+  for (const part of `${baseDir}${raw}`.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/") || "index.html";
+}
+
 function ProjectEditor() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
@@ -173,6 +191,7 @@ function ProjectEditor() {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [previewKey, setPreviewKey] = useState(0);
+  const [previewPath, setPreviewPath] = useState("index.html");
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("chat");
 
@@ -276,25 +295,52 @@ function ProjectEditor() {
 
   // build preview srcDoc
   const previewDoc = useMemo(() => {
-    const indexHtml = files.find((f) => f.path === "index.html")?.content;
-    if (!indexHtml) return "<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem'>No <code>index.html</code> yet. Ask the AI to create one.</body></html>";
-    const fileMap = new Map(files.map((f) => [f.path, f.content]));
+    const fileMap = new Map(files.map((f) => [normalizeAssetPath(f.path), f.content]));
+    const currentPath = fileMap.has(normalizeAssetPath(previewPath)) ? normalizeAssetPath(previewPath) : "index.html";
+    const currentHtml = fileMap.get(currentPath);
+    if (!currentHtml) return "<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem'>No <code>index.html</code> yet. Ask the AI to create one.</body></html>";
     // inline <link href="x.css"> and <script src="x.js">
-    let html = indexHtml.replace(/<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g, (m, href) => {
+    let html = currentHtml.replace(/<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g, (m, href) => {
       if (/^(https?:)?\/\//i.test(href) || href.startsWith("data:") || href.startsWith("#")) return m;
-      const css = fileMap.get(normalizeAssetPath(href));
+      const css = fileMap.get(resolveProjectPath(href, currentPath));
       if (css == null) return m;
       return `<style data-from="${href}">${css}</style>`;
     });
     html = html.replace(/<script\s+([^>]*?)src=["']([^"']+)["']([^>]*)>\s*<\/script>/g, (m, pre, src, post) => {
       if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:") || src.startsWith("#")) return m;
-      const js = fileMap.get(normalizeAssetPath(src));
+      const js = fileMap.get(resolveProjectPath(src, currentPath));
       if (js == null) return m;
       const attrs = `${pre}${post}`.trim();
       return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
     });
-    return html;
-  }, [files]);
+    const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
+    return html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
+  }, [files, previewPath]);
+
+  useEffect(() => {
+    const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
+    if (files.length > 0 && !available.has(normalizeAssetPath(previewPath)) && available.has("index.html")) {
+      setPreviewPath("index.html");
+    }
+  }, [files, previewPath]);
+
+  useEffect(() => {
+    function onPreviewMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; path?: string } | undefined;
+      if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
+      const targetPath = resolveProjectPath(data.path, previewPath);
+      const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
+      const finalPath = available.has(targetPath) ? targetPath : available.has(`${targetPath}.html`) ? `${targetPath}.html` : null;
+      if (!finalPath) {
+        toast.error(`${targetPath} was not created yet`);
+        return;
+      }
+      setPreviewPath(finalPath);
+      setPreviewKey((key) => key + 1);
+    }
+    window.addEventListener("message", onPreviewMessage);
+    return () => window.removeEventListener("message", onPreviewMessage);
+  }, [files, previewPath]);
 
   const transport = useMemo(
     () =>
@@ -329,6 +375,7 @@ function ProjectEditor() {
 
   useEffect(() => {
     let shouldRefresh = false;
+    let nextPreviewPath: string | null = null;
     for (const message of messages) {
       for (const part of message.parts) {
         if (typeof part.type !== "string" || !part.type.startsWith("tool-")) continue;
@@ -338,10 +385,17 @@ function ProjectEditor() {
         if (toolPart.state !== "output-available" || refreshedToolResultsRef.current.has(key)) continue;
         refreshedToolResultsRef.current.add(key);
         if (toolName === "write_file" || toolName === "delete_file") shouldRefresh = true;
+        const writtenPath = normalizeAssetPath(String(toolPart.input?.path ?? toolPart.output?.path ?? ""));
+        if (toolName === "write_file" && /\.html?$/i.test(writtenPath)) {
+          if (/(auth|sign|signup|login|register)/i.test(writtenPath)) nextPreviewPath = writtenPath;
+          else nextPreviewPath ??= writtenPath;
+        }
       }
     }
     if (!shouldRefresh) return;
     refreshFiles();
+    if (nextPreviewPath) setPreviewPath(nextPreviewPath);
+    setTab("preview");
     setPreviewKey((k) => k + 1);
   }, [messages]);
 
