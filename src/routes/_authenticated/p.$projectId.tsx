@@ -494,11 +494,21 @@ function ProjectEditor() {
           </div>
           <span className="text-sm font-semibold truncate">{projectName}</span>
         </div>
-        {tab === "preview" && (
-          <Button size="sm" variant="ghost" onClick={() => setPreviewKey((k) => k + 1)} className="h-9">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={async () => {
+            await refreshFiles();
+            setPreviewKey((k) => k + 1);
+            if (tab !== "preview") setTab("preview");
+            toast.success("Rebuilt preview from latest files");
+          }}
+          className="h-9 gap-1.5"
+          title="Rebuild and revert preview to the latest saved files"
+        >
+          <RefreshCw className="h-4 w-4" />
+          <span className="hidden xs:inline text-xs">Rebuild</span>
+        </Button>
         <Button
           size="sm"
           variant={published ? "secondary" : "default"}
