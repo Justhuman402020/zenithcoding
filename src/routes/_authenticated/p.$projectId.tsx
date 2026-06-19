@@ -375,6 +375,7 @@ function ProjectEditor() {
 
   useEffect(() => {
     let shouldRefresh = false;
+    let nextPreviewPath: string | null = null;
     for (const message of messages) {
       for (const part of message.parts) {
         if (typeof part.type !== "string" || !part.type.startsWith("tool-")) continue;
@@ -384,10 +385,17 @@ function ProjectEditor() {
         if (toolPart.state !== "output-available" || refreshedToolResultsRef.current.has(key)) continue;
         refreshedToolResultsRef.current.add(key);
         if (toolName === "write_file" || toolName === "delete_file") shouldRefresh = true;
+        const writtenPath = normalizeAssetPath(String(toolPart.input?.path ?? toolPart.output?.path ?? ""));
+        if (toolName === "write_file" && /\.html?$/i.test(writtenPath)) {
+          if (/(auth|sign|signup|login|register)/i.test(writtenPath)) nextPreviewPath = writtenPath;
+          else nextPreviewPath ??= writtenPath;
+        }
       }
     }
     if (!shouldRefresh) return;
     refreshFiles();
+    if (nextPreviewPath) setPreviewPath(nextPreviewPath);
+    setTab("preview");
     setPreviewKey((k) => k + 1);
   }, [messages]);
 
