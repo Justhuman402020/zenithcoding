@@ -40,6 +40,66 @@ type ProjectFile = { id: string; path: string; content: string };
 
 type TabKey = "chat" | "preview" | "code";
 
+type AttachmentFrame = { name: string; mediaType: string; url: string };
+type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function sampleVideoFrames(file: File, maxFrames = 4): Promise<AttachmentFrame[]> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = objectUrl;
+
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("Could not read video"));
+      video.load();
+    });
+
+    const sourceWidth = video.videoWidth || 640;
+    const sourceHeight = video.videoHeight || 360;
+    const width = Math.min(sourceWidth, 960);
+    const height = Math.max(1, Math.round(width * (sourceHeight / sourceWidth)));
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+    const count = Math.min(maxFrames, Math.max(1, Math.ceil(duration)));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return [];
+
+    const frames: AttachmentFrame[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const targetTime = Math.min(duration - 0.05, Math.max(0, ((index + 1) / (count + 1)) * duration));
+      await new Promise<void>((resolve, reject) => {
+        video.onseeked = () => resolve();
+        video.onerror = () => reject(new Error("Could not sample video"));
+        video.currentTime = Number.isFinite(targetTime) ? targetTime : 0;
+      });
+      context.drawImage(video, 0, 0, width, height);
+      frames.push({
+        name: `${file.name} frame ${index + 1}.jpg`,
+        mediaType: "image/jpeg",
+        url: canvas.toDataURL("image/jpeg", 0.78),
+      });
+    }
+    return frames;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function toolLabel(toolName: string, input: any, state: string) {
   const verbing = state === "output-available" ? "done" : "active";
   const path = input?.path as string | undefined;
@@ -85,13 +145,17 @@ function ProjectEditor() {
 
   // chat state
   const [input, setInput] = useState("");
-  const [attachments, setAttachments] = useState<{ name: string; mediaType: string; url: string }[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
+  const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   // load project + files + history + token
   useEffect(() => {
@@ -188,16 +252,20 @@ function ProjectEditor() {
     () =>
       new DefaultChatTransport({
         api: "/api/public/chat",
-        headers: () => ({
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          "x-project-id": projectId,
-        }),
+        headers: async () => {
+          const { data } = await supabase.auth.getSession();
+          const accessToken = data.session?.access_token ?? tokenRef.current;
+          return {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            "x-project-id": projectId,
+          };
+        },
       }),
-    [token, projectId],
+    [projectId],
   );
 
   const { messages, sendMessage, status } = useChat({
-    id: projectId,
+    id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
     onError: (err) => toast.error(err.message),
@@ -226,9 +294,16 @@ function ProjectEditor() {
     const text = input.trim();
     if ((!text && attachments.length === 0) || isStreaming || !token) return;
     setInput("");
-    const files = attachments.map((a) => ({ type: "file" as const, mediaType: a.mediaType, url: a.url, filename: a.name }));
+    const videoNotes = attachments
+      .filter((a) => a.mediaType.startsWith("video/"))
+      .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
+    const messageText = [text, ...videoNotes].filter(Boolean).join("\n\n");
+    const files = attachments.flatMap((a) => {
+      const visualParts = a.mediaType.startsWith("video/") ? (a.frames ?? []) : [a];
+      return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
+    });
     setAttachments([]);
-    await sendMessage({ text: text || "(see attached image)", files });
+    await sendMessage({ text: messageText || "(see attached image)", files });
     // persist user message
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
@@ -236,7 +311,7 @@ function ProjectEditor() {
         project_id: projectId,
         user_id: userRes.user.id,
         role: "user",
-        content: text,
+        content: messageText,
       });
     }
   }
@@ -245,15 +320,15 @@ function ProjectEditor() {
     if (!list) return;
     const arr = Array.from(list).slice(0, 4);
     const reads = await Promise.all(
-      arr.map(
-        (f) =>
-          new Promise<{ name: string; mediaType: string; url: string }>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve({ name: f.name, mediaType: f.type || "image/png", url: reader.result as string });
-            reader.onerror = reject;
-            reader.readAsDataURL(f);
-          }),
-      ),
+      arr.map(async (f) => {
+        const mediaType = f.type || (f.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "image/png");
+        const url = await readFileAsDataUrl(f);
+        if (mediaType.startsWith("video/")) {
+          const frames = await sampleVideoFrames(f).catch(() => []);
+          return { name: f.name, mediaType, url, frames };
+        }
+        return { name: f.name, mediaType, url };
+      }),
     );
     setAttachments((cur) => [...cur, ...reads].slice(0, 4));
   }

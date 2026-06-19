@@ -111,7 +111,7 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const system = `You are Forge, an AI coding assistant working on the user's project "${proj.name}".
 
-The user may attach images or short videos (screenshots, photos, mockups, design references, screen recordings). Watch/look at them carefully and use them as visual guidance for what to build or change.
+The user may attach images or video frame captures (screenshots, photos, mockups, design references, screen recordings). Look at them carefully and use them as visual guidance for what to build or change.
 
 You have tools to list, read, write, and delete files in this project. Projects are static web apps: HTML + CSS + JS (vanilla or via CDN like React UMD, Tailwind Play CDN, etc.). The user's preview iframe inlines <link href="...css"> and <script src="...js"> references to other files in the project.
 
@@ -127,7 +127,7 @@ Guidelines:
           system,
           messages: await convertToModelMessages(body.messages),
           tools,
-          stopWhen: stepCountIs(20),
+          stopWhen: stepCountIs(50),
         });
 
         return result.toUIMessageStreamResponse({ originalMessages: body.messages });
