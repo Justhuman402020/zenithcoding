@@ -52,8 +52,8 @@ export const Route = createFileRoute("/s/$slug")({
           .eq("project_id", project.id);
 
         const map = new Map((files ?? []).map((f) => [normalizeAssetPath(f.path), f.content]));
-        const requestedPage = new URL(request.url).searchParams.get("page") ?? "index.html";
-        const currentPath = map.has(normalizeAssetPath(requestedPage)) ? normalizeAssetPath(requestedPage) : "index.html";
+        const requestedPage = resolveProjectPath(new URL(request.url).searchParams.get("page") ?? "index.html");
+        const currentPath = map.has(requestedPage) ? requestedPage : "index.html";
         const currentHtml = map.get(currentPath);
         if (!currentHtml) {
           return new Response(emptyHtml(project.name), {
