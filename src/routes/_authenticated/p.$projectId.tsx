@@ -250,10 +250,14 @@ function ProjectEditor() {
     () =>
       new DefaultChatTransport({
         api: "/api/public/chat",
-        headers: () => ({
-          ...(tokenRef.current ? { Authorization: `Bearer ${tokenRef.current}` } : {}),
-          "x-project-id": projectId,
-        }),
+        headers: async () => {
+          const { data } = await supabase.auth.getSession();
+          const accessToken = data.session?.access_token ?? tokenRef.current;
+          return {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            "x-project-id": projectId,
+          };
+        },
       }),
     [projectId],
   );
