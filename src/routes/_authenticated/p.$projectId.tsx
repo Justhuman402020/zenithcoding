@@ -414,6 +414,16 @@ function ProjectEditor() {
             <RefreshCw className="h-4 w-4" />
           </Button>
         )}
+        <Button
+          size="sm"
+          variant={published ? "secondary" : "default"}
+          onClick={() => setPublishOpen(true)}
+          className="h-9 gap-1.5"
+          title={published ? "Manage published site" : "Publish this site"}
+        >
+          <Globe className="h-4 w-4" />
+          <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
+        </Button>
       </header>
 
       {/* Tabs */}
