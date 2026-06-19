@@ -176,7 +176,7 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
               return { toolChoice: { type: "tool", toolName: "list_files" }, activeTools: ["list_files"] };
             }
             if (!hasRead && !hasMutation && stepNumber < 4) {
-              return { toolChoice: "required", activeTools: ["read_file", "write_file"] };
+              return { toolChoice: { type: "tool", toolName: "read_file" }, activeTools: ["read_file"] };
             }
             if (!hasMutation && stepNumber < 8) {
               return { toolChoice: "required", activeTools: ["write_file", "delete_file"] };
