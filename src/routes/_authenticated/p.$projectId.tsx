@@ -164,6 +164,24 @@ function normalizeAssetPath(path: string): string {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
 }
 
+function isExternalNavigationTarget(path: string): boolean {
+  return /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(path.trim());
+}
+
+function resolveProjectPath(path: string, fromPath = "index.html"): string {
+  const raw = path.trim().split("#")[0].split("?")[0];
+  if (!raw || raw === "/") return "index.html";
+  if (raw.startsWith("/")) return normalizeAssetPath(raw);
+  const baseDir = fromPath.includes("/") ? `${fromPath.split("/").slice(0, -1).join("/")}/` : "";
+  const parts: string[] = [];
+  for (const part of `${baseDir}${raw}`.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/") || "index.html";
+}
+
 function ProjectEditor() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
@@ -173,6 +191,7 @@ function ProjectEditor() {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [previewKey, setPreviewKey] = useState(0);
+  const [previewPath, setPreviewPath] = useState("index.html");
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("chat");
 
