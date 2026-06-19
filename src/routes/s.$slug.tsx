@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 
+function normalizeAssetPath(path: string): string {
+  return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
+}
+
 export const Route = createFileRoute("/s/$slug")({
   server: {
     handlers: {
@@ -45,7 +49,8 @@ export const Route = createFileRoute("/s/$slug")({
         let html = indexHtml.replace(
           /<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g,
           (m: string, href: string) => {
-            const css = map.get(href);
+            if (/^(https?:)?\/\//i.test(href) || href.startsWith("data:") || href.startsWith("#")) return m;
+            const css = map.get(normalizeAssetPath(href));
             if (css == null) return m;
             return `<style data-from="${href}">${css}</style>`;
           },
@@ -53,10 +58,11 @@ export const Route = createFileRoute("/s/$slug")({
         html = html.replace(
           /<script\s+([^>]*?)src=["']([^"']+)["']([^>]*)>\s*<\/script>/g,
           (m: string, pre: string, src: string, post: string) => {
-            const js = map.get(src);
+            if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:") || src.startsWith("#")) return m;
+            const js = map.get(normalizeAssetPath(src));
             if (js == null) return m;
-            const typeAttr = /type=/.test(pre + post) ? "" : ' type="text/javascript"';
-            return `<script${typeAttr} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
+            const attrs = `${pre}${post}`.trim();
+            return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
           },
         );
 
