@@ -721,6 +721,91 @@ function ProjectEditor() {
           </div>
         )}
       </div>
+
+      <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              {published ? "Your site is live" : "Publish your site"}
+            </DialogTitle>
+            <DialogDescription>
+              {published
+                ? "Anyone with the link can view your site. Update it any time."
+                : "Pick a URL name and we'll publish your project to the public web."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="slug">URL name</Label>
+              <div className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 focus-within:ring-2 focus-within:ring-ring">
+                <span className="text-xs text-muted-foreground select-none">/s/</span>
+                <Input
+                  id="slug"
+                  value={slugDraft}
+                  onChange={(e) => setSlugDraft(normalizeSlug(e.target.value))}
+                  placeholder="my-cool-site"
+                  className="border-0 bg-transparent px-0 focus-visible:ring-0 h-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Letters, numbers and dashes — 3 to 40 characters.
+              </p>
+            </div>
+
+            {published && publicUrl && (
+              <div className="space-y-1.5">
+                <Label>Public link</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 truncate rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+                    {publicUrl}
+                  </div>
+                  <Button type="button" size="icon" variant="outline" onClick={copyPublicUrl} className="h-9 w-9 shrink-0" title="Copy link">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-accent shrink-0"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-border bg-card/40 p-3 text-xs text-muted-foreground">
+              <strong className="text-foreground">Custom domain?</strong> Coming soon — for now every published site lives at{" "}
+              <code className="bg-muted px-1 py-0.5 rounded">/s/your-name</code> on this app's domain.
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            {published && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUnpublish}
+                disabled={publishing}
+              >
+                Unpublish
+              </Button>
+            )}
+            <Button type="button" onClick={handlePublish} disabled={publishing}>
+              {publishing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : published ? (
+                "Update"
+              ) : (
+                "Publish"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
