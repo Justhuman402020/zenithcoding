@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 
-export const Route = createFileRoute("/api/chat")({
+export const Route = createFileRoute("/api/public/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -106,6 +106,8 @@ export const Route = createFileRoute("/api/chat")({
         };
 
         const system = `You are Forge, an AI coding assistant working on the user's project "${proj.name}".
+
+The user may attach images (screenshots, photos, mockups, design references). Look at them carefully and use them as visual guidance for what to build or change.
 
 You have tools to list, read, write, and delete files in this project. Projects are static web apps: HTML + CSS + JS (vanilla or via CDN like React UMD, Tailwind Play CDN, etc.). The user's preview iframe inlines <link href="...css"> and <script src="...js"> references to other files in the project.
 
