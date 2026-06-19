@@ -5,6 +5,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -27,6 +38,9 @@ import {
   Paperclip,
   Camera,
   X,
+  Globe,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -143,6 +157,13 @@ function ProjectEditor() {
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("chat");
 
+  // publish state
+  const [published, setPublished] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [slugDraft, setSlugDraft] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
   // chat state
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -161,7 +182,7 @@ function ProjectEditor() {
   useEffect(() => {
     (async () => {
       const [{ data: proj }, { data: fileData }, { data: msgs }, { data: sess }] = await Promise.all([
-        supabase.from("projects").select("name").eq("id", projectId).maybeSingle(),
+        supabase.from("projects").select("name,published,slug").eq("id", projectId).maybeSingle(),
         supabase.from("files").select("id,path,content").eq("project_id", projectId).order("path"),
         supabase.from("chat_messages").select("id,role,content,created_at").eq("project_id", projectId).order("created_at"),
         supabase.auth.getSession(),
@@ -172,6 +193,10 @@ function ProjectEditor() {
         return;
       }
       setProjectName(proj.name);
+      setPublished(!!(proj as any).published);
+      const existingSlug = (proj as any).slug ?? "";
+      setSlug(existingSlug);
+      setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
       const list = (fileData ?? []) as ProjectFile[];
       setFiles(list);
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
