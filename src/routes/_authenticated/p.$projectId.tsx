@@ -562,7 +562,7 @@ function ProjectEditor() {
                 const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
-                const workOpen = openWorkLogs[m.id] ?? isStreaming;
+                const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
                 return (
                   <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                     <div
