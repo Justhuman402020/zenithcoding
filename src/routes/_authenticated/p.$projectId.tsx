@@ -561,6 +561,8 @@ function ProjectEditor() {
               {messages.map((m) => {
                 const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
+                const showTools = toolParts.length > 0;
+                const workOpen = openWorkLogs[m.id] ?? isStreaming;
                 return (
                   <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                     <div
@@ -570,26 +572,42 @@ function ProjectEditor() {
                           : "max-w-full text-sm space-y-2 w-full"
                       }
                     >
-                      {toolParts.length > 0 && (
+                      {showTools && (
                         <div className="space-y-1.5">
-                          {toolParts.map((t, i) => {
-                            const name = t.type.replace("tool-", "");
-                            const { icon: Icon, label } = toolLabel(name, t.input, t.state);
-                            const active = t.state !== "output-available";
-                            return (
-                              <div
-                                key={i}
-                                className="flex items-center gap-2 text-xs rounded-lg border border-border bg-card/60 px-3 py-2"
-                              >
-                                {active ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-                                ) : (
-                                  <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
-                                )}
-                                <span className="truncate">{label}</span>
-                              </div>
-                            );
-                          })}
+                          <button
+                            type="button"
+                            onClick={() => setOpenWorkLogs((current) => ({ ...current, [m.id]: !workOpen }))}
+                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+                          >
+                            {toolParts.some((t) => t.state !== "output-available") ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            ) : (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                            )}
+                            View work log
+                          </button>
+                          {workOpen && (
+                            <div className="space-y-1.5">
+                              {toolParts.map((t, i) => {
+                                const name = t.type.replace("tool-", "");
+                                const { icon: Icon, label } = toolLabel(name, t.input, t.state);
+                                const active = t.state !== "output-available";
+                                return (
+                                  <div
+                                    key={i}
+                                    className="flex items-center gap-2 text-xs rounded-lg border border-border bg-card/60 px-3 py-2"
+                                  >
+                                    {active ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                                    ) : (
+                                      <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+                                    )}
+                                    <span className="truncate">{label}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                       {m.role === "assistant"
