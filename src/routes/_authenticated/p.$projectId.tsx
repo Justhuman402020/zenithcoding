@@ -412,7 +412,11 @@ function ProjectEditor() {
                 <div className="flex gap-2 overflow-x-auto">
                   {attachments.map((a, i) => (
                     <div key={i} className="relative shrink-0">
-                      <img src={a.url} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+                      {a.mediaType.startsWith("video/") ? (
+                        <video src={a.url} className="h-16 w-16 object-cover rounded-lg border border-border" muted playsInline />
+                      ) : (
+                        <img src={a.url} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+                      )}
                       <button
                         type="button"
                         onClick={() => setAttachments((cur) => cur.filter((_, j) => j !== i))}
@@ -428,7 +432,7 @@ function ProjectEditor() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   multiple
                   className="hidden"
                   onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
@@ -436,15 +440,15 @@ function ProjectEditor() {
                 <input
                   ref={cameraInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   capture="environment"
                   className="hidden"
                   onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
                 />
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image">
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
                   <Paperclip className="h-4 w-4" />
                 </Button>
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo">
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
                   <Camera className="h-4 w-4" />
                 </Button>
                 <Textarea
