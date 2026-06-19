@@ -60,6 +60,21 @@ export const Route = createFileRoute("/api/public/chat")({
           .join(" ") ?? "";
         const needsFileChange = /\b(build|add|create|make|fix|update|change|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|menu|screen)\b/i.test(lastUserText);
 
+        // Snapshot current files BEFORE the AI mutates anything, so the user
+        // can one-click revert to this stable version if the build fails.
+        if (needsFileChange) {
+          const { data: currentFiles } = await supabase
+            .from("files")
+            .select("path,content")
+            .eq("project_id", projectId);
+          await supabase.from("project_snapshots").insert({
+            project_id: projectId,
+            user_id: userId,
+            label: lastUserText.slice(0, 120) || "pre-build",
+            files: currentFiles ?? [],
+          });
+        }
+
         function normalizePath(path: string) {
           return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
         }

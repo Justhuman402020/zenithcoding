@@ -87,6 +87,33 @@ export type Database = {
           },
         ]
       }
+      project_snapshots: {
+        Row: {
+          created_at: string
+          files: Json
+          id: string
+          label: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          files: Json
+          id?: string
+          label?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          files?: Json
+          id?: string
+          label?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           created_at: string

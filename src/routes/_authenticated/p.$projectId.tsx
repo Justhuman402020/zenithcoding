@@ -41,6 +41,7 @@ import {
   Globe,
   Copy,
   ExternalLink,
+  Undo2,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -457,6 +458,54 @@ function ProjectEditor() {
     }
   }
 
+  const [reverting, setReverting] = useState(false);
+  async function revertToLastStable() {
+    if (reverting) return;
+    if (!confirm("Revert this project to the version saved before your most recent build? This cannot be undone.")) return;
+    setReverting(true);
+    try {
+      const { data: snap, error: snapErr } = await supabase
+        .from("project_snapshots")
+        .select("id,files,created_at")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (snapErr) throw snapErr;
+      if (!snap) {
+        toast.error("No previous version saved yet");
+        return;
+      }
+      const { data: userRes } = await supabase.auth.getUser();
+      if (!userRes.user) {
+        toast.error("Please sign in again");
+        return;
+      }
+      const snapFiles = (snap.files as Array<{ path: string; content: string }>) ?? [];
+      const { error: delErr } = await supabase.from("files").delete().eq("project_id", projectId);
+      if (delErr) throw delErr;
+      if (snapFiles.length > 0) {
+        const rows = snapFiles.map((f) => ({
+          project_id: projectId,
+          user_id: userRes.user!.id,
+          path: f.path,
+          content: f.content,
+        }));
+        const { error: insErr } = await supabase.from("files").insert(rows);
+        if (insErr) throw insErr;
+      }
+      // consume the snapshot so repeated clicks don't keep restoring the same one
+      await supabase.from("project_snapshots").delete().eq("id", snap.id);
+      await refreshFiles();
+      setPreviewKey((k) => k + 1);
+      toast.success("Reverted to last stable version");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not revert");
+    } finally {
+      setReverting(false);
+    }
+  }
+
   // persist assistant messages when they complete
   const lastPersistedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -508,6 +557,17 @@ function ProjectEditor() {
         >
           <RefreshCw className="h-4 w-4" />
           <span className="hidden xs:inline text-xs">Rebuild</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={revertToLastStable}
+          disabled={reverting}
+          className="h-9 gap-1.5"
+          title="Undo the most recent build and restore the previous version"
+        >
+          {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+          <span className="hidden xs:inline text-xs">Revert</span>
         </Button>
         <Button
           size="sm"
