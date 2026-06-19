@@ -5,10 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Sparkles, Trash2, Code2, LogOut } from "lucide-react";
+import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-type Project = { id: string; name: string; description: string | null; updated_at: string };
+type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  updated_at: string;
+  published: boolean;
+  slug: string | null;
+};
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "Forge — your projects" }] }),
@@ -27,7 +34,7 @@ function Dashboard() {
     setLoading(true);
     const { data, error } = await supabase
       .from("projects")
-      .select("id,name,description,updated_at")
+      .select("id,name,description,updated_at,published,slug")
       .order("updated_at", { ascending: false });
     if (error) toast.error(error.message);
     else setProjects(data ?? []);
@@ -152,12 +159,31 @@ function Dashboard() {
             {projects.map((p) => (
               <div key={p.id} className="group relative rounded-xl border border-border bg-card p-5 hover:border-primary/50 transition-colors">
                 <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
-                  <h3 className="font-medium truncate">{p.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium truncate">{p.name}</h3>
+                    {p.published && p.slug && (
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                        <Globe className="h-2.5 w-2.5" /> Live
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5rem]">{p.description || "No description"}</p>
                   <p className="text-xs text-muted-foreground mt-3">
                     Edited {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}
                   </p>
                 </Link>
+                {p.published && p.slug && (
+                  <a
+                    href={`/s/${p.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    /s/{p.slug}
+                  </a>
+                )}
                 <button
                   onClick={() => deleteProject(p.id)}
                   className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
