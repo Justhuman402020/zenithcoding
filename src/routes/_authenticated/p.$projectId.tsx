@@ -428,7 +428,7 @@ function ProjectEditor() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   multiple
                   className="hidden"
                   onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
@@ -436,15 +436,15 @@ function ProjectEditor() {
                 <input
                   ref={cameraInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   capture="environment"
                   className="hidden"
                   onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
                 />
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image">
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
                   <Paperclip className="h-4 w-4" />
                 </Button>
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo">
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
                   <Camera className="h-4 w-4" />
                 </Button>
                 <Textarea
