@@ -41,6 +41,7 @@ import {
   Globe,
   Copy,
   ExternalLink,
+  Undo2,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
