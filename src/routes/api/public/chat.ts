@@ -45,6 +45,18 @@ export const Route = createFileRoute("/api/public/chat")({
           return new Response("messages required", { status: 400 });
         }
 
+        const lastUserText = [...body.messages]
+          .reverse()
+          .find((message) => message.role === "user")
+          ?.parts
+          ?.map((part) => (part.type === "text" ? part.text : ""))
+          .join(" ") ?? "";
+        const needsFileChange = /\b(build|add|create|make|fix|update|change|implement|design|remove|delete|edit|style|wire|connect)\b/i.test(lastUserText);
+
+        function normalizePath(path: string) {
+          return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
+        }
+
         const gateway = createLovableAiGatewayProvider(lovableKey);
         const model = gateway("google/gemini-3-flash-preview");
 
@@ -65,11 +77,12 @@ export const Route = createFileRoute("/api/public/chat")({
             description: "Read the contents of a file in the project.",
             inputSchema: z.object({ path: z.string() }),
             execute: async ({ path }) => {
+              const cleanPath = normalizePath(path);
               const { data, error } = await supabase
                 .from("files")
                 .select("content")
                 .eq("project_id", projectId)
-                .eq("path", path)
+                .eq("path", cleanPath)
                 .maybeSingle();
               if (error) return { error: error.message };
               if (!data) return { error: "not found" };
@@ -84,25 +97,36 @@ export const Route = createFileRoute("/api/public/chat")({
               content: z.string().describe("Full file contents"),
             }),
             execute: async ({ path, content }) => {
+              const cleanPath = normalizePath(path);
+              if (!cleanPath || cleanPath.includes("..")) return { ok: false, error: "Invalid file path" };
               const { error } = await supabase
                 .from("files")
                 .upsert(
-                  { project_id: projectId, user_id: userId, path, content },
+                  { project_id: projectId, user_id: userId, path: cleanPath, content },
                   { onConflict: "project_id,path" },
                 );
               if (error) return { ok: false, error: error.message };
-              return { ok: true, path };
+              const { data: saved, error: verifyError } = await supabase
+                .from("files")
+                .select("content")
+                .eq("project_id", projectId)
+                .eq("path", cleanPath)
+                .maybeSingle();
+              if (verifyError) return { ok: false, error: verifyError.message };
+              if (!saved || saved.content !== content) return { ok: false, error: "File write did not persist" };
+              return { ok: true, path: cleanPath };
             },
           }),
           delete_file: tool({
             description: "Delete a file from the project.",
             inputSchema: z.object({ path: z.string() }),
             execute: async ({ path }) => {
+              const cleanPath = normalizePath(path);
               const { error } = await supabase
                 .from("files")
                 .delete()
                 .eq("project_id", projectId)
-                .eq("path", path);
+                .eq("path", cleanPath);
               if (error) return { ok: false, error: error.message };
               return { ok: true };
             },
@@ -141,6 +165,24 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
           system,
           messages: await convertToModelMessages(body.messages),
           tools,
+          prepareStep: ({ steps, stepNumber }) => {
+            if (!needsFileChange) return undefined;
+            const toolResults = steps.flatMap((step) => step.toolResults);
+            const hasListed = toolResults.some((result) => result.toolName === "list_files");
+            const hasRead = toolResults.some((result) => result.toolName === "read_file");
+            const hasMutation = toolResults.some((result) => result.toolName === "write_file" || result.toolName === "delete_file");
+
+            if (stepNumber === 0 || !hasListed) {
+              return { toolChoice: { type: "tool", toolName: "list_files" }, activeTools: ["list_files"] };
+            }
+            if (!hasRead && !hasMutation && stepNumber < 4) {
+              return { toolChoice: { type: "tool", toolName: "read_file" }, activeTools: ["read_file"] };
+            }
+            if (!hasMutation && stepNumber < 8) {
+              return { toolChoice: "required", activeTools: ["write_file", "delete_file"] };
+            }
+            return undefined;
+          },
           stopWhen: stepCountIs(50),
         });
 

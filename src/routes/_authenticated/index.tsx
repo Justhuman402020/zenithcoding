@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink } from "lucide-react";
+import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink, Share2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 type Project = {
@@ -92,6 +92,20 @@ function Dashboard() {
     setProjects((p) => p.filter((x) => x.id !== id));
   }
 
+  function publicSiteUrl(slug: string) {
+    if (typeof window === "undefined") return `/s/${slug}`;
+    return `${window.location.origin}/s/${slug}`;
+  }
+
+  async function shareProject(slug: string) {
+    try {
+      await navigator.clipboard.writeText(publicSiteUrl(slug));
+      toast.success("Public link copied");
+    } catch {
+      toast.error("Could not copy link");
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     navigate({ to: "/auth" });
@@ -173,16 +187,31 @@ function Dashboard() {
                   </p>
                 </Link>
                 {p.published && p.slug && (
-                  <a
-                    href={`/s/${p.slug}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    /s/{p.slug}
-                  </a>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <a
+                      href={`/s/${p.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline min-w-0"
+                    >
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                      <span className="truncate">/s/{p.slug}</span>
+                    </a>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 px-2.5 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        shareProject(p.slug!);
+                      }}
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      Share
+                    </Button>
+                  </div>
                 )}
                 <button
                   onClick={() => deleteProject(p.id)}
