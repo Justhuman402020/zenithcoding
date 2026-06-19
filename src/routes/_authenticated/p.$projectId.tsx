@@ -412,7 +412,11 @@ function ProjectEditor() {
                 <div className="flex gap-2 overflow-x-auto">
                   {attachments.map((a, i) => (
                     <div key={i} className="relative shrink-0">
-                      <img src={a.url} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+                      {a.mediaType.startsWith("video/") ? (
+                        <video src={a.url} className="h-16 w-16 object-cover rounded-lg border border-border" muted playsInline />
+                      ) : (
+                        <img src={a.url} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+                      )}
                       <button
                         type="button"
                         onClick={() => setAttachments((cur) => cur.filter((_, j) => j !== i))}
