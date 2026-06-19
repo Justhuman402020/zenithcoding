@@ -4,6 +4,13 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 
+type WriteResult = { ok: boolean; path: string; bytes: number } | { ok: false; path: string; error: string };
+
+function getToolOutput(result: unknown) {
+  if (!result || typeof result !== "object") return undefined;
+  return "output" in result ? (result as { output?: unknown }).output : undefined;
+}
+
 export const Route = createFileRoute("/api/public/chat")({
   server: {
     handlers: {
@@ -51,7 +58,7 @@ export const Route = createFileRoute("/api/public/chat")({
           ?.parts
           ?.map((part) => (part.type === "text" ? part.text : ""))
           .join(" ") ?? "";
-        const needsFileChange = /\b(build|add|create|make|fix|update|change|implement|design|remove|delete|edit|style|wire|connect)\b/i.test(lastUserText);
+        const needsFileChange = /\b(build|add|create|make|fix|update|change|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|menu|screen)\b/i.test(lastUserText);
 
         function normalizePath(path: string) {
           return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
@@ -91,30 +98,31 @@ export const Route = createFileRoute("/api/public/chat")({
           }),
           write_file: tool({
             description:
-              "Create or overwrite a file in the project with the given full contents. Use this to add new files or update existing ones.",
+              "Create or overwrite a file in the project with the given full contents. This is the ONLY way to make user-visible changes.",
             inputSchema: z.object({
               path: z.string().describe("File path like index.html, app.js, style.css"),
               content: z.string().describe("Full file contents"),
             }),
-            execute: async ({ path, content }) => {
+            execute: async ({ path, content }): Promise<WriteResult> => {
               const cleanPath = normalizePath(path);
-              if (!cleanPath || cleanPath.includes("..")) return { ok: false, error: "Invalid file path" };
+              if (!cleanPath || cleanPath.includes("..")) return { ok: false, path: cleanPath || path, error: "Invalid file path" };
+              if (!content.trim()) return { ok: false, path: cleanPath, error: "Refusing to write an empty file" };
               const { error } = await supabase
                 .from("files")
                 .upsert(
                   { project_id: projectId, user_id: userId, path: cleanPath, content },
                   { onConflict: "project_id,path" },
                 );
-              if (error) return { ok: false, error: error.message };
+              if (error) return { ok: false, path: cleanPath, error: error.message };
               const { data: saved, error: verifyError } = await supabase
                 .from("files")
                 .select("content")
                 .eq("project_id", projectId)
                 .eq("path", cleanPath)
                 .maybeSingle();
-              if (verifyError) return { ok: false, error: verifyError.message };
-              if (!saved || saved.content !== content) return { ok: false, error: "File write did not persist" };
-              return { ok: true, path: cleanPath };
+              if (verifyError) return { ok: false, path: cleanPath, error: verifyError.message };
+              if (!saved || saved.content !== content) return { ok: false, path: cleanPath, error: "File write did not persist" };
+              return { ok: true, path: cleanPath, bytes: content.length };
             },
           }),
           delete_file: tool({
@@ -148,10 +156,11 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
 
 ## How you MUST work on every build request
 1. Call list_files first to see the current state.
-2. read_file on any file you'll modify so you preserve existing work.
+2. read_file index.html and any css/js file you will modify so you preserve existing work.
 3. write_file for every file you create or change — with the COMPLETE, runnable file contents. Do NOT output code in chat instead of writing it. Do NOT say "I'll add..." without calling the tool in the same turn.
-4. Make sure index.html links every css/js file you created.
-5. After the changes land, reply with a 1–3 sentence summary of what you built. Do not paste the code back.
+4. Make sure index.html links every css/js file you created. Prefer simple relative paths like "style.css" and "app.js".
+5. If the user asks for a signup/sign up area, build a visible signup interface in the project itself: email and password fields, clear sign-up button, validation, success/error states, and a working submit handler (local demo behavior is OK unless backend auth is specifically requested).
+6. After the changes land, reply with a 1–3 sentence summary naming the files you changed. If a write tool returns ok:false, say the exact failure instead of claiming success.
 
 ## Behavior rules
 - Default to action. If the request is reasonable (e.g. "build a signup area", "add a contact form", "make it dark mode"), just build it with sensible defaults — do not ask clarifying questions first.
@@ -170,7 +179,9 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
             const toolResults = steps.flatMap((step) => step.toolResults);
             const hasListed = toolResults.some((result) => result.toolName === "list_files");
             const hasRead = toolResults.some((result) => result.toolName === "read_file");
-            const hasMutation = toolResults.some((result) => result.toolName === "write_file" || result.toolName === "delete_file");
+            const writeResults = toolResults.filter((result) => result.toolName === "write_file");
+            const hasSuccessfulWrite = writeResults.some((result) => (getToolOutput(result) as { ok?: boolean } | undefined)?.ok === true);
+            const hasMutation = hasSuccessfulWrite || toolResults.some((result) => result.toolName === "delete_file");
 
             if (stepNumber === 0 || !hasListed) {
               return { toolChoice: { type: "tool", toolName: "list_files" }, activeTools: ["list_files"] };
@@ -178,15 +189,21 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
             if (!hasRead && !hasMutation && stepNumber < 4) {
               return { toolChoice: { type: "tool", toolName: "read_file" }, activeTools: ["read_file"] };
             }
-            if (!hasMutation && stepNumber < 8) {
-              return { toolChoice: "required", activeTools: ["write_file", "delete_file"] };
+            if (!hasMutation && stepNumber < 12) {
+              return { toolChoice: { type: "tool", toolName: "write_file" }, activeTools: ["write_file"] };
+            }
+            if (hasMutation) {
+              return { activeTools: ["list_files", "read_file"] };
             }
             return undefined;
           },
           stopWhen: stepCountIs(50),
         });
 
-        return result.toUIMessageStreamResponse({ originalMessages: body.messages });
+        return result.toUIMessageStreamResponse({
+          originalMessages: body.messages,
+          onError: (error) => (error instanceof Error ? error.message : "The AI build failed before it could write files."),
+        });
       },
     },
   },
