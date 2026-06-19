@@ -159,6 +159,10 @@ function normalizeSlug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 }
 
+function normalizeAssetPath(path: string): string {
+  return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/, "/");
+}
+
 function ProjectEditor() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
@@ -276,15 +280,17 @@ function ProjectEditor() {
     const fileMap = new Map(files.map((f) => [f.path, f.content]));
     // inline <link href="x.css"> and <script src="x.js">
     let html = indexHtml.replace(/<link\s+[^>]*href=["']([^"']+)["'][^>]*>/g, (m, href) => {
-      const css = fileMap.get(href);
+      if (/^(https?:)?\/\//i.test(href) || href.startsWith("data:") || href.startsWith("#")) return m;
+      const css = fileMap.get(normalizeAssetPath(href));
       if (css == null) return m;
       return `<style data-from="${href}">${css}</style>`;
     });
     html = html.replace(/<script\s+([^>]*?)src=["']([^"']+)["']([^>]*)>\s*<\/script>/g, (m, pre, src, post) => {
-      const js = fileMap.get(src);
+      if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:") || src.startsWith("#")) return m;
+      const js = fileMap.get(normalizeAssetPath(src));
       if (js == null) return m;
-      const typeAttr = /type=/.test(pre + post) ? "" : ' type="text/javascript"';
-      return `<script${typeAttr} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
+      const attrs = `${pre}${post}`.trim();
+      return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
     });
     return html;
   }, [files]);
