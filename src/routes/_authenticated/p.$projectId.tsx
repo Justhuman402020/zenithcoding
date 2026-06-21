@@ -188,6 +188,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
+  const { prompt: initialPrompt } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -376,6 +377,27 @@ function ProjectEditor() {
   });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  // Auto-send a prompt passed in via ?prompt= (from the home composer)
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current || !initialPrompt || !chatReady || !token || isStreaming) return;
+    if (initialMessages.length > 0) { autoSentRef.current = true; return; }
+    autoSentRef.current = true;
+    (async () => {
+      await sendMessage({ text: initialPrompt });
+      const { data: userRes } = await supabase.auth.getUser();
+      if (userRes.user) {
+        await supabase.from("chat_messages").insert({
+          project_id: projectId,
+          user_id: userRes.user.id,
+          role: "user",
+          content: initialPrompt,
+        });
+      }
+      navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+    })();
+  }, [initialPrompt, chatReady, token, isStreaming, initialMessages.length, sendMessage, projectId, navigate]);
 
   useEffect(() => {
     let shouldRefresh = false;
