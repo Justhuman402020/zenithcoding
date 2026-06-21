@@ -946,9 +946,8 @@ function ProjectEditor() {
               </div>
             )}
 
-            <div className="rounded-md border border-border bg-card/40 p-3 text-xs text-muted-foreground">
-              <strong className="text-foreground">Custom domain?</strong> Coming soon — for now every published site lives at{" "}
-              <code className="bg-muted px-1 py-0.5 rounded">/s/your-name</code> on this app's domain.
+            <div className="border-t border-border pt-4">
+              <DomainsPanel projectId={projectId} />
             </div>
           </div>
 
