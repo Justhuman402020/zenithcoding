@@ -726,10 +726,12 @@ function ProjectEditor() {
                 const showTools = toolParts.length > 0;
                 const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
                 const reasoningParts = m.parts.filter(
-                  (p): p is { type: "reasoning"; text: string; state?: string } =>
-                    p.type === "reasoning",
+                  (p): p is Extract<typeof p, { type: "reasoning" }> => p.type === "reasoning",
                 );
-                const reasoningText = reasoningParts.map((p) => p.text).join("\n").trim();
+                const reasoningText = reasoningParts
+                  .map((p) => (p as any).text ?? "")
+                  .join("\n")
+                  .trim();
                 const isLastStreaming = isStreaming && m.id === messages[messages.length - 1]?.id;
                 const thinkingActive =
                   isLastStreaming &&
