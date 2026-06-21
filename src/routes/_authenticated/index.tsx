@@ -229,6 +229,8 @@ function Dashboard() {
         .single();
       if (projErr) throw projErr;
       if (!project) throw new Error("Could not create project");
+      const projectId = project.id;
+      const userId = userRes.user.id;
 
       // Fetch raw files with limited concurrency
       const stripPrefix = (p: string) => (subpath ? p.replace(new RegExp(`^${subpath}/?`), "") : p);
@@ -245,8 +247,8 @@ function Dashboard() {
             if (r.ok) {
               const text = await r.text();
               files.push({
-                project_id: project.id,
-                user_id: userRes.user!.id,
+                project_id: projectId,
+                user_id: userId,
                 path: stripPrefix(b.path),
                 content: text,
               });
@@ -269,8 +271,8 @@ function Dashboard() {
           files.unshift({ ...candidate, path: "index.html" });
         } else {
           files.push({
-            project_id: project.id,
-            user_id: userRes.user.id,
+            project_id: projectId,
+            user_id: userId,
             path: "index.html",
             content: `<!doctype html><html><head><meta charset="utf-8"/><title>${projectName}</title></head><body style="font-family:system-ui;padding:2rem;background:#0f0c1a;color:#e8e3f5"><h1>${projectName}</h1><p>Imported from github.com/${owner}/${repo}. Open the file tree to start editing — ask the AI to wire up a homepage.</p></body></html>`,
           });
