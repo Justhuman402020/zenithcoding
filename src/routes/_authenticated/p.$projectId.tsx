@@ -45,9 +45,13 @@ import {
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
+import { DomainsPanel } from "@/components/DomainsPanel";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    prompt: typeof search.prompt === "string" ? search.prompt : undefined,
+  }),
   component: ProjectEditor,
 });
 
@@ -184,6 +188,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
+  const { prompt: initialPrompt } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -372,6 +377,27 @@ function ProjectEditor() {
   });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  // Auto-send a prompt passed in via ?prompt= (from the home composer)
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current || !initialPrompt || !chatReady || !token || isStreaming) return;
+    if (initialMessages.length > 0) { autoSentRef.current = true; return; }
+    autoSentRef.current = true;
+    (async () => {
+      await sendMessage({ text: initialPrompt });
+      const { data: userRes } = await supabase.auth.getUser();
+      if (userRes.user) {
+        await supabase.from("chat_messages").insert({
+          project_id: projectId,
+          user_id: userRes.user.id,
+          role: "user",
+          content: initialPrompt,
+        });
+      }
+      navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+    })();
+  }, [initialPrompt, chatReady, token, isStreaming, initialMessages.length, sendMessage, projectId, navigate]);
 
   useEffect(() => {
     let shouldRefresh = false;
@@ -945,9 +971,8 @@ function ProjectEditor() {
               </div>
             )}
 
-            <div className="rounded-md border border-border bg-card/40 p-3 text-xs text-muted-foreground">
-              <strong className="text-foreground">Custom domain?</strong> Coming soon — for now every published site lives at{" "}
-              <code className="bg-muted px-1 py-0.5 rounded">/s/your-name</code> on this app's domain.
+            <div className="border-t border-border pt-4">
+              <DomainsPanel projectId={projectId} />
             </div>
           </div>
 
