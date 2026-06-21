@@ -603,12 +603,29 @@ function Dashboard() {
                 <button type="button" onClick={handleDisconnectGh} className="text-muted-foreground hover:text-destructive">Disconnect</button>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Repository</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">
+                    Repository {ghRepos.length > 0 && <span className="text-muted-foreground/60">· {ghRepos.length} found</span>}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={loadRepos}
+                    disabled={ghLoadingRepos}
+                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary disabled:opacity-50"
+                  >
+                    {ghLoadingRepos ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Refresh
+                  </button>
+                </div>
                 <Select value={ghSelectedRepo} onValueChange={(v) => { setGhSelectedRepo(v); setGhBranch(""); }} disabled={ghLoadingRepos || ghImporting}>
                   <SelectTrigger>
                     <SelectValue placeholder={ghLoadingRepos ? "Loading repos…" : "Pick a repository"} />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
+                    {ghRepos.length === 0 && !ghLoadingRepos && (
+                      <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        No repositories visible to this token.
+                      </div>
+                    )}
                     {ghRepos.map((r) => (
                       <SelectItem key={r.full_name} value={r.full_name}>
                         <span className="inline-flex items-center gap-1.5">
@@ -619,6 +636,12 @@ function Dashboard() {
                     ))}
                   </SelectContent>
                 </Select>
+                {ghRepoError && (
+                  <p className="text-[11px] text-destructive/90">{ghRepoError}</p>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Don't see a repo? Make sure the OAuth app has <code className="px-1 rounded bg-muted/40">repo</code> scope, then click Refresh. Or paste a full <code className="px-1 rounded bg-muted/40">https://github.com/owner/repo</code> URL in Branch / Subfolder below.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
