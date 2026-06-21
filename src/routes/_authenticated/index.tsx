@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 
@@ -68,6 +68,7 @@ function Dashboard() {
   const [ghSubpath, setGhSubpath] = useState("");
   const [ghLoadingRepos, setGhLoadingRepos] = useState(false);
   const [ghConnecting, setGhConnecting] = useState(false);
+  const [ghRepoError, setGhRepoError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const startGhAuth = useServerFn(getGithubAuthUrl);
@@ -105,14 +106,26 @@ function Dashboard() {
     return () => window.removeEventListener("message", onMsg);
   }, []);
 
+  async function loadRepos() {
+    setGhLoadingRepos(true);
+    setGhRepoError(null);
+    try {
+      const rs = await fetchGhRepos({});
+      setGhRepos(rs);
+      if (rs.length === 0) setGhRepoError("No repositories found on this GitHub account.");
+    } catch (e: any) {
+      const msg = e?.message || "Could not load repos";
+      setGhRepoError(msg);
+      toast.error(msg);
+    } finally {
+      setGhLoadingRepos(false);
+    }
+  }
+
   // Load repo list when dialog opens (if connected)
   useEffect(() => {
     if (!ghOpen || !ghConnected.connected) return;
-    setGhLoadingRepos(true);
-    fetchGhRepos({})
-      .then((rs) => setGhRepos(rs))
-      .catch((e) => toast.error(e?.message || "Could not load repos"))
-      .finally(() => setGhLoadingRepos(false));
+    loadRepos();
   }, [ghOpen, ghConnected.connected]);
 
   async function connectGithub() {
