@@ -228,6 +228,7 @@ function Dashboard() {
         .select()
         .single();
       if (projErr) throw projErr;
+      if (!project) throw new Error("Could not create project");
 
       // Fetch raw files with limited concurrency
       const stripPrefix = (p: string) => (subpath ? p.replace(new RegExp(`^${subpath}/?`), "") : p);
