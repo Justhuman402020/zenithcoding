@@ -15,6 +15,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
+import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -45,6 +46,11 @@ const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   path: '/p/$projectId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
+  id: '/api/public/github/callback',
+  path: '/api/public/github/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/s/$slug': typeof SSlugRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -68,12 +76,25 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/s/$slug' | '/p/$projectId' | '/api/public/chat'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/s/$slug'
+    | '/p/$projectId'
+    | '/api/public/chat'
+    | '/api/public/github/callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/s/$slug' | '/' | '/p/$projectId' | '/api/public/chat'
+  to:
+    | '/auth'
+    | '/s/$slug'
+    | '/'
+    | '/p/$projectId'
+    | '/api/public/chat'
+    | '/api/public/github/callback'
   id:
     | '__root__'
     | '/_authenticated'
@@ -82,6 +103,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/github/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -89,6 +111,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   SSlugRoute: typeof SSlugRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
+  ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -135,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/github/callback': {
+      id: '/api/public/github/callback'
+      path: '/api/public/github/callback'
+      fullPath: '/api/public/github/callback'
+      preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -156,6 +186,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   SSlugRoute: SSlugRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
+  ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

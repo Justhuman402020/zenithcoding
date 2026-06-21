@@ -1,13 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  getGithubAuthUrl,
+  getGithubStatus,
+  listGithubRepos,
+  importGithubRepoServer,
+  disconnectGithub,
+} from "@/lib/github.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2 } from "lucide-react";
+import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -51,7 +60,20 @@ function Dashboard() {
   const [ghUrl, setGhUrl] = useState("");
   const [ghImporting, setGhImporting] = useState(false);
   const [ghProgress, setGhProgress] = useState<string>("");
+  const [ghConnected, setGhConnected] = useState<{ connected: boolean; login: string | null }>({ connected: false, login: null });
+  const [ghRepos, setGhRepos] = useState<Array<{ full_name: string; private: boolean; default_branch: string; description: string | null }>>([]);
+  const [ghSelectedRepo, setGhSelectedRepo] = useState<string>("");
+  const [ghBranch, setGhBranch] = useState("");
+  const [ghSubpath, setGhSubpath] = useState("");
+  const [ghLoadingRepos, setGhLoadingRepos] = useState(false);
+  const [ghConnecting, setGhConnecting] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  const startGhAuth = useServerFn(getGithubAuthUrl);
+  const fetchGhStatus = useServerFn(getGithubStatus);
+  const fetchGhRepos = useServerFn(listGithubRepos);
+  const importGhRepo = useServerFn(importGithubRepoServer);
+  const disconnectGh = useServerFn(disconnectGithub);
 
   async function load() {
     setLoading(true);
@@ -65,6 +87,55 @@ function Dashboard() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Refresh GitHub status when the dashboard mounts and after the popup signals back
+  useEffect(() => {
+    fetchGhStatus({}).then(setGhConnected).catch(() => {});
+    function onMsg(e: MessageEvent) {
+      if (e.data?.type === "github-connected") {
+        setGhConnecting(false);
+        fetchGhStatus({}).then((s) => {
+          setGhConnected(s);
+          if (s.connected) toast.success(`GitHub connected${s.login ? ` as ${s.login}` : ""}`);
+        }).catch(() => {});
+      }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  // Load repo list when dialog opens (if connected)
+  useEffect(() => {
+    if (!ghOpen || !ghConnected.connected) return;
+    setGhLoadingRepos(true);
+    fetchGhRepos({})
+      .then((rs) => setGhRepos(rs))
+      .catch((e) => toast.error(e?.message || "Could not load repos"))
+      .finally(() => setGhLoadingRepos(false));
+  }, [ghOpen, ghConnected.connected]);
+
+  async function connectGithub() {
+    try {
+      setGhConnecting(true);
+      const { url } = await startGhAuth({});
+      const w = window.open(url, "github-oauth", "width=720,height=820");
+      if (!w) {
+        window.location.href = url;
+        return;
+      }
+    } catch (e: any) {
+      setGhConnecting(false);
+      toast.error(e?.message || "Could not start GitHub auth");
+    }
+  }
+
+  async function handleDisconnectGh() {
+    await disconnectGh({});
+    setGhConnected({ connected: false, login: null });
+    setGhRepos([]);
+    setGhSelectedRepo("");
+    toast.success("Disconnected GitHub");
+  }
 
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
@@ -161,135 +232,85 @@ function Dashboard() {
   async function importFromGithub(e: React.FormEvent) {
     e.preventDefault();
     if (ghImporting) return;
-    const raw = ghUrl.trim();
-    if (!raw) return;
 
-    // Parse owner/repo[/tree/branch[/subpath...]]
-    let owner = "", repo = "", branch = "", subpath = "";
-    try {
-      const cleaned = raw
-        .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
-        .replace(/\.git$/, "")
-        .replace(/\/$/, "");
-      const parts = cleaned.split("/");
-      owner = parts[0];
-      repo = parts[1];
-      if (parts[2] === "tree" && parts[3]) {
-        branch = parts[3];
-        subpath = parts.slice(4).join("/");
+    // Determine owner/repo/branch/subpath from either URL or selected repo
+    let owner = "", repo = "", branch = ghBranch.trim(), subpath = ghSubpath.trim();
+    if (ghSelectedRepo) {
+      const [o, r] = ghSelectedRepo.split("/");
+      owner = o; repo = r;
+      if (!branch) {
+        const found = ghRepos.find((x) => x.full_name === ghSelectedRepo);
+        branch = found?.default_branch || "";
       }
-      if (!owner || !repo) throw new Error("bad");
-    } catch {
-      return toast.error("Enter a GitHub URL like https://github.com/owner/repo");
+    } else {
+      const raw = ghUrl.trim();
+      if (!raw) return toast.error("Pick a repo or paste a URL");
+      try {
+        const cleaned = raw
+          .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
+          .replace(/\.git$/, "")
+          .replace(/\/$/, "");
+        const parts = cleaned.split("/");
+        owner = parts[0]; repo = parts[1];
+        if (parts[2] === "tree" && parts[3]) {
+          if (!branch) branch = parts[3];
+          if (!subpath) subpath = parts.slice(4).join("/");
+        }
+        if (!owner || !repo) throw new Error("bad");
+      } catch {
+        return toast.error("Use https://github.com/owner/repo");
+      }
     }
 
     setGhImporting(true);
-    setGhProgress("Looking up repo…");
-
+    setGhProgress("Reading repo…");
     try {
       const { data: userRes } = await supabase.auth.getUser();
       if (!userRes.user) throw new Error("Not signed in");
 
-      // Find default branch if not specified
-      if (!branch) {
-        const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-        if (!r.ok) throw new Error(`Repo not found (${r.status}). Public repos only.`);
-        const meta = await r.json();
-        branch = meta.default_branch || "main";
-      }
+      const { branch: resolvedBranch, files } = await importGhRepo({
+        data: { owner, repo, branch: branch || undefined, subpath: subpath || undefined },
+      });
 
-      setGhProgress("Reading file tree…");
-      const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`);
-      if (!treeRes.ok) throw new Error(`Could not read tree (${treeRes.status})`);
-      const tree = await treeRes.json();
-      if (!tree.tree) throw new Error("Empty repo");
-
-      const ALLOWED = /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|yml|yaml|vue|astro|mjs|cjs)$/i;
-      const SKIP_DIR = /(^|\/)(node_modules|\.git|dist|build|\.next|\.nuxt|coverage)\//i;
-      const blobs: { path: string; size: number }[] = tree.tree
-        .filter((n: any) => n.type === "blob")
-        .filter((n: any) => !subpath || n.path.startsWith(subpath + "/") || n.path === subpath)
-        .filter((n: any) => !SKIP_DIR.test("/" + n.path + "/"))
-        .filter((n: any) => ALLOWED.test(n.path))
-        .filter((n: any) => (n.size ?? 0) < 250_000)
-        .slice(0, 300);
-
-      if (blobs.length === 0) throw new Error("No importable text files found");
-
-      // Create project
       const projectName = subpath ? `${repo}/${subpath.split("/").pop()}` : repo;
       const { data: project, error: projErr } = await supabase
         .from("projects")
         .insert({
           name: projectName,
-          description: `Imported from github.com/${owner}/${repo}${branch ? `@${branch}` : ""}`,
+          description: `Imported from github.com/${owner}/${repo}@${resolvedBranch}`,
           user_id: userRes.user.id,
         })
         .select()
         .single();
-      if (projErr) throw projErr;
-      if (!project) throw new Error("Could not create project");
-      const projectId = project.id;
-      const userId = userRes.user.id;
+      if (projErr || !project) throw projErr || new Error("Could not create project");
 
-      // Fetch raw files with limited concurrency
-      const stripPrefix = (p: string) => (subpath ? p.replace(new RegExp(`^${subpath}/?`), "") : p);
-      const files: { project_id: string; user_id: string; path: string; content: string }[] = [];
-      let done = 0;
-      const concurrency = 8;
-      let idx = 0;
-      async function worker() {
-        while (idx < blobs.length) {
-          const i = idx++;
-          const b = blobs[i];
-          try {
-            const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURI(b.path)}`);
-            if (r.ok) {
-              const text = await r.text();
-              files.push({
-                project_id: projectId,
-                user_id: userId,
-                path: stripPrefix(b.path),
-                content: text,
-              });
-            }
-          } catch {}
-          done++;
-          if (done % 5 === 0 || done === blobs.length) {
-            setGhProgress(`Downloading ${done}/${blobs.length} files…`);
-          }
-        }
-      }
-      await Promise.all(Array.from({ length: concurrency }, worker));
-
-      // Ensure an index.html exists so the preview shows something
-      if (!files.some((f) => f.path === "index.html")) {
-        const candidate =
-          files.find((f) => /(^|\/)index\.html$/i.test(f.path)) ||
-          files.find((f) => /\.html?$/i.test(f.path));
-        if (candidate) {
-          files.unshift({ ...candidate, path: "index.html" });
-        } else {
-          files.push({
-            project_id: projectId,
-            user_id: userId,
-            path: "index.html",
-            content: `<!doctype html><html><head><meta charset="utf-8"/><title>${projectName}</title></head><body style="font-family:system-ui;padding:2rem;background:#0f0c1a;color:#e8e3f5"><h1>${projectName}</h1><p>Imported from github.com/${owner}/${repo}. Open the file tree to start editing — ask the AI to wire up a homepage.</p></body></html>`,
-          });
-        }
+      const rows = files.map((f) => ({
+        project_id: project.id,
+        user_id: userRes.user!.id,
+        path: f.path,
+        content: f.content,
+      }));
+      if (!rows.some((r) => r.path === "index.html")) {
+        const cand = rows.find((r) => /(^|\/)index\.html$/i.test(r.path)) || rows.find((r) => /\.html?$/i.test(r.path));
+        if (cand) rows.unshift({ ...cand, path: "index.html" });
+        else rows.push({
+          project_id: project.id,
+          user_id: userRes.user!.id,
+          path: "index.html",
+          content: `<!doctype html><html><head><meta charset="utf-8"/><title>${projectName}</title></head><body style="font-family:system-ui;padding:2rem;background:#0f0c1a;color:#e8e3f5"><h1>${projectName}</h1><p>Imported from github.com/${owner}/${repo}.</p></body></html>`,
+        });
       }
 
-      setGhProgress(`Saving ${files.length} files…`);
-      // Insert in chunks
+      setGhProgress(`Saving ${rows.length} files…`);
       const chunk = 50;
-      for (let i = 0; i < files.length; i += chunk) {
-        const { error } = await supabase.from("files").insert(files.slice(i, i + chunk));
+      for (let i = 0; i < rows.length; i += chunk) {
+        const { error } = await supabase.from("files").insert(rows.slice(i, i + chunk));
         if (error) throw error;
       }
 
-      toast.success(`Imported ${files.length} files from ${owner}/${repo}`);
+      toast.success(`Imported ${rows.length} files from ${owner}/${repo}`);
       setGhOpen(false);
-      setGhUrl("");
+      setGhUrl(""); setGhSelectedRepo(""); setGhBranch(""); setGhSubpath("");
       navigate({ to: "/p/$projectId", params: { projectId: project.id } });
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
@@ -502,38 +523,92 @@ function Dashboard() {
       </main>
 
       <Dialog open={ghOpen} onOpenChange={(o) => !ghImporting && setGhOpen(o)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Github className="h-4 w-4" /> Import from GitHub
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={importFromGithub} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm">Public repository URL</label>
-              <Input
-                autoFocus
-                required
-                value={ghUrl}
-                onChange={(e) => setGhUrl(e.target.value)}
-                placeholder="https://github.com/owner/repo"
-                disabled={ghImporting}
-              />
-              <p className="text-xs text-muted-foreground">
-                Public repos only. Pulls source files into a new Forge project so you can edit and publish immediately.
+          {!ghConnected.connected ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Connect your GitHub account to import private repositories, pick branches, and skip URL pasting.
               </p>
-            </div>
-            {ghProgress && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" /> {ghProgress}
-              </div>
-            )}
-            <DialogFooter>
-              <Button type="submit" disabled={ghImporting || !ghUrl.trim()}>
-                {ghImporting ? "Importing…" : "Import & open"}
+              <Button onClick={connectGithub} disabled={ghConnecting} className="w-full gap-2">
+                {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+                {ghConnecting ? "Opening GitHub…" : "Connect GitHub"}
               </Button>
-            </DialogFooter>
-          </form>
+              <div className="relative my-2">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center text-[10px] uppercase tracking-wide"><span className="bg-background px-2 text-muted-foreground">or paste a public URL</span></div>
+              </div>
+              <form onSubmit={importFromGithub} className="space-y-3">
+                <Input
+                  value={ghUrl}
+                  onChange={(e) => setGhUrl(e.target.value)}
+                  placeholder="https://github.com/owner/repo"
+                  disabled={ghImporting}
+                />
+                {ghProgress && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> {ghProgress}
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button type="submit" disabled={ghImporting || !ghUrl.trim()}>
+                    {ghImporting ? "Importing…" : "Import & open"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </div>
+          ) : (
+            <form onSubmit={importFromGithub} className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <Check className="h-3 w-3 text-primary" /> Connected as <span className="text-foreground font-medium">{ghConnected.login}</span>
+                </span>
+                <button type="button" onClick={handleDisconnectGh} className="text-muted-foreground hover:text-destructive">Disconnect</button>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Repository</label>
+                <Select value={ghSelectedRepo} onValueChange={(v) => { setGhSelectedRepo(v); setGhBranch(""); }} disabled={ghLoadingRepos || ghImporting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={ghLoadingRepos ? "Loading repos…" : "Pick a repository"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {ghRepos.map((r) => (
+                      <SelectItem key={r.full_name} value={r.full_name}>
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.private && <Lock className="h-3 w-3 text-muted-foreground" />}
+                          {r.full_name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Branch (optional)</label>
+                  <Input value={ghBranch} onChange={(e) => setGhBranch(e.target.value)} placeholder="default" disabled={ghImporting} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">Subfolder (optional)</label>
+                  <Input value={ghSubpath} onChange={(e) => setGhSubpath(e.target.value)} placeholder="apps/web" disabled={ghImporting} />
+                </div>
+              </div>
+              {ghProgress && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> {ghProgress}
+                </div>
+              )}
+              <DialogFooter>
+                <Button type="submit" disabled={ghImporting || !ghSelectedRepo}>
+                  {ghImporting ? "Importing…" : "Import & open"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
