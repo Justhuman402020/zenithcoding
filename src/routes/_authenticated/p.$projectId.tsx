@@ -478,20 +478,22 @@ function ProjectEditor() {
     setInput("");
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
-    (async () => {
-      try {
-        const { data: userRes } = await supabase.auth.getUser();
-        if (!userRes.user || files.length === 0) return;
-        const snapFiles = files.map((f) => ({ path: f.path, content: f.content }));
-        const label = text ? text.slice(0, 80) : "Before image edit";
-        await supabase.from("project_snapshots").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          label,
-          files: snapFiles as any,
-        });
-      } catch {}
-    })();
+    const filesAtSend = files.map((f) => ({ path: f.path, content: f.content }));
+    if (filesAtSend.length > 0) {
+      (async () => {
+        try {
+          const { data: userRes } = await supabase.auth.getUser();
+          if (!userRes.user) return;
+          const label = text ? text.slice(0, 80) : "Before image edit";
+          await supabase.from("project_snapshots").insert({
+            project_id: projectId,
+            user_id: userRes.user.id,
+            label,
+            files: filesAtSend as any,
+          });
+        } catch {}
+      })();
+    }
     const videoNotes = attachments
       .filter((a) => a.mediaType.startsWith("video/"))
       .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
