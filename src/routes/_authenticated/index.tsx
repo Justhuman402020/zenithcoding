@@ -1,11 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink, Share2 } from "lucide-react";
+import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 type Project = {
@@ -29,6 +31,10 @@ function Dashboard() {
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   async function load() {
     setLoading(true);
@@ -85,6 +91,30 @@ function Dashboard() {
     navigate({ to: "/p/$projectId", params: { projectId: data.id } });
   }
 
+  async function createFromPrompt(e: React.FormEvent) {
+    e.preventDefault();
+    const text = prompt.trim();
+    if (!text || creating) return;
+    setCreating(true);
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes.user) { setCreating(false); return; }
+    const name = text.split(/\s+/).slice(0, 4).join(" ").slice(0, 60) || "Untitled";
+    const { data, error } = await supabase
+      .from("projects")
+      .insert({ name, description: text.slice(0, 200), user_id: userRes.user.id })
+      .select()
+      .single();
+    if (error) { setCreating(false); return toast.error(error.message); }
+    await supabase.from("files").insert({
+      project_id: data.id,
+      user_id: userRes.user.id,
+      path: "index.html",
+      content: `<!doctype html><html><head><meta charset="utf-8"/><title>${name}</title></head><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0f0c1a;color:#e8e3f5"><p>Building…</p></body></html>`,
+    });
+    setPrompt("");
+    navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: text } as any });
+  }
+
   async function deleteProject(id: string) {
     if (!confirm("Delete this project and all its files?")) return;
     const { error } = await supabase.from("projects").delete().eq("id", id);
@@ -112,31 +142,111 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      <header className="h-14 flex items-center justify-between px-3 shrink-0">
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-10 w-10" aria-label="Open menu">
+              <PanelLeft className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-[300px] p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
+            <SheetHeader className="px-4 pt-4 pb-2">
+              <SheetTitle className="flex items-center gap-2 text-base">
+                <div className="h-7 w-7 rounded-md flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
+                  <Sparkles className="h-4 w-4 text-primary-foreground" />
+                </div>
+                Forge
+              </SheetTitle>
+            </SheetHeader>
+            <nav className="px-2 py-2 space-y-0.5">
+              <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
+              <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
+              <SidebarItem icon={MessageSquare} label="Chats" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
+            </nav>
+            <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
+              <SidebarItem icon={LogOut} label="Sign out" onClick={signOut} />
             </div>
-            <h1 className="text-lg font-semibold tracking-tight">Forge</h1>
-          </div>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            <LogOut className="h-4 w-4 mr-2" /> Sign out
-          </Button>
-        </div>
+            <div className="px-4 pt-4 pb-2 text-[10px] uppercase tracking-wide text-muted-foreground">Recent</div>
+            <div className="px-2 space-y-0.5 overflow-y-auto max-h-[40vh]">
+              {projects.slice(0, 10).map((p) => (
+                <Link
+                  key={p.id}
+                  to="/p/$projectId"
+                  params={{ projectId: p.id }}
+                  onClick={() => setSidebarOpen(false)}
+                  className="block px-3 py-2 rounded-md text-sm truncate hover:bg-sidebar-accent"
+                >
+                  {p.name}
+                </Link>
+              ))}
+            </div>
+          </SheetContent>
+        </Sheet>
+        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+          <LogOut className="h-4 w-4" />
+        </Button>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
+      <section className="flex-1 flex flex-col items-center justify-center px-4 -mt-10">
+        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-center mb-6">
+          What do you want to create?
+        </h1>
+        <form onSubmit={createFromPrompt} className="w-full max-w-2xl">
+          <div className="rounded-2xl border border-border bg-card/60 backdrop-blur p-3 shadow-2xl">
+            <Textarea
+              ref={promptRef}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); createFromPrompt(e as any); } }}
+              placeholder="Ask Forge to build…"
+              rows={2}
+              className="resize-none border-0 bg-transparent focus-visible:ring-0 text-base min-h-[60px] p-2"
+            />
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40"
+              >
+                <Plus className="h-4 w-4" /> New blank project
+              </button>
+              <Button
+                type="submit"
+                size="icon"
+                className="h-9 w-9 rounded-full"
+                disabled={!prompt.trim() || creating}
+                aria-label="Send"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4 justify-center">
+            {["Landing page for a coffee shop", "Personal portfolio site", "Simple todo app"].map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => { setPrompt(s); promptRef.current?.focus(); }}
+                className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:bg-accent/40"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </form>
+      </section>
+
+      <main id="projects-grid" className="max-w-6xl w-full mx-auto px-4 pb-10">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight">Projects</h2>
-            <p className="text-sm text-muted-foreground mt-1">Spin up an AI-built coding project.</p>
+            <h2 className="text-xl font-semibold tracking-tight">Your projects</h2>
+            <p className="text-xs text-muted-foreground mt-1">Tap a project to open it.</p>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button style={{ background: "var(--gradient-primary)" }} className="text-primary-foreground">
-                <Plus className="h-4 w-4 mr-2" /> New project
+              <Button size="sm" variant="outline">
+                <Plus className="h-4 w-4 mr-1.5" /> New
               </Button>
             </DialogTrigger>
             <DialogContent>
