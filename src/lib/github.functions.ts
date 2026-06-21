@@ -56,12 +56,22 @@ export const listGithubRepos = createServerFn({ method: "GET" })
       .maybeSingle();
     if (!tok) throw new Error("Connect GitHub first");
     const token = (tok as any).access_token as string;
-    const r = await fetch("https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member", {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
-    });
-    if (!r.ok) throw new Error(`GitHub error ${r.status}`);
-    const repos = (await r.json()) as any[];
-    return repos.map((r) => ({
+    const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" };
+    const all: any[] = [];
+    // Paginate through up to 5 pages (500 repos) — covers virtually everyone.
+    for (let page = 1; page <= 5; page += 1) {
+      const url = `https://api.github.com/user/repos?per_page=100&page=${page}&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member`;
+      const r = await fetch(url, { headers });
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        throw new Error(`GitHub error ${r.status}: ${body.slice(0, 160) || r.statusText}`);
+      }
+      const batch = (await r.json()) as any[];
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      all.push(...batch);
+      if (batch.length < 100) break;
+    }
+    return all.map((r) => ({
       full_name: r.full_name as string,
       private: r.private as boolean,
       default_branch: r.default_branch as string,

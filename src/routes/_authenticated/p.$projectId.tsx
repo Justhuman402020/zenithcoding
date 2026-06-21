@@ -220,6 +220,7 @@ function ProjectEditor() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
   const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
+  const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({});
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const thinkingStartRef = useRef<Record<string, number>>({});
@@ -853,17 +854,49 @@ function ProjectEditor() {
                                 const name = t.type.replace("tool-", "");
                                 const { icon: Icon, label } = toolLabel(name, t.input, t.state);
                                 const active = t.state !== "output-available";
+                                const detailKey = `${m.id}:${i}`;
+                                const detailOpen = !!openToolDetails[detailKey];
+                                const inputPreview = t.input ? JSON.stringify(t.input, null, 2) : "";
+                                const outputRaw = (t.output ?? (t as any).result) as any;
+                                const outputPreview = outputRaw !== undefined ? (typeof outputRaw === "string" ? outputRaw : JSON.stringify(outputRaw, null, 2)) : "";
                                 return (
-                                  <div
-                                    key={i}
-                                    className="flex items-center gap-2 text-xs rounded-lg border border-border bg-card/60 px-3 py-2"
-                                  >
-                                    {active ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-                                    ) : (
-                                      <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  <div key={i} className="rounded-lg border border-border bg-card/60 overflow-hidden">
+                                    <button
+                                      type="button"
+                                      onClick={() => setOpenToolDetails((cur) => ({ ...cur, [detailKey]: !detailOpen }))}
+                                      className="w-full flex items-center gap-2 text-xs px-3 py-2 hover:bg-accent/30 transition-colors text-left"
+                                    >
+                                      {active ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                                      ) : (
+                                        <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+                                      )}
+                                      <span className="truncate flex-1">{label}</span>
+                                      {detailOpen ? (
+                                        <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      ) : (
+                                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      )}
+                                    </button>
+                                    {detailOpen && (
+                                      <div className="px-3 py-2 border-t border-border/60 space-y-2 bg-background/40">
+                                        {inputPreview && (
+                                          <div className="space-y-1">
+                                            <div className="text-[10px] uppercase tracking-wider text-primary/70 font-mono">Input</div>
+                                            <pre className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{inputPreview}</pre>
+                                          </div>
+                                        )}
+                                        {outputPreview && (
+                                          <div className="space-y-1">
+                                            <div className="text-[10px] uppercase tracking-wider text-primary/70 font-mono">Result</div>
+                                            <pre className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed">{outputPreview}</pre>
+                                          </div>
+                                        )}
+                                        {!inputPreview && !outputPreview && (
+                                          <div className="text-[11px] text-muted-foreground/70">No details yet.</div>
+                                        )}
+                                      </div>
                                     )}
-                                    <span className="truncate">{label}</span>
                                   </div>
                                 );
                               })}
