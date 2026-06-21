@@ -220,6 +220,7 @@ function ProjectEditor() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
   const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
+  const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({});
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const thinkingStartRef = useRef<Record<string, number>>({});
