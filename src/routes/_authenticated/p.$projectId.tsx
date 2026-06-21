@@ -42,6 +42,9 @@ import {
   Copy,
   ExternalLink,
   Undo2,
+  Lightbulb,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -213,6 +216,9 @@ function ProjectEditor() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
   const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
+  const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
+  const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
+  const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -377,6 +383,31 @@ function ProjectEditor() {
   });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  // Track how long the AI spent "thinking" per assistant message, so we can
+  // show "Thought for Xs" once it finishes.
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      const hasReasoning = m.parts.some((p) => p.type === "reasoning");
+      if (!hasReasoning) continue;
+      if (!thinkingStartRef.current[m.id]) {
+        thinkingStartRef.current[m.id] = Date.now();
+      }
+      const isLast = m.id === messages[messages.length - 1]?.id;
+      const done =
+        !isStreaming ||
+        !isLast ||
+        m.parts.some((p) => p.type === "text" && (p as any).text?.trim());
+      if (done && thinkingDurations[m.id] === undefined) {
+        const seconds = Math.max(
+          1,
+          Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000),
+        );
+        setThinkingDurations((cur) => ({ ...cur, [m.id]: seconds }));
+      }
+    }
+  }, [messages, isStreaming, thinkingDurations]);
 
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);
@@ -719,6 +750,20 @@ function ProjectEditor() {
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
+                const reasoningParts = m.parts.filter(
+                  (p): p is Extract<typeof p, { type: "reasoning" }> => p.type === "reasoning",
+                );
+                const reasoningText = reasoningParts
+                  .map((p) => (p as any).text ?? "")
+                  .join("\n")
+                  .trim();
+                const isLastStreaming = isStreaming && m.id === messages[messages.length - 1]?.id;
+                const thinkingActive =
+                  isLastStreaming &&
+                  reasoningParts.length > 0 &&
+                  !text &&
+                  !toolParts.some((t) => t.state === "output-available");
+                const thinkOpen = openThinking[m.id] ?? thinkingActive;
                 return (
                   <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                     <div
@@ -728,6 +773,42 @@ function ProjectEditor() {
                           : "max-w-full text-sm space-y-2 w-full"
                       }
                     >
+                      {m.role === "assistant" && reasoningText && (
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenThinking((cur) => ({ ...cur, [m.id]: !thinkOpen }))
+                            }
+                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+                          >
+                            {thinkingActive ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            ) : (
+                              <Lightbulb className="h-3.5 w-3.5 text-primary" />
+                            )}
+                            <span>
+                              {thinkingActive
+                                ? "Thinking…"
+                                : `Thought${
+                                    thinkingDurations[m.id]
+                                      ? ` for ${thinkingDurations[m.id]}s`
+                                      : ""
+                                  }`}
+                            </span>
+                            {thinkOpen ? (
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          {thinkOpen && (
+                            <div className="rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground/90 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
+                              {reasoningText}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {showTools && (
                         <div className="space-y-1.5">
                           <button

@@ -214,6 +214,7 @@ Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwi
 
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
+          sendReasoning: true,
           onError: (error) => (error instanceof Error ? error.message : "The AI build failed before it could write files."),
         });
       },
