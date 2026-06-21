@@ -216,6 +216,9 @@ function ProjectEditor() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
   const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
+  const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
+  const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
+  const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
