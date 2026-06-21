@@ -498,12 +498,12 @@ function ProjectEditor() {
       .filter((a) => a.mediaType.startsWith("video/"))
       .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
     const messageText = [text, ...videoNotes].filter(Boolean).join("\n\n");
-    const files = attachments.flatMap((a) => {
+    const attachmentFiles = attachments.flatMap((a) => {
       const visualParts = a.mediaType.startsWith("video/") ? (a.frames ?? []) : [a];
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
     setAttachments([]);
-    await sendMessage({ text: messageText || "(see attached image)", files });
+    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
     // persist user message
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
