@@ -329,7 +329,8 @@ function ProjectEditor() {
       return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
     });
     const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
-    return html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
+    const withNav = html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
+    return injectConsoleBridge(withNav);
   }, [files, previewPath]);
 
   useEffect(() => {
@@ -938,12 +939,29 @@ function ProjectEditor() {
         )}
 
         {tab === "preview" && (
-          <iframe
-            key={previewKey}
-            title="preview"
-            sandbox="allow-scripts allow-forms allow-modals"
-            className="flex-1 bg-white w-full"
+          <PreviewFrame
             srcDoc={previewDoc}
+            previewKey={previewKey}
+            onRefresh={async () => {
+              await refreshFiles();
+              setPreviewKey((k) => k + 1);
+            }}
+            openInNewTab={
+              published && slug
+                ? () => window.open(`/s/${slug}`, "_blank")
+                : undefined
+            }
+          />
+        )}
+
+        {tab === "history" && (
+          <HistoryPanel
+            projectId={projectId}
+            onRestored={async () => {
+              await refreshFiles();
+              setPreviewKey((k) => k + 1);
+              setTab("preview");
+            }}
           />
         )}
 
