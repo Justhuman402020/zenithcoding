@@ -45,10 +45,14 @@ import {
   Lightbulb,
   ChevronDown,
   ChevronUp,
+  History as HistoryIcon,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import { DomainsPanel } from "@/components/DomainsPanel";
+import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
+import { HistoryPanel } from "@/components/HistoryPanel";
+import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
@@ -60,7 +64,7 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 
 type ProjectFile = { id: string; path: string; content: string };
 
-type TabKey = "chat" | "preview" | "code";
+type TabKey = "chat" | "preview" | "code" | "history";
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
@@ -135,7 +139,7 @@ function toolLabel(toolName: string, input: any, state: string) {
     case "list_files":
       return { icon: ListTree, label: verbing === "done" ? "Listed files" : "Listing files…" };
     default:
-      return { icon: Sparkles, label: toolName };
+      return { icon: FilePlus2, label: toolName };
   }
 }
 
