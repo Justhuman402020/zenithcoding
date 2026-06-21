@@ -384,6 +384,31 @@ function ProjectEditor() {
 
   const isStreaming = status === "submitted" || status === "streaming";
 
+  // Track how long the AI spent "thinking" per assistant message, so we can
+  // show "Thought for Xs" once it finishes.
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      const hasReasoning = m.parts.some((p) => p.type === "reasoning");
+      if (!hasReasoning) continue;
+      if (!thinkingStartRef.current[m.id]) {
+        thinkingStartRef.current[m.id] = Date.now();
+      }
+      const isLast = m.id === messages[messages.length - 1]?.id;
+      const done =
+        !isStreaming ||
+        !isLast ||
+        m.parts.some((p) => p.type === "text" && (p as any).text?.trim());
+      if (done && thinkingDurations[m.id] === undefined) {
+        const seconds = Math.max(
+          1,
+          Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000),
+        );
+        setThinkingDurations((cur) => ({ ...cur, [m.id]: seconds }));
+      }
+    }
+  }, [messages, isStreaming, thinkingDurations]);
+
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);
   useEffect(() => {
