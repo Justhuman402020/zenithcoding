@@ -87,6 +87,56 @@ export type Database = {
           },
         ]
       }
+      project_domains: {
+        Row: {
+          created_at: string
+          hostname: string
+          id: string
+          last_check_at: string | null
+          last_check_error: string | null
+          project_id: string
+          updated_at: string
+          user_id: string
+          verification_token: string
+          verified: boolean
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          hostname: string
+          id?: string
+          last_check_at?: string | null
+          last_check_error?: string | null
+          project_id: string
+          updated_at?: string
+          user_id: string
+          verification_token?: string
+          verified?: boolean
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          hostname?: string
+          id?: string
+          last_check_at?: string | null
+          last_check_error?: string | null
+          project_id?: string
+          updated_at?: string
+          user_id?: string
+          verification_token?: string
+          verified?: boolean
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_domains_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_snapshots: {
         Row: {
           created_at: string
