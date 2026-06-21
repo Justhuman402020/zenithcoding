@@ -1,73 +1,68 @@
-# Your Personal Lovable-Style Workspace
+## Pure Gold — premium Lovable-style rebuild
 
-A single-user AI coding studio: manage multiple projects, browse files, chat with AI to generate/edit code, see it run live in a preview pane. Dark theme with purple/violet accents.
+A two-part job: a new design foundation everywhere, then four Lovable-feature passes inside the editor.
 
-## What you'll get
+### Part 1 — Design foundation (touches every screen)
 
-A web app with three main views:
+Reset the visual system to Noir & Gold + Instrument Serif / Work Sans, then re-skin each surface against it. Nothing functional changes here — just the look.
 
-1. **Projects dashboard** — list of all your projects, "new project" button, last-edited timestamps, delete/rename.
-2. **Editor view** (per project) — three panels:
-   - Left: file tree (create/rename/delete files & folders)
-   - Center: AI chat + code editor (Monaco, same engine as VS Code)
-   - Right: live preview iframe that runs your HTML/CSS/JS
-3. **Settings** — pick AI model, manage projects.
+**Design tokens (`src/styles.css`)**
+- Background `#0a0a0a`, surfaces `#171717`/`#1f1f1f`, foreground `#f5efe1`, muted `#8a8275`.
+- Primary `#c9a84c` (pure gold), primary-glow `#f0d78c`, accent `#e6b948`.
+- Border `rgba(201,168,76,0.18)`, ring `#c9a84c`.
+- Gold gradient + soft "candlelight" shadow tokens reused across cards, buttons, badges.
+- Fonts: Instrument Serif (display) + Work Sans (body), loaded via `<link>` in `__root.tsx` head.
 
-## How it works under the hood (plain English)
+**Re-skin pass (no logic changes)**
+- `src/routes/__root.tsx` — fonts, favicon meta, OG image tag.
+- `src/routes/auth.tsx` — split-screen: gold serif headline + Google + email; remove generic Sparkles.
+- `src/routes/_authenticated/index.tsx` — premium hero composer, gold project cards, sidebar in noir.
+- `src/routes/_authenticated/p.$projectId.tsx` — gold-trimmed chat rail, dark editor chrome, status pills.
+- `src/routes/s.$slug.tsx` — published shell: subtle gold "Made with Forge" badge.
+- Replace `Sparkles` brand icon with a generated gold "Forge" mark in `src/assets/`.
 
-- **Storage**: Lovable Cloud database stores your projects, files, and chat history. Survives refreshes and works from any device when you log in.
-- **AI**: Lovable AI Gateway (no API key setup needed). You'll get Google Gemini models by default.
-- **Live preview**: Your project files are stitched together in the browser and rendered in a sandboxed iframe — so a project is essentially `index.html` + JS/CSS files that the AI writes for you. Good for static sites, vanilla JS apps, and React via CDN.
-- **Auth**: Since this is just for you, I'll add a simple login (email + password) so nobody else can access your projects from the public URL.
+### Part 2 — Lovable-grade feature polish (editor only)
 
-## Realistic scope — what's IN vs OUT
+**A. Chat polish (thinking + tool calls + diffs)**
+- Install AI Elements: `conversation`, `message`, `prompt-input`, `shimmer`, `tool`, `reasoning`.
+- Replace the hand-built transcript and composer with AI Elements primitives.
+- Render `reasoning` parts using `Reasoning` component (collapsible "Thought for Xs" — server already streams `sendReasoning: true`).
+- Render file-edit tool calls (a new `editFile` tool exposed to the model) as `<Tool>` cards with a compact unified diff preview (added/removed line counts + first 6 lines, expandable).
 
-**In the MVP:**
-- Multi-project CRUD
-- File tree with create/rename/delete
-- Monaco code editor with syntax highlighting
-- AI chat that reads your file tree, writes/edits files, and explains code
-- Live iframe preview for HTML/CSS/JS projects
-- Dark Lovable-style theme (purple/violet)
-- Single-user auth
+**B. Live preview + device switcher + console**
+- Add a top bar above the iframe: Mobile (390) / Tablet (768) / Desktop (full) toggle, refresh, open-in-new-tab.
+- Capture iframe `console.*` + `window.onerror` via a tiny preload script injected into the served HTML; pipe to a collapsible Console drawer with level filters and clear.
 
-**NOT in MVP (would need follow-up work):**
-- Running full Node.js/npm projects in-browser (needs WebContainers — separate license)
-- Real git integration / GitHub sync
-- Database/backend per generated project
-- Deploying your generated projects to the web
-- Realtime collaboration
+**C. Versions / history + restore**
+- Auto-snapshot to `project_snapshots` on every successful AI edit (label = first user prompt of the turn).
+- New "History" panel: timeline of snapshots, file-count diff vs current, "Restore" (replaces files transactionally) and "Preview" (read-only diff).
 
-We can add any of these later.
+**D. Publish + custom domains + share**
+- Finish `DomainsPanel`: live DNS verify polling already exists — add status pill colors, copy-to-clipboard for A/TXT records, plain-English newbie helper text per step.
+- Publish dialog: visibility toggle (public/private placeholder), gold "Live" pill, share-card preview, copy link button, QR code.
 
-## Cost to run (monthly, just you)
+### Out of scope (call out, don't build)
+- GitHub two-way sync (token storage exists; push-on-edit deferred).
+- Remix/fork another user's project.
+- Project secrets UI.
 
-- **Hosting** (this app on Lovable): free on the Free plan if usage is light
-- **Lovable Cloud** (database + auth + storage): ~$0–5/month at single-user usage — well within the free monthly allowance for most personal use
-- **Lovable AI** (the AI that writes code inside your app): pay-as-you-go from your Lovable credits. Heavy daily use ≈ a few dollars/month; light use is essentially free thanks to the monthly allowance. Exact spend depends on how chatty you are.
+### Technical notes
+- TanStack Start + Tailwind v4 + shadcn already in place — no framework swap.
+- All color tokens go through `@theme inline` in `src/styles.css` so existing shadcn classes (`bg-primary`, `border-border`) re-skin automatically.
+- AI Elements installed via `bun x ai-elements@latest add conversation message prompt-input shimmer tool reasoning`.
+- New `editFile` server tool will use the existing `files` table + RLS — no schema change needed.
+- One new migration: add `snapshot_after_message_id` column to `project_snapshots` so the History panel can map snapshots back to chat turns.
+- No new secrets. Existing GitHub OAuth + Lovable AI Gateway keys cover everything.
 
-**Realistic total: $0–10/month for solo, moderate use.** No external accounts, no separate OpenAI/Anthropic bill.
+### Approximate file footprint
+- ~3 new components (DeviceSwitcher, ConsoleDrawer, HistoryPanel).
+- ~2 new server functions (snapshot create/list/restore, editFile tool).
+- Edits to 6 existing routes + `styles.css` + `__root.tsx` + chat API route.
 
-## Build order
-
-1. Enable Lovable Cloud (database + auth + AI gateway)
-2. Auth (email/password, just for you)
-3. Database schema: `projects`, `files`, `chat_messages`
-4. Projects dashboard route
-5. Editor route with 3-pane layout (file tree / editor+chat / preview)
-6. Monaco editor integration
-7. AI chat wired to Lovable AI with tools for read_file / write_file / list_files
-8. Live preview iframe (blob URLs from project files)
-9. Polish: dark purple theme, animations, empty states
-
-## Technical notes (skip if you like)
-
-- TanStack Start + React 19 + Tailwind v4 (already set up)
-- Monaco Editor for the code editor
-- Lovable Cloud (Supabase) for DB/auth/storage
-- AI SDK + Lovable AI Gateway, server functions for tool-calling
-- Iframe sandbox with `srcdoc` built from in-memory file map for the preview
-
----
-
-Approve this and I'll start building. Heads-up: this is a big build — I'll ship it in passes (auth + DB first, then editor shell, then AI wiring, then preview). You'll see something usable after each pass.
+### Order of execution
+1. Tokens, fonts, gold logo, root head.
+2. Auth + landing/dashboard re-skin (so the user sees the new identity immediately).
+3. Editor re-skin + AI Elements swap + reasoning/tool UI.
+4. Device switcher + console drawer.
+5. History panel + auto-snapshots.
+6. Publish/domains polish.

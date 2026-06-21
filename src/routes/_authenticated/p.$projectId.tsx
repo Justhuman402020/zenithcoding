@@ -45,10 +45,14 @@ import {
   Lightbulb,
   ChevronDown,
   ChevronUp,
+  History as HistoryIcon,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import { DomainsPanel } from "@/components/DomainsPanel";
+import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
+import { HistoryPanel } from "@/components/HistoryPanel";
+import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
@@ -60,7 +64,7 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 
 type ProjectFile = { id: string; path: string; content: string };
 
-type TabKey = "chat" | "preview" | "code";
+type TabKey = "chat" | "preview" | "code" | "history";
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
@@ -135,7 +139,7 @@ function toolLabel(toolName: string, input: any, state: string) {
     case "list_files":
       return { icon: ListTree, label: verbing === "done" ? "Listed files" : "Listing files…" };
     default:
-      return { icon: Sparkles, label: toolName };
+      return { icon: FilePlus2, label: toolName };
   }
 }
 
@@ -325,7 +329,8 @@ function ProjectEditor() {
       return `<script${attrs ? ` ${attrs}` : ""} data-from="${src}">${js}\n//# sourceURL=${src}</script>`;
     });
     const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
-    return html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
+    const withNav = html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
+    return injectConsoleBridge(withNav);
   }, [files, previewPath]);
 
   useEffect(() => {
@@ -471,16 +476,34 @@ function ProjectEditor() {
     const text = input.trim();
     if ((!text && attachments.length === 0) || isStreaming || !token) return;
     setInput("");
+    // Snapshot current files BEFORE the AI changes them, so users can roll back
+    // any AI turn from the History panel.
+    const filesAtSend = files.map((f) => ({ path: f.path, content: f.content }));
+    if (filesAtSend.length > 0) {
+      (async () => {
+        try {
+          const { data: userRes } = await supabase.auth.getUser();
+          if (!userRes.user) return;
+          const label = text ? text.slice(0, 80) : "Before image edit";
+          await supabase.from("project_snapshots").insert({
+            project_id: projectId,
+            user_id: userRes.user.id,
+            label,
+            files: filesAtSend as any,
+          });
+        } catch {}
+      })();
+    }
     const videoNotes = attachments
       .filter((a) => a.mediaType.startsWith("video/"))
       .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
     const messageText = [text, ...videoNotes].filter(Boolean).join("\n\n");
-    const files = attachments.flatMap((a) => {
+    const attachmentFiles = attachments.flatMap((a) => {
       const visualParts = a.mediaType.startsWith("video/") ? (a.frames ?? []) : [a];
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
     setAttachments([]);
-    await sendMessage({ text: messageText || "(see attached image)", files });
+    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
     // persist user message
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
@@ -644,15 +667,13 @@ function ProjectEditor() {
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <header className="h-14 border-b border-border flex items-center px-3 gap-2 shrink-0">
-        <Link to="/" className="p-2 -ml-2 text-muted-foreground hover:text-foreground">
+      <header className="h-14 hairline-bottom-gold flex items-center px-3 gap-2 shrink-0 bg-card/30 backdrop-blur-sm">
+        <Link to="/" className="p-2 -ml-2 text-muted-foreground hover:text-primary transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div className="h-7 w-7 rounded-md flex items-center justify-center shrink-0" style={{ background: "var(--gradient-primary)" }}>
-            <Sparkles className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-sm font-semibold truncate">{projectName}</span>
+          <ForgeMark className="h-7 w-7 shrink-0" />
+          <span className="font-display text-lg truncate text-foreground/95">{projectName}</span>
         </div>
         <Button
           size="sm"
@@ -663,7 +684,7 @@ function ProjectEditor() {
             if (tab !== "preview") setTab("preview");
             toast.success("Rebuilt preview from latest files");
           }}
-          className="h-9 gap-1.5"
+          className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
           title="Rebuild and revert preview to the latest saved files"
         >
           <RefreshCw className="h-4 w-4" />
@@ -674,7 +695,7 @@ function ProjectEditor() {
           variant="ghost"
           onClick={revertToLastStable}
           disabled={reverting}
-          className="h-9 gap-1.5"
+          className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
           title="Undo the most recent build and restore the previous version"
         >
           {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
@@ -682,9 +703,13 @@ function ProjectEditor() {
         </Button>
         <Button
           size="sm"
-          variant={published ? "secondary" : "default"}
+          variant={published ? "outline" : "default"}
           onClick={() => setPublishOpen(true)}
-          className="h-9 gap-1.5"
+          className={
+            published
+              ? "h-9 gap-1.5 hairline-gold text-primary hover:bg-primary/10"
+              : "h-9 gap-1.5 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow"
+          }
           title={published ? "Manage published site" : "Publish this site"}
         >
           <Globe className="h-4 w-4" />
@@ -693,18 +718,19 @@ function ProjectEditor() {
       </header>
 
       {/* Tabs */}
-      <nav className="flex border-b border-border shrink-0 bg-card/40">
+      <nav className="flex hairline-bottom-gold shrink-0 bg-card/40">
         {([
           { k: "chat", label: "Chat", icon: MessageSquare },
           { k: "preview", label: "Preview", icon: Eye },
           { k: "code", label: "Code", icon: Code2 },
+          { k: "history", label: "History", icon: HistoryIcon },
         ] as const).map(({ k, label, icon: Icon }) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors border-b-2 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors border-b-2 -mb-px ${
               tab === k
-                ? "border-primary text-foreground"
+                ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -721,23 +747,21 @@ function ProjectEditor() {
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
               {chatReady && messages.length === 0 && (
                 <div className="text-center py-12 space-y-3">
-                  <div className="h-12 w-12 mx-auto rounded-xl flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
-                    <Sparkles className="h-6 w-6 text-primary-foreground" />
-                  </div>
-                  <h2 className="text-base font-semibold">What do you want to build?</h2>
+                  <ForgeMark className="h-14 w-14 mx-auto" glow />
+                  <h2 className="font-display text-2xl">What will we forge?</h2>
                   <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                    Describe your idea and I'll create it. You'll see the changes live in the Preview tab.
+                    Describe what you want and I'll build it. You'll see it take shape live in <em className="text-primary not-italic">Preview</em>.
                   </p>
                   <div className="grid gap-2 max-w-xs mx-auto pt-2">
                     {[
-                      "Make a landing page for a coffee shop",
-                      "Build a todo list app",
-                      "Create a portfolio site",
+                      "An editorial portfolio in gold and noir",
+                      "A reservation page for a private restaurant",
+                      "A landing page for a luxury watch brand",
                     ].map((s) => (
                       <button
                         key={s}
                         onClick={() => setInput(s)}
-                        className="text-left text-sm px-3 py-2 rounded-lg border border-border hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-left text-sm px-3.5 py-2 rounded-lg hairline-gold hover:bg-accent/30 text-muted-foreground hover:text-primary transition-colors"
                       >
                         {s}
                       </button>
@@ -865,7 +889,7 @@ function ProjectEditor() {
                 </div>
               )}
             </div>
-            <form onSubmit={handleSend} className="p-3 border-t border-border bg-card/40 space-y-2">
+            <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {attachments.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto">
                   {attachments.map((a, i) => (
@@ -924,7 +948,12 @@ function ProjectEditor() {
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
                 />
-                <Button type="submit" size="icon" className="h-11 w-11 shrink-0" disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}>
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
+                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}
+                >
                   {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
@@ -933,12 +962,29 @@ function ProjectEditor() {
         )}
 
         {tab === "preview" && (
-          <iframe
-            key={previewKey}
-            title="preview"
-            sandbox="allow-scripts allow-forms allow-modals"
-            className="flex-1 bg-white w-full"
+          <PreviewFrame
             srcDoc={previewDoc}
+            previewKey={previewKey}
+            onRefresh={async () => {
+              await refreshFiles();
+              setPreviewKey((k) => k + 1);
+            }}
+            openInNewTab={
+              published && slug
+                ? () => window.open(`/s/${slug}`, "_blank")
+                : undefined
+            }
+          />
+        )}
+
+        {tab === "history" && (
+          <HistoryPanel
+            projectId={projectId}
+            onRestored={async () => {
+              await refreshFiles();
+              setPreviewKey((k) => k + 1);
+              setTab("preview");
+            }}
           />
         )}
 
@@ -1002,7 +1048,9 @@ function ProjectEditor() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5 text-primary" />
-              {published ? "Your site is live" : "Publish your site"}
+              <span className="font-display text-2xl">
+                {published ? "Your site is live" : "Publish your site"}
+              </span>
             </DialogTitle>
             <DialogDescription>
               {published
@@ -1068,7 +1116,12 @@ function ProjectEditor() {
                 Unpublish
               </Button>
             )}
-            <Button type="button" onClick={handlePublish} disabled={publishing}>
+            <Button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing}
+              className="bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow"
+            >
               {publishing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : published ? (

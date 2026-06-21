@@ -16,15 +16,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Sparkles, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { ForgeMark } from "@/components/ForgeMark";
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-        active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        active ? "bg-sidebar-accent text-primary" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
       }`}
     >
       <Icon className="h-4 w-4" /> {label}
@@ -321,21 +322,20 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background flex flex-col">
-      <header className="h-14 flex items-center justify-between px-3 shrink-0">
+    <div className="min-h-[100dvh] bg-background flex flex-col relative overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0 vignette" />
+      <header className="h-14 flex items-center justify-between px-3 shrink-0 relative">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-10 w-10" aria-label="Open menu">
+            <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-primary" aria-label="Open menu">
               <PanelLeft className="h-5 w-5" />
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-[300px] p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
             <SheetHeader className="px-4 pt-4 pb-2">
-              <SheetTitle className="flex items-center gap-2 text-base">
-                <div className="h-7 w-7 rounded-md flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
-                  <Sparkles className="h-4 w-4 text-primary-foreground" />
-                </div>
-                Forge
+              <SheetTitle className="flex items-center gap-2.5 text-base font-display">
+                <ForgeMark className="h-7 w-7" glow />
+                <span className="text-gold text-xl">Forge</span>
               </SheetTitle>
             </SheetHeader>
             <nav className="px-2 py-2 space-y-0.5">
@@ -346,7 +346,7 @@ function Dashboard() {
             <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
               <SidebarItem icon={LogOut} label="Sign out" onClick={signOut} />
             </div>
-            <div className="px-4 pt-4 pb-2 text-[10px] uppercase tracking-wide text-muted-foreground">Recent</div>
+            <div className="px-4 pt-4 pb-2 text-[10px] uppercase tracking-[0.2em] text-primary/70 font-mono">Recent</div>
             <div className="px-2 space-y-0.5 overflow-y-auto max-h-[40vh]">
               {projects.slice(0, 10).map((p) => (
                 <Link
@@ -362,59 +362,77 @@ function Dashboard() {
             </div>
           </SheetContent>
         </Sheet>
-        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+        <div className="flex items-center gap-2 md:hidden">
+          <ForgeMark className="h-6 w-6" />
+          <span className="font-display text-lg text-gold">Forge</span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
           <LogOut className="h-4 w-4" />
         </Button>
       </header>
 
-      <section className="flex-1 flex flex-col items-center justify-center px-4 -mt-10">
-        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-center mb-6">
-          What do you want to create?
+      <section className="flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12 relative">
+        <div className="hidden md:flex items-center gap-3 mb-8">
+          <ForgeMark className="h-12 w-12" glow />
+          <span className="font-display text-3xl text-gold">Forge</span>
+        </div>
+        <p className="text-[10px] font-mono uppercase tracking-[0.32em] text-primary/60 mb-3">
+          Pure Gold · Private Atelier
+        </p>
+        <h1 className="font-display text-4xl sm:text-6xl leading-[1.02] text-center mb-8 max-w-3xl">
+          What will you <em className="text-gold not-italic">forge</em> today?
         </h1>
         <form onSubmit={createFromPrompt} className="w-full max-w-2xl">
-          <div className="rounded-2xl border border-border bg-card/60 backdrop-blur p-3 shadow-2xl">
+          <div className="rounded-2xl hairline-gold bg-card/70 backdrop-blur-sm p-3 shadow-candlelight">
             <Textarea
               ref={promptRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); createFromPrompt(e as any); } }}
-              placeholder="Ask Forge to build…"
+              placeholder="Describe what you want — a landing page, a portfolio, a tool…"
               rows={2}
-              className="resize-none border-0 bg-transparent focus-visible:ring-0 text-base min-h-[60px] p-2"
+              className="resize-none border-0 bg-transparent focus-visible:ring-0 text-base min-h-[64px] p-2 placeholder:text-muted-foreground/70"
             />
             <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
-                onClick={() => setOpen(true)}
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40"
-              >
-                <Plus className="h-4 w-4" /> New blank project
-              </button>
-              <button
-                type="button"
-                onClick={() => setGhOpen(true)}
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 ml-1"
-              >
-                <Github className="h-4 w-4" /> Import GitHub repo
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
+                >
+                  <Plus className="h-4 w-4" /> Blank
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGhOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
+                >
+                  <Github className="h-4 w-4" /> Import
+                </button>
+              </div>
               <Button
                 type="submit"
                 size="icon"
-                className="h-9 w-9 rounded-full"
+                className="h-10 w-10 rounded-full bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow"
                 disabled={!prompt.trim() || creating}
                 aria-label="Send"
               >
-                <ArrowUp className="h-4 w-4" />
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
               </Button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 mt-4 justify-center">
-            {["Landing page for a coffee shop", "Personal portfolio site", "Simple todo app"].map((s) => (
+          <div className="flex flex-wrap gap-2 mt-5 justify-center">
+            {[
+              "An editorial portfolio in gold and noir",
+              "A landing page for a luxury watch brand",
+              "A reservation page for a private restaurant",
+              "A boutique law firm site",
+            ].map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => { setPrompt(s); promptRef.current?.focus(); }}
-                className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                className="text-xs px-3.5 py-1.5 rounded-full hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/30 transition-colors"
               >
                 {s}
               </button>
@@ -423,33 +441,33 @@ function Dashboard() {
         </form>
       </section>
 
-      <main id="projects-grid" className="max-w-6xl w-full mx-auto px-4 pb-10">
-        <div className="flex items-end justify-between mb-8">
+      <main id="projects-grid" className="max-w-6xl w-full mx-auto px-4 pb-16 relative">
+        <div className="flex items-end justify-between mb-8 hairline-bottom-gold pb-5">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight">Your projects</h2>
-            <p className="text-xs text-muted-foreground mt-1">Tap a project to open it.</p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/70 mb-1">Atelier</p>
+            <h2 className="font-display text-3xl">Your projects</h2>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
+              <Button size="sm" variant="outline" className="hairline-gold hover:bg-accent/30 hover:text-primary">
                 <Plus className="h-4 w-4 mr-1.5" /> New
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>New project</DialogTitle>
+                <DialogTitle className="font-display text-2xl">New project</DialogTitle>
               </DialogHeader>
               <form onSubmit={createProject} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm">Name</label>
+                  <label className="text-xs uppercase tracking-wider text-muted-foreground">Name</label>
                   <Input autoFocus required value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="my-app" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm">Description (optional)</label>
+                  <label className="text-xs uppercase tracking-wider text-muted-foreground">Description (optional)</label>
                   <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="What are you building?" />
                 </div>
                 <DialogFooter>
-                  <Button type="submit">Create</Button>
+                  <Button type="submit" className="bg-gold-gradient text-primary-foreground hover:opacity-95">Create</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -457,28 +475,30 @@ function Dashboard() {
         </div>
 
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
+          <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading…</div>
         ) : projects.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border p-12 text-center">
-            <Code2 className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <h3 className="font-medium">No projects yet</h3>
-            <p className="text-sm text-muted-foreground mt-1">Create your first one to start chatting with the AI.</p>
+          <div className="rounded-2xl hairline-gold bg-card/40 p-14 text-center">
+            <Hammer className="h-10 w-10 mx-auto text-primary mb-4" />
+            <h3 className="font-display text-2xl">An empty forge</h3>
+            <p className="text-sm text-muted-foreground mt-2 max-w-sm mx-auto">
+              Describe an idea above, or import a GitHub repo, and watch the first piece take shape.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((p) => (
-              <div key={p.id} className="group relative rounded-xl border border-border bg-card p-5 hover:border-primary/50 transition-colors">
+              <div key={p.id} className="group relative rounded-2xl hairline-gold bg-card/70 backdrop-blur-sm p-5 hover:shadow-candlelight hover:border-primary/40 transition-all">
                 <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-medium truncate">{p.name}</h3>
+                    <h3 className="font-display text-xl truncate group-hover:text-gold transition-colors">{p.name}</h3>
                     {p.published && p.slug && (
-                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium border border-primary/30">
                         <Globe className="h-2.5 w-2.5" /> Live
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5rem]">{p.description || "No description"}</p>
-                  <p className="text-xs text-muted-foreground mt-3">
+                  <p className="text-sm text-muted-foreground line-clamp-2 mt-1.5 min-h-[2.5rem]">{p.description || "No description"}</p>
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 mt-3">
                     Edited {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}
                   </p>
                 </Link>
@@ -498,7 +518,7 @@ function Dashboard() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-8 gap-1.5 px-2.5 text-xs"
+                      className="h-8 gap-1.5 px-2.5 text-xs hairline-gold"
                       onClick={(e) => {
                         e.stopPropagation();
                         shareProject(p.slug!);

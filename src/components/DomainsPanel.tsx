@@ -91,20 +91,20 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-3">
       <form onSubmit={addDomain} className="space-y-2">
-        <Label htmlFor="newDomain" className="text-sm">Connect a custom domain</Label>
+        <Label htmlFor="newDomain" className="text-xs uppercase tracking-wider text-muted-foreground">Connect your own domain</Label>
         <div className="flex gap-2">
           <Input
             id="newDomain"
             value={newHost}
             onChange={(e) => setNewHost(e.target.value)}
             placeholder="mysite.com"
-            className="h-10"
+            className="h-10 bg-background/40"
           />
-          <Button type="submit" disabled={adding} className="h-10 shrink-0">
+          <Button type="submit" disabled={adding} className="h-10 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95">
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">You'll get DNS instructions after adding the domain.</p>
+        <p className="text-xs text-muted-foreground">After you add it, we'll show you two small settings to paste at your domain provider (like GoDaddy, Namecheap, or Cloudflare). Don't worry — we walk you through it.</p>
       </form>
 
       {loading ? (
@@ -136,24 +136,33 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
 
               {!d.verified && (
                 <div className="space-y-2 text-xs">
-                  <p className="text-muted-foreground">
-                    Add this <strong className="text-foreground">TXT record</strong> at your domain registrar (e.g. GoDaddy, Namecheap, Cloudflare). Then tap <em>Verify now</em>.
+                  <p className="text-muted-foreground leading-relaxed">
+                    <strong className="text-primary">Step 1:</strong> Sign in to where you bought your domain. Find <em className="text-foreground">DNS records</em> (sometimes called "Manage DNS" or "Advanced DNS").
                   </p>
-                  <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1.5 font-mono">
+                  <p className="text-muted-foreground leading-relaxed">
+                    <strong className="text-primary">Step 2:</strong> Add a new record with exactly these values, then come back and tap <em>Verify now</em>:
+                  </p>
+                  <div className="rounded-md hairline-gold bg-muted/20 p-2.5 space-y-1.5 font-mono">
                     <DnsRow label="Type" value="TXT" copy={copy} />
                     <DnsRow label="Name / Host" value={`_forge-verify.${d.hostname.split(".").slice(-2).join(".") === d.hostname ? "" : d.hostname.split(".").slice(0, -2).join(".") + "."}${d.hostname.split(".").slice(-2).join(".")}`} display={`_forge-verify${d.hostname.split(".").length > 2 ? "." + d.hostname.split(".").slice(0, -2).join(".") : ""}`} copy={copy} />
                     <DnsRow label="Value" value={d.verification_token} copy={copy} />
                   </div>
+                  <p className="text-[11px] text-muted-foreground/80 italic leading-relaxed">
+                    DNS changes can take a few minutes (sometimes longer). If it doesn't verify right away, wait a moment and tap Verify again.
+                  </p>
                   {d.last_check_error && (
-                    <p className="text-[11px] text-muted-foreground italic">Last check: {d.last_check_error}</p>
+                    <p className="text-[11px] text-destructive/80 italic">Last check: {d.last_check_error}</p>
                   )}
                 </div>
               )}
 
               {d.verified && (
                 <div className="text-xs text-muted-foreground space-y-2">
-                  <p>Domain ownership verified. To make your site load at <strong className="text-foreground">{d.hostname}</strong>, point it to this app with a <strong className="text-foreground">CNAME record</strong>:</p>
-                  <div className="rounded-md border border-border bg-muted/30 p-2 space-y-1.5 font-mono">
+                  <p className="leading-relaxed">
+                    <CheckCircle2 className="inline h-3 w-3 text-primary mr-1" />
+                    You own <strong className="text-foreground">{d.hostname}</strong>. <strong className="text-primary">Last step:</strong> add one more record so visitors land on your site:
+                  </p>
+                  <div className="rounded-md hairline-gold bg-muted/20 p-2.5 space-y-1.5 font-mono">
                     <DnsRow label="Type" value="CNAME" copy={copy} />
                     <DnsRow label="Name" value={d.hostname} copy={copy} />
                     <DnsRow label="Value" value={typeof window !== "undefined" ? window.location.hostname : "your-app.lovable.app"} copy={copy} />
@@ -167,7 +176,7 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
                 variant={d.verified ? "outline" : "default"}
                 onClick={() => runVerify(d)}
                 disabled={busyId === d.id}
-                className="w-full h-9 gap-1.5"
+                className={`w-full h-9 gap-1.5 ${d.verified ? "hairline-gold" : "bg-gold-gradient text-primary-foreground hover:opacity-95"}`}
               >
                 {busyId === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 {d.verified ? "Re-check DNS" : "Verify now"}
