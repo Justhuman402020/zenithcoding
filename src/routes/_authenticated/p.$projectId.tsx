@@ -871,7 +871,7 @@ function ProjectEditor() {
                 </div>
               )}
             </div>
-            <form onSubmit={handleSend} className="p-3 border-t border-border bg-card/40 space-y-2">
+            <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {attachments.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto">
                   {attachments.map((a, i) => (
@@ -930,7 +930,12 @@ function ProjectEditor() {
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
                 />
-                <Button type="submit" size="icon" className="h-11 w-11 shrink-0" disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}>
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
+                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}
+                >
                   {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
@@ -1025,7 +1030,9 @@ function ProjectEditor() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5 text-primary" />
-              {published ? "Your site is live" : "Publish your site"}
+              <span className="font-display text-2xl">
+                {published ? "Your site is live" : "Publish your site"}
+              </span>
             </DialogTitle>
             <DialogDescription>
               {published
@@ -1091,7 +1098,12 @@ function ProjectEditor() {
                 Unpublish
               </Button>
             )}
-            <Button type="button" onClick={handlePublish} disabled={publishing}>
+            <Button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing}
+              className="bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow"
+            >
               {publishing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : published ? (
