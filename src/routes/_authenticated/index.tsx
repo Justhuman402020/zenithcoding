@@ -208,6 +208,34 @@ function Dashboard() {
     loadRepos();
   }, [ghOpen, ghConnected.connected]);
 
+  // Auto-load repos on the page as soon as GitHub is connected
+  useEffect(() => {
+    if (!ghConnected.connected) return;
+    if (ghRepos.length > 0 || ghLoadingRepos) return;
+    loadRepos();
+  }, [ghConnected.connected]);
+
+  const [importingRepo, setImportingRepo] = useState<string | null>(null);
+  const [repoFilter, setRepoFilter] = useState("");
+
+  async function quickImportRepo(fullName: string, defaultBranch: string) {
+    if (importingRepo) return;
+    const [owner, repo] = fullName.split("/");
+    if (!owner || !repo) return;
+    setImportingRepo(fullName);
+    try {
+      const result = await importGhRepo({
+        data: { owner, repo, branch: defaultBranch || undefined },
+      });
+      toast.success(`Imported ${result.fileCount} files from ${fullName}`);
+      navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
+    } catch (err: any) {
+      toast.error(err?.message || "Import failed");
+    } finally {
+      setImportingRepo(null);
+    }
+  }
+
   async function connectGithub() {
     try {
       setGhConnecting(true);
@@ -624,6 +652,101 @@ function Dashboard() {
             <p className="text-[11px] text-muted-foreground/80 mt-5">
               Tip: only the projects you link in Step 2 are visible to Forge. Repeat Step 2 for any project you want here.
             </p>
+          </div>
+        )}
+
+        {ghConnected.connected && (
+          <div className="mb-10">
+            <div className="flex items-end justify-between mb-5 hairline-bottom-gold pb-4 gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/70 mb-1">
+                  <Github className="h-3 w-3 inline mr-1.5 -mt-0.5" />
+                  GitHub · {ghConnected.login}
+                </p>
+                <h2 className="font-display text-3xl">Your repositories</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={repoFilter}
+                  onChange={(e) => setRepoFilter(e.target.value)}
+                  placeholder="Filter…"
+                  className="h-9 w-40 sm:w-56"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={loadRepos}
+                  disabled={ghLoadingRepos}
+                  className="hairline-gold"
+                >
+                  {ghLoadingRepos ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleDisconnectGh}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  Disconnect
+                </Button>
+              </div>
+            </div>
+            {ghLoadingRepos && ghRepos.length === 0 ? (
+              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading your repositories…
+              </div>
+            ) : ghRepoError ? (
+              <div className="rounded-xl hairline-gold bg-card/40 p-5 text-sm text-muted-foreground">{ghRepoError}</div>
+            ) : ghRepos.length === 0 ? (
+              <div className="rounded-xl hairline-gold bg-card/40 p-5 text-sm text-muted-foreground">No repositories found.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {ghRepos
+                  .filter((r) => !repoFilter.trim() || r.full_name.toLowerCase().includes(repoFilter.trim().toLowerCase()))
+                  .slice(0, 60)
+                  .map((r) => (
+                    <div key={r.full_name} className="group rounded-2xl hairline-gold bg-card/70 backdrop-blur-sm p-4 hover:shadow-candlelight hover:border-primary/40 transition-all flex flex-col">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <Github className="h-4 w-4 mt-1 shrink-0 text-primary" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <h3 className="font-medium truncate group-hover:text-gold transition-colors">{r.full_name}</h3>
+                            {r.private && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-1 min-h-[2rem]">
+                            {r.description || "No description"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <a
+                          href={`https://github.com/${r.full_name}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </a>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => quickImportRepo(r.full_name, r.default_branch)}
+                          disabled={!!importingRepo}
+                          className="h-8 bg-gold-gradient text-primary-foreground hover:opacity-95"
+                        >
+                          {importingRepo === r.full_name ? (
+                            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Importing…</>
+                          ) : (
+                            <><CloudDownload className="h-3.5 w-3.5 mr-1.5" /> Import</>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
