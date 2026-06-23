@@ -7,6 +7,7 @@ import {
   getGithubStatus,
   listGithubRepos,
   importGithubRepoAsProject,
+  mirrorAllGithubRepos,
   disconnectGithub,
 } from "@/lib/github.functions";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,50 @@ function Dashboard() {
   const fetchGhStatus = useServerFn(getGithubStatus);
   const fetchGhRepos = useServerFn(listGithubRepos);
   const importGhRepo = useServerFn(importGithubRepoAsProject);
+  const mirrorRepos = useServerFn(mirrorAllGithubRepos);
   const disconnectGh = useServerFn(disconnectGithub);
+
+  const [mirroring, setMirroring] = useState(false);
+  const [mirrorStatus, setMirrorStatus] = useState<{
+    total: number;
+    done: number;
+    failed: { full_name: string; error: string }[];
+  } | null>(null);
+
+  async function handleMirrorAll() {
+    if (mirroring) return;
+    setMirroring(true);
+    setMirrorStatus(null);
+    const failed: { full_name: string; error: string }[] = [];
+    let total = 0;
+    let done = 0;
+    try {
+      // Loop: import in batches until the server reports remaining === 0.
+      for (let i = 0; i < 50; i += 1) {
+        const res: any = await mirrorRepos({ data: undefined });
+        if (i === 0) {
+          total = (res.total ?? 0) - (res.alreadyMirrored ?? 0);
+          done = 0;
+        }
+        done += res.imported?.length ?? 0;
+        if (res.failed?.length) failed.push(...res.failed);
+        setMirrorStatus({
+          total: total || (res.imported?.length ?? 0) + (res.remaining ?? 0),
+          done,
+          failed: [...failed],
+        });
+        if (!res.remaining) break;
+      }
+      await load();
+      toast.success(
+        `Mirrored ${done} repo${done === 1 ? "" : "s"}${failed.length ? ` · ${failed.length} failed` : ""}`,
+      );
+    } catch (e: any) {
+      toast.error(e?.message || "Mirror failed");
+    } finally {
+      setMirroring(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
