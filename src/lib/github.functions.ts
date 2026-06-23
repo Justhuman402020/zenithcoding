@@ -171,8 +171,28 @@ async function readGithubRepoFiles({
   if (!resolvedBranch) {
     const mr = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, { headers });
     if (!mr.ok) {
+      if (mr.status === 404) {
+        // Probe the owner to disambiguate the cause for the user.
+        const ownerRes = await fetch(
+          `https://api.github.com/users/${cleanGithubPathPart(owner)}`,
+          { headers },
+        ).catch(() => null);
+        if (ownerRes && ownerRes.status === 404) {
+          throw new Error(
+            `GitHub user or org "${owner}" doesn't exist. Check the spelling in the URL (https://github.com/${owner}/${repo}).`,
+          );
+        }
+        if (token) {
+          throw new Error(
+            `Repo ${owner}/${repo} not found. It may be private and not visible to your connected GitHub account (${ownerRes ? "owner exists" : "owner unknown"}). Open the repo on github.com to confirm the exact owner/name, or grant the Lovable GitHub app access to that org/repo.`,
+          );
+        }
+        throw new Error(
+          `Repo ${owner}/${repo} not found or is private. Connect GitHub first (Import → Connect GitHub) so private repos become visible.`,
+        );
+      }
       const body = await mr.text().catch(() => "");
-      throw new Error(`Repo not found (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
+      throw new Error(`Could not read repo ${owner}/${repo} (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
     }
     resolvedBranch = (await mr.json()).default_branch || "main";
   }
