@@ -17,7 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 
@@ -389,6 +389,31 @@ function Dashboard() {
           <LogOut className="h-4 w-4" />
         </Button>
       </header>
+      {ghConnected.connected && (
+        <button
+          type="button"
+          onClick={handleMirrorAll}
+          disabled={mirroring}
+          aria-label="Import all my GitHub repos"
+          title={
+            mirroring && mirrorStatus
+              ? `Importing ${mirrorStatus.done}/${mirrorStatus.total} repos…`
+              : "One-tap: import every repo from your connected GitHub into Forge"
+          }
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-gold-gradient px-4 py-3 text-primary-foreground shadow-gold-glow hairline-gold transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-80"
+        >
+          {mirroring ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <CloudDownload className="h-5 w-5" />
+          )}
+          <span className="text-xs font-medium">
+            {mirroring && mirrorStatus
+              ? `${mirrorStatus.done}/${mirrorStatus.total}`
+              : "Import all my sites"}
+          </span>
+        </button>
+      )}
 
       <section className="flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12 relative">
         <div className="hidden md:flex items-center gap-3 mb-8">
