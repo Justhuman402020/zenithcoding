@@ -407,7 +407,7 @@ export const pushProjectToGithub = createServerFn({ method: "POST" })
       .eq("project_id", data.projectId)
       .eq("user_id", context.userId);
     if (filesErr) throw new Error(filesErr.message);
-    const files = (filesRows || []) as { path: string; content: string }[];
+    const files = (filesRows || []) as unknown as { path: string; content: string }[];
     if (files.length === 0) throw new Error("No files to push");
     if (files.length > 800) throw new Error("Too many files to push in one commit (max 800)");
 
