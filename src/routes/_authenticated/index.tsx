@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload } from "lucide-react";
+import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 
@@ -85,6 +86,15 @@ function Dashboard() {
     done: number;
     failed: { full_name: string; error: string }[];
   } | null>(null);
+
+  const [helperDismissed, setHelperDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("forge-gh-helper-dismissed") === "1";
+  });
+  function dismissHelper() {
+    setHelperDismissed(true);
+    try { window.localStorage.setItem("forge-gh-helper-dismissed", "1"); } catch {}
+  }
 
   async function handleMirrorAll() {
     if (mirroring) return;
@@ -500,6 +510,98 @@ function Dashboard() {
       </section>
 
       <main id="projects-grid" className="max-w-6xl w-full mx-auto px-4 pb-16 relative">
+        {!helperDismissed && (
+          <div className="mb-8 rounded-2xl hairline-gold bg-card/60 backdrop-blur-sm p-5 sm:p-6 relative shadow-candlelight">
+            <button
+              type="button"
+              onClick={dismissHelper}
+              aria-label="Dismiss"
+              className="absolute top-3 right-3 p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-2 mb-1">
+              <Github className="h-4 w-4 text-primary" />
+              <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/70">
+                Connect to GitHub
+              </p>
+            </div>
+            <h3 className="font-display text-2xl mb-2">
+              Bring every Lovable project here in 3 steps
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              Lovable doesn't expose a direct download API, but every Lovable project can push its code to GitHub with one click. Once a project is on GitHub, Forge mirrors it automatically.
+            </p>
+
+            <ol className="mt-5 space-y-4">
+              <li className="flex gap-3">
+                <span className="shrink-0 h-6 w-6 rounded-full bg-gold-gradient text-primary-foreground text-xs font-bold grid place-items-center">1</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Open your Lovable dashboard</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tap the link below and sign in if needed. You'll see every project you've built.
+                  </p>
+                  <a
+                    href="https://lovable.dev/projects"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Open lovable.dev/projects
+                  </a>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 h-6 w-6 rounded-full bg-gold-gradient text-primary-foreground text-xs font-bold grid place-items-center">2</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">For each project, click <span className="text-foreground">+ → GitHub → Connect project</span></p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    The plus button is in the bottom-left of the Lovable chat input. Authorize the Lovable GitHub app the first time — after that it's a one-tap action per project.
+                  </p>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 h-6 w-6 rounded-full bg-gold-gradient text-primary-foreground text-xs font-bold grid place-items-center">3</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Come back here and tap <span className="text-foreground">"Import all my sites"</span></p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {ghConnected.connected
+                      ? `You're connected as ${ghConnected.login}. Every Lovable project you linked to GitHub will appear in your Forge projects below.`
+                      : "First time? Tap Import below, then Connect GitHub. After that the gold button (bottom-right) pulls in every linked repo."}
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {!ghConnected.connected ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setGhOpen(true)}
+                        className="bg-gold-gradient text-primary-foreground hover:opacity-95 h-8"
+                      >
+                        <Github className="h-3.5 w-3.5 mr-1.5" /> Connect GitHub
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleMirrorAll}
+                        disabled={mirroring}
+                        className="bg-gold-gradient text-primary-foreground hover:opacity-95 h-8"
+                      >
+                        {mirroring ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CloudDownload className="h-3.5 w-3.5 mr-1.5" />}
+                        {mirroring && mirrorStatus ? `Importing ${mirrorStatus.done}/${mirrorStatus.total}` : "Import all my sites"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            </ol>
+
+            <p className="text-[11px] text-muted-foreground/80 mt-5">
+              Tip: only the projects you link in Step 2 are visible to Forge. Repeat Step 2 for any project you want here.
+            </p>
+          </div>
+        )}
+
         <div className="flex items-end justify-between mb-8 hairline-bottom-gold pb-5">
           <div>
             <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/70 mb-1">Atelier</p>
