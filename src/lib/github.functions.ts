@@ -154,7 +154,8 @@ async function readGithubRepoFiles({
     resolvedBranch = (await mr.json()).default_branch || "main";
   }
 
-  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(resolvedBranch)}?recursive=1`;
+  const treeBranch = resolvedBranch || "main";
+  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(treeBranch)}?recursive=1`;
   const tr = await fetch(treeUrl, { headers });
   if (!tr.ok) {
     const body = await tr.text().catch(() => "");
@@ -200,7 +201,7 @@ async function readGithubRepoFiles({
   await Promise.all(Array.from({ length: 8 }, worker));
   files.sort((a, b) => a.path.localeCompare(b.path));
 
-  return { branch: resolvedBranch, files };
+  return { branch: treeBranch, files };
 }
 
 const ALLOWED = /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|yml|yaml|vue|astro|mjs|cjs)$/i;
