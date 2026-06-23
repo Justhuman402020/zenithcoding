@@ -50,10 +50,12 @@ export function GithubPushDialog({
   open,
   onOpenChange,
   projectId,
+  onPushed,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   projectId: string;
+  onPushed?: (p: { branch: string; sha: string; at: string; message: string }) => void;
 }) {
   const getLink = useServerFn(getProjectGithubLink);
   const listBranches = useServerFn(listProjectGithubBranches);
@@ -185,6 +187,7 @@ export function GithubPushDialog({
         setLastResult({ url: result.url, branch: result.branch, sha: result.sha });
         // Reset resume cache and update header link summary after a clean push.
         setUploadedBlobs([]);
+        const at = new Date().toISOString();
         setLink((l) =>
           l
             ? {
@@ -192,10 +195,11 @@ export function GithubPushDialog({
                 last_pushed_branch: result!.branch,
                 last_pushed_sha: result!.sha,
                 last_pushed_message: attempt.message,
-                last_pushed_at: new Date().toISOString(),
+                last_pushed_at: at,
               }
             : l,
         );
+        onPushed?.({ branch: result.branch, sha: result.sha, at, message: attempt.message });
         toast.success(`Pushed ${result.fileCount} files to ${result.branch}`);
       } else {
         const msg = errorMsg || "Push failed";
