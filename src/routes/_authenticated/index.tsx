@@ -211,7 +211,7 @@ function Dashboard() {
   async function connectGithub() {
     try {
       setGhConnecting(true);
-      const { url } = await startGhAuth({});
+      const { url } = await startGhAuth({ data: { origin: window.location.origin } });
       // On mobile, popups usually open as a new tab and window.opener is null,
       // so postMessage back to this tab won't fire. We rely on BroadcastChannel,
       // a localStorage signal, and focus/visibility polling (set up in the
