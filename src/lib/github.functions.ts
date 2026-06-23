@@ -501,3 +501,140 @@ export const pushProjectToGithub = createServerFn({ method: "POST" })
       fileCount: files.length,
     };
   });
+
+// ============= Mirror every GitHub repo into Forge =============
+
+// Imports up to MIRROR_BATCH missing repos per call. Re-call until `remaining` is 0.
+const MIRROR_BATCH = 6;
+
+export const mirrorAllGithubRepos = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: tok } = await context.supabase
+      .from("github_tokens" as any)
+      .select("access_token, scope")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!tok) throw new Error("Connect GitHub first");
+    const token = (tok as any).access_token as string;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+
+    // 1. List every repo the user can see (owner + collaborator + org).
+    const allRepos: { full_name: string; default_branch: string; updated_at?: string }[] = [];
+    const seen = new Set<string>();
+    for (
+      const baseUrl of [
+        "https://api.github.com/user/repos?sort=updated&affiliation=owner,collaborator,organization_member",
+        "https://api.github.com/user/repos?sort=updated&type=all",
+      ]
+    ) {
+      for (let page = 1; page <= 20; page += 1) {
+        const url = `${baseUrl}&per_page=100&page=${page}`;
+        const r = await fetch(url, { headers });
+        if (!r.ok) {
+          const body = await r.text().catch(() => "");
+          throw new Error(`GitHub ${r.status}: ${body.slice(0, 200) || r.statusText}`);
+        }
+        const batch = (await r.json()) as any[];
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        for (const repo of batch) {
+          if (!repo?.full_name || seen.has(repo.full_name)) continue;
+          seen.add(repo.full_name);
+          allRepos.push({
+            full_name: repo.full_name,
+            default_branch: repo.default_branch || "main",
+            updated_at: repo.updated_at,
+          });
+        }
+        const linkHdr = r.headers.get("link") ?? "";
+        if (batch.length < 100 || !linkHdr.includes('rel="next"')) break;
+      }
+    }
+    allRepos.sort(
+      (a, b) => new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime(),
+    );
+
+    // 2. Determine which are already mirrored for this user.
+    const { data: existingLinks } = await context.supabase
+      .from("project_github_links" as any)
+      .select("owner, repo")
+      .eq("user_id", context.userId);
+    const mirroredKeys = new Set(
+      ((existingLinks as any[]) || []).map((l) => `${l.owner}/${l.repo}`.toLowerCase()),
+    );
+
+    const missing = allRepos.filter((r) => !mirroredKeys.has(r.full_name.toLowerCase()));
+    const batch = missing.slice(0, MIRROR_BATCH);
+
+    const imported: { full_name: string; projectId: string; fileCount: number }[] = [];
+    const failed: { full_name: string; error: string }[] = [];
+
+    for (const repo of batch) {
+      const [owner, name] = repo.full_name.split("/");
+      try {
+        const { branch, files } = await readGithubRepoFiles({
+          owner,
+          repo: name,
+          branch: repo.default_branch,
+          token,
+        });
+        const { data: project, error: projectError } = await context.supabase
+          .from("projects" as any)
+          .insert({
+            name: name,
+            description: `Mirrored from github.com/${repo.full_name}@${branch}`,
+            user_id: context.userId,
+          })
+          .select("id")
+          .single();
+        if (projectError || !project) throw new Error(projectError?.message || "Could not create project");
+        const projectId = (project as any).id as string;
+
+        const rows = files.map((file) => ({
+          project_id: projectId,
+          user_id: context.userId,
+          path: file.path,
+          content: file.content,
+        }));
+        if (!rows.some((row) => row.path === "index.html")) {
+          const candidate =
+            rows.find((row) => /(^|\/)index\.html$/i.test(row.path)) ||
+            rows.find((row) => /\.html?$/i.test(row.path));
+          if (candidate) rows.unshift({ ...candidate, path: "index.html" });
+        }
+        for (let i = 0; i < rows.length; i += 50) {
+          const { error } = await context.supabase
+            .from("files" as any)
+            .insert(rows.slice(i, i + 50));
+          if (error) {
+            await context.supabase.from("projects" as any).delete().eq("id", projectId);
+            throw new Error(error.message);
+          }
+        }
+        await context.supabase.from("project_github_links" as any).insert({
+          project_id: projectId,
+          user_id: context.userId,
+          owner,
+          repo: name,
+          default_branch: branch,
+        });
+        imported.push({ full_name: repo.full_name, projectId, fileCount: rows.length });
+      } catch (e: any) {
+        failed.push({ full_name: repo.full_name, error: e?.message || "import failed" });
+      }
+    }
+
+    const remaining = Math.max(0, missing.length - batch.length);
+    return {
+      total: allRepos.length,
+      alreadyMirrored: allRepos.length - missing.length,
+      missing: missing.length,
+      imported,
+      failed,
+      remaining,
+    };
+  });
