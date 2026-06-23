@@ -33,10 +33,33 @@ export const getGithubStatus = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data } = await context.supabase
       .from("github_tokens" as any)
-      .select("github_login")
+      .select("access_token, github_login, scope")
       .eq("user_id", context.userId)
       .maybeSingle();
-    return { connected: !!data, login: (data as any)?.github_login ?? null };
+    if (!data) return { connected: false, login: null, scope: null };
+    const row = data as any;
+    if (row.github_login) return { connected: true, login: row.github_login as string, scope: row.scope ?? null };
+
+    const me = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${row.access_token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (me.status === 401 || me.status === 403) {
+      await context.supabase.from("github_tokens" as any).delete().eq("user_id", context.userId);
+      return { connected: false, login: null, scope: null };
+    }
+    const profile = me.ok ? await me.json().catch(() => null) : null;
+    const login = typeof profile?.login === "string" ? profile.login : null;
+    if (login) {
+      await context.supabase
+        .from("github_tokens" as any)
+        .update({ github_login: login, updated_at: new Date().toISOString() })
+        .eq("user_id", context.userId);
+    }
+    return { connected: true, login, scope: row.scope ?? null };
   });
 
 export const disconnectGithub = createServerFn({ method: "POST" })
