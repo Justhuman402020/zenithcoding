@@ -80,6 +80,21 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function formatRelativeTime(iso: string) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diff = Math.max(0, Date.now() - then);
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 async function sampleVideoFrames(file: File, maxFrames = 4): Promise<AttachmentFrame[]> {
   const objectUrl = URL.createObjectURL(file);
   try {
@@ -219,6 +234,12 @@ function ProjectEditor() {
   // GitHub link/push state
   const [githubLinked, setGithubLinked] = useState(false);
   const [pushOpen, setPushOpen] = useState(false);
+  const [lastPush, setLastPush] = useState<{
+    branch: string | null;
+    sha: string | null;
+    at: string | null;
+    message: string | null;
+  } | null>(null);
 
   // chat state
   const [input, setInput] = useState("");
@@ -261,10 +282,19 @@ function ProjectEditor() {
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
       const { data: ghLink } = await supabase
         .from("project_github_links" as any)
-        .select("project_id")
+        .select("project_id, last_pushed_branch, last_pushed_sha, last_pushed_at, last_pushed_message")
         .eq("project_id", projectId)
         .maybeSingle();
       setGithubLinked(!!ghLink);
+      if (ghLink) {
+        const g = ghLink as any;
+        setLastPush({
+          branch: g.last_pushed_branch ?? null,
+          sha: g.last_pushed_sha ?? null,
+          at: g.last_pushed_at ?? null,
+          message: g.last_pushed_message ?? null,
+        });
+      }
       const list = (fileData ?? []) as ProjectFile[];
       setFiles(list);
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
@@ -715,16 +745,35 @@ function ProjectEditor() {
           <span className="hidden xs:inline text-xs">Revert</span>
         </Button>
         {githubLinked && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setPushOpen(true)}
-            className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
-            title="Commit and push current files to GitHub"
-          >
-            <Github className="h-4 w-4" />
-            <span className="hidden xs:inline text-xs">Push</span>
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPushOpen(true)}
+              className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
+              title={
+                lastPush?.at
+                  ? `Last push: ${lastPush.branch} @ ${lastPush.sha?.slice(0, 7)} · ${new Date(lastPush.at).toLocaleString()}${lastPush.message ? ` · ${lastPush.message}` : ""}`
+                  : "Commit and push current files to GitHub"
+              }
+            >
+              <Github className="h-4 w-4" />
+              <span className="hidden xs:inline text-xs">Push</span>
+            </Button>
+            {lastPush?.at && lastPush.sha && (
+              <span
+                className="hidden md:inline-flex items-center gap-1 rounded-full hairline-gold px-2 py-0.5 text-[10px] text-muted-foreground"
+                title={`${lastPush.message || ""}\n${new Date(lastPush.at).toLocaleString()}`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="text-foreground/80">{lastPush.branch}</span>
+                <span className="opacity-60">·</span>
+                <span className="font-mono">{lastPush.sha.slice(0, 7)}</span>
+                <span className="opacity-60">·</span>
+                <span>{formatRelativeTime(lastPush.at)}</span>
+              </span>
+            )}
+          </div>
         )}
         <Button
           size="sm"
@@ -747,6 +796,9 @@ function ProjectEditor() {
           open={pushOpen}
           onOpenChange={setPushOpen}
           projectId={projectId}
+          onPushed={(p) =>
+            setLastPush({ branch: p.branch, sha: p.sha, at: p.at, message: p.message })
+          }
         />
       )}
 

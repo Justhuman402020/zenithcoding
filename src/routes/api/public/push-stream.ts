@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 type Evt =
   | { type: "log"; level: "info" | "warn" | "error" | "success"; message: string; meta?: unknown }
   | { type: "progress"; phase: string; current: number; total: number }
+  | { type: "blob"; path: string; sha: string }
   | { type: "result"; sha: string; branch: string; url: string; fileCount: number }
   | { type: "error"; message: string };
 
@@ -25,6 +26,7 @@ export const Route = createFileRoute("/api/public/push-stream")({
           message?: string;
           createBranch?: boolean;
           fromBranch?: string;
+          priorBlobs?: { path: string; sha: string }[];
         };
         try {
           body = await request.json();
@@ -36,6 +38,13 @@ export const Route = createFileRoute("/api/public/push-stream")({
         const message = String(body.message || "").trim();
         const createBranch = Boolean(body.createBranch);
         const fromBranchInput = body.fromBranch ? String(body.fromBranch).trim() : "";
+        const priorBlobs = Array.isArray(body.priorBlobs) ? body.priorBlobs : [];
+        const priorMap = new Map<string, string>();
+        for (const b of priorBlobs) {
+          if (b && typeof b.path === "string" && typeof b.sha === "string") {
+            priorMap.set(b.path, b.sha);
+          }
+        }
         if (!projectId) return new Response("Missing projectId", { status: 400 });
         if (!branch) return new Response("Missing branch", { status: 400 });
         if (!/^[\w.\-\/]+$/.test(branch)) return new Response("Invalid branch name", { status: 400 });
@@ -95,6 +104,13 @@ export const Route = createFileRoute("/api/public/push-stream")({
               if (files.length > 800)
                 throw new Error("Too many files to push in one commit (max 800)");
               log("success", `Loaded ${files.length} files`);
+              const filesToUpload = files.filter((f) => !priorMap.has(f.path));
+              if (priorMap.size > 0) {
+                log(
+                  "info",
+                  `Resuming: ${priorMap.size} blob(s) already uploaded, ${filesToUpload.length} remaining`,
+                );
+              }
 
               const owner = cleanGithubPathPart(l.owner);
               const repo = cleanGithubPathPart(l.repo);
@@ -156,16 +172,20 @@ export const Route = createFileRoute("/api/public/push-stream")({
               const baseTreeSha = baseCommit.tree?.sha as string;
               log("info", `Base tree ${String(baseTreeSha).slice(0, 7)}`);
 
-              log("info", `Uploading ${files.length} blobs to GitHub…`);
-              send({ type: "progress", phase: "blobs", current: 0, total: files.length });
+              log("info", `Uploading ${filesToUpload.length} blob(s) to GitHub…`);
+              send({ type: "progress", phase: "blobs", current: 0, total: filesToUpload.length });
               const treeEntries: { path: string; mode: string; type: string; sha: string }[] = [];
+              // Seed tree entries with previously uploaded blobs.
+              for (const [path, sha] of priorMap.entries()) {
+                treeEntries.push({ path, mode: "100644", type: "blob", sha });
+              }
               let idx = 0;
               let done = 0;
               const errors: string[] = [];
               async function blobWorker() {
-                while (idx < files.length) {
+                while (idx < filesToUpload.length) {
                   const i = idx++;
-                  const f = files[i];
+                  const f = filesToUpload[i];
                   try {
                     const b = await gh<any>(`/git/blobs`, {
                       method: "POST",
@@ -180,28 +200,34 @@ export const Route = createFileRoute("/api/public/push-stream")({
                       type: "blob",
                       sha: b.sha,
                     });
+                    send({ type: "blob", path: f.path, sha: b.sha });
                   } catch (e: any) {
                     errors.push(`${f.path}: ${e?.message || "blob failed"}`);
                     log("error", `Blob failed for ${f.path}: ${e?.message || "unknown"}`);
                   } finally {
                     done++;
-                    if (done % 5 === 0 || done === files.length) {
+                    if (done % 5 === 0 || done === filesToUpload.length) {
                       send({
                         type: "progress",
                         phase: "blobs",
                         current: done,
-                        total: files.length,
+                        total: filesToUpload.length,
                       });
                     }
                   }
                 }
               }
               await Promise.all(Array.from({ length: 6 }, blobWorker));
+              if (errors.length > 0) {
+                throw new Error(
+                  `${errors.length} blob upload(s) failed. Retry to resume from where it stopped. First error: ${errors[0]}`,
+                );
+              }
               if (treeEntries.length === 0)
-                throw new Error(`All blob uploads failed (${errors[0] || "unknown"})`);
+                throw new Error("No blobs to commit");
               log(
                 errors.length ? "warn" : "success",
-                `Uploaded ${treeEntries.length}/${files.length} blobs${
+                `Uploaded ${treeEntries.length}/${files.length} blob(s)${
                   errors.length ? ` (${errors.length} failed)` : ""
                 }`,
               );
