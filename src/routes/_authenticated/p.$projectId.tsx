@@ -730,16 +730,35 @@ function ProjectEditor() {
           <span className="hidden xs:inline text-xs">Revert</span>
         </Button>
         {githubLinked && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setPushOpen(true)}
-            className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
-            title="Commit and push current files to GitHub"
-          >
-            <Github className="h-4 w-4" />
-            <span className="hidden xs:inline text-xs">Push</span>
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPushOpen(true)}
+              className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
+              title={
+                lastPush?.at
+                  ? `Last push: ${lastPush.branch} @ ${lastPush.sha?.slice(0, 7)} · ${new Date(lastPush.at).toLocaleString()}${lastPush.message ? ` · ${lastPush.message}` : ""}`
+                  : "Commit and push current files to GitHub"
+              }
+            >
+              <Github className="h-4 w-4" />
+              <span className="hidden xs:inline text-xs">Push</span>
+            </Button>
+            {lastPush?.at && lastPush.sha && (
+              <span
+                className="hidden md:inline-flex items-center gap-1 rounded-full hairline-gold px-2 py-0.5 text-[10px] text-muted-foreground"
+                title={`${lastPush.message || ""}\n${new Date(lastPush.at).toLocaleString()}`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="text-foreground/80">{lastPush.branch}</span>
+                <span className="opacity-60">·</span>
+                <span className="font-mono">{lastPush.sha.slice(0, 7)}</span>
+                <span className="opacity-60">·</span>
+                <span>{formatRelativeTime(lastPush.at)}</span>
+              </span>
+            )}
+          </div>
         )}
         <Button
           size="sm"
@@ -762,6 +781,9 @@ function ProjectEditor() {
           open={pushOpen}
           onOpenChange={setPushOpen}
           projectId={projectId}
+          onPushed={(p) =>
+            setLastPush({ branch: p.branch, sha: p.sha, at: p.at, message: p.message })
+          }
         />
       )}
 
