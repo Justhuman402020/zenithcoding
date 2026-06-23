@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Github, Loader2, GitBranch, ExternalLink } from "lucide-react";
+import { Github, Loader2, GitBranch, ExternalLink, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
@@ -71,6 +71,10 @@ export function GithubPushDialog({
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
+  // Successful blob uploads kept across retries so the next attempt can resume.
+  const [uploadedBlobs, setUploadedBlobs] = useState<{ path: string; sha: string }[]>([]);
+  // Locked branch/message for the current attempt so Retry uses the same values.
+  const [activeAttempt, setActiveAttempt] = useState<{ branch: string; message: string; createBranch: boolean; fromBranch?: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -78,6 +82,8 @@ export function GithubPushDialog({
     setLogs([]);
     setProgress(null);
     setPushError(null);
+    setUploadedBlobs([]);
+    setActiveAttempt(null);
     setLoading(true);
     (async () => {
       try {
@@ -98,12 +104,8 @@ export function GithubPushDialog({
     })();
   }, [open, projectId, getLink, listBranches]);
 
-  async function handlePush() {
-    const targetBranch = createBranch ? newBranch.trim() : branch.trim();
-    if (!targetBranch) return toast.error("Pick or name a branch");
-    if (!message.trim()) return toast.error("Write a commit message");
+  async function runPush(attempt: { branch: string; message: string; createBranch: boolean; fromBranch?: string }, prior: { path: string; sha: string }[]) {
     setPushing(true);
-    setLogs([]);
     setProgress(null);
     setPushError(null);
     setLastResult(null);
@@ -120,10 +122,11 @@ export function GithubPushDialog({
         },
         body: JSON.stringify({
           projectId,
-          branch: targetBranch,
-          message: message.trim(),
-          createBranch,
-          fromBranch: createBranch ? fromBranch.trim() || undefined : undefined,
+          branch: attempt.branch,
+          message: attempt.message,
+          createBranch: attempt.createBranch,
+          fromBranch: attempt.createBranch ? attempt.fromBranch || undefined : undefined,
+          priorBlobs: prior,
         }),
       });
 
@@ -137,6 +140,7 @@ export function GithubPushDialog({
       let buffer = "";
       let result: { url: string; branch: string; sha: string; fileCount: number } | null = null;
       let errorMsg: string | null = null;
+      const newBlobs: { path: string; sha: string }[] = [];
 
       while (true) {
         const { value, done } = await reader.read();
@@ -156,6 +160,8 @@ export function GithubPushDialog({
               ]);
             } else if (evt.type === "progress") {
               setProgress({ phase: evt.phase, current: evt.current, total: evt.total });
+            } else if (evt.type === "blob") {
+              newBlobs.push({ path: evt.path, sha: evt.sha });
             } else if (evt.type === "result") {
               result = evt;
             } else if (evt.type === "error") {
@@ -166,9 +172,30 @@ export function GithubPushDialog({
           }
         }
       }
+      // Merge new blobs into resume cache, deduped by path (latest wins).
+      if (newBlobs.length) {
+        setUploadedBlobs((prev) => {
+          const map = new Map(prev.map((b) => [b.path, b.sha] as const));
+          for (const b of newBlobs) map.set(b.path, b.sha);
+          return Array.from(map, ([path, sha]) => ({ path, sha }));
+        });
+      }
 
       if (result) {
         setLastResult({ url: result.url, branch: result.branch, sha: result.sha });
+        // Reset resume cache and update header link summary after a clean push.
+        setUploadedBlobs([]);
+        setLink((l) =>
+          l
+            ? {
+                ...l,
+                last_pushed_branch: result!.branch,
+                last_pushed_sha: result!.sha,
+                last_pushed_message: attempt.message,
+                last_pushed_at: new Date().toISOString(),
+              }
+            : l,
+        );
         toast.success(`Pushed ${result.fileCount} files to ${result.branch}`);
       } else {
         const msg = errorMsg || "Push failed";
@@ -183,6 +210,31 @@ export function GithubPushDialog({
     } finally {
       setPushing(false);
     }
+  }
+
+  async function handlePush() {
+    const targetBranch = createBranch ? newBranch.trim() : branch.trim();
+    if (!targetBranch) return toast.error("Pick or name a branch");
+    if (!message.trim()) return toast.error("Write a commit message");
+    const attempt = {
+      branch: targetBranch,
+      message: message.trim(),
+      createBranch,
+      fromBranch: createBranch ? fromBranch.trim() : undefined,
+    };
+    setActiveAttempt(attempt);
+    setLogs([]);
+    setUploadedBlobs([]);
+    await runPush(attempt, []);
+  }
+
+  async function handleRetry() {
+    if (!activeAttempt) return handlePush();
+    setLogs((prev) => [
+      ...prev,
+      { level: "info", message: `Retrying — resuming from ${uploadedBlobs.length} already-uploaded blob(s)…`, ts: Date.now() },
+    ]);
+    await runPush(activeAttempt, uploadedBlobs);
   }
 
   return (
@@ -346,6 +398,22 @@ export function GithubPushDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pushing}>
             Close
           </Button>
+          {link && pushError && !pushing && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRetry}
+              className="gap-1.5"
+              title={
+                uploadedBlobs.length
+                  ? `Resume from ${uploadedBlobs.length} uploaded file(s)`
+                  : "Retry with the same branch and commit message"
+              }
+            >
+              <RotateCw className="h-4 w-4" />
+              {uploadedBlobs.length ? `Retry (resume ${uploadedBlobs.length})` : "Retry"}
+            </Button>
+          )}
           {link && (
             <Button
               type="button"
