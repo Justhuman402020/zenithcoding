@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
+import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
@@ -34,6 +35,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const SSlugRoute = SSlugRouteImport.update({
   id: '/s/$slug',
   path: '/s/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
+  id: '/api/public/push-stream',
+  path: '/api/public/push-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/s/$slug': typeof SSlugRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
 }
 export interface FileRoutesById {
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
 }
 export interface FileRouteTypes {
@@ -86,6 +95,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/push-stream'
     | '/api/public/github/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/push-stream'
     | '/api/public/github/callback'
   id:
     | '__root__'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/push-stream'
     | '/api/public/github/callback'
   fileRoutesById: FileRoutesById
 }
@@ -111,6 +123,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   SSlugRoute: typeof SSlugRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
+  ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
 }
 
@@ -142,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/s/$slug'
       fullPath: '/s/$slug'
       preLoaderRoute: typeof SSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/push-stream': {
+      id: '/api/public/push-stream'
+      path: '/api/public/push-stream'
+      fullPath: '/api/public/push-stream'
+      preLoaderRoute: typeof ApiPublicPushStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/chat': {
@@ -186,6 +206,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   SSlugRoute: SSlugRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
+  ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
 }
 export const routeTree = rootRouteImport

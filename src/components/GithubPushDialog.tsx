@@ -3,8 +3,8 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   getProjectGithubLink,
   listProjectGithubBranches,
-  pushProjectToGithub,
 } from "@/lib/github.functions";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { Github, Loader2, GitBranch, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { Progress } from "@/components/ui/progress";
 
 type LinkInfo = {
   owner: string;
@@ -36,6 +38,12 @@ type LinkInfo = {
   last_pushed_sha: string | null;
   last_pushed_message: string | null;
   last_pushed_at: string | null;
+};
+
+type LogLine = {
+  level: "info" | "warn" | "error" | "success";
+  message: string;
+  ts: number;
 };
 
 export function GithubPushDialog({
@@ -49,7 +57,6 @@ export function GithubPushDialog({
 }) {
   const getLink = useServerFn(getProjectGithubLink);
   const listBranches = useServerFn(listProjectGithubBranches);
-  const pushFn = useServerFn(pushProjectToGithub);
 
   const [loading, setLoading] = useState(false);
   const [link, setLink] = useState<LinkInfo | null>(null);
@@ -61,10 +68,16 @@ export function GithubPushDialog({
   const [message, setMessage] = useState("Update from Forge");
   const [pushing, setPushing] = useState(false);
   const [lastResult, setLastResult] = useState<{ url: string; branch: string; sha: string } | null>(null);
+  const [logs, setLogs] = useState<LogLine[]>([]);
+  const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLastResult(null);
+    setLogs([]);
+    setProgress(null);
+    setPushError(null);
     setLoading(true);
     (async () => {
       try {
@@ -90,20 +103,83 @@ export function GithubPushDialog({
     if (!targetBranch) return toast.error("Pick or name a branch");
     if (!message.trim()) return toast.error("Write a commit message");
     setPushing(true);
+    setLogs([]);
+    setProgress(null);
+    setPushError(null);
+    setLastResult(null);
     try {
-      const res = await pushFn({
-        data: {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      if (!token) throw new Error("Not signed in");
+
+      const res = await fetch("/api/public/push-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
           projectId,
           branch: targetBranch,
           message: message.trim(),
           createBranch,
           fromBranch: createBranch ? fromBranch.trim() || undefined : undefined,
-        },
+        }),
       });
-      setLastResult({ url: res.url, branch: res.branch, sha: res.sha });
-      toast.success(`Pushed ${res.fileCount} files to ${res.branch}`);
+
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let result: { url: string; branch: string; sha: string; fileCount: number } | null = null;
+      let errorMsg: string | null = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          try {
+            const evt = JSON.parse(line);
+            if (evt.type === "log") {
+              setLogs((prev) => [
+                ...prev,
+                { level: evt.level, message: evt.message, ts: Date.now() },
+              ]);
+            } else if (evt.type === "progress") {
+              setProgress({ phase: evt.phase, current: evt.current, total: evt.total });
+            } else if (evt.type === "result") {
+              result = evt;
+            } else if (evt.type === "error") {
+              errorMsg = evt.message;
+            }
+          } catch {
+            // ignore malformed line
+          }
+        }
+      }
+
+      if (result) {
+        setLastResult({ url: result.url, branch: result.branch, sha: result.sha });
+        toast.success(`Pushed ${result.fileCount} files to ${result.branch}`);
+      } else {
+        const msg = errorMsg || "Push failed";
+        setPushError(msg);
+        toast.error(msg);
+      }
     } catch (e: any) {
-      toast.error(e?.message || "Push failed");
+      const msg = e?.message || "Push failed";
+      setPushError(msg);
+      setLogs((prev) => [...prev, { level: "error", message: msg, ts: Date.now() }]);
+      toast.error(msg);
     } finally {
       setPushing(false);
     }
@@ -211,6 +287,57 @@ export function GithubPushDialog({
                 View commit {lastResult.sha.slice(0, 7)} on {lastResult.branch}
                 <ExternalLink className="h-3 w-3" />
               </a>
+            )}
+
+            {(pushing || logs.length > 0 || progress || pushError) && (
+              <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+                {progress && progress.total > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span className="capitalize">{progress.phase}</span>
+                      <span>
+                        {progress.current}/{progress.total}
+                      </span>
+                    </div>
+                    <Progress value={Math.round((progress.current / progress.total) * 100)} />
+                  </div>
+                )}
+                <div className="max-h-44 overflow-auto rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed">
+                  {logs.length === 0 ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Starting push…
+                    </div>
+                  ) : (
+                    logs.map((l, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          "flex gap-2",
+                          l.level === "error" && "text-destructive",
+                          l.level === "warn" && "text-amber-500",
+                          l.level === "success" && "text-emerald-500",
+                          l.level === "info" && "text-muted-foreground",
+                        )}
+                      >
+                        <span className="shrink-0 opacity-60">
+                          {l.level === "error"
+                            ? "✗"
+                            : l.level === "success"
+                              ? "✓"
+                              : l.level === "warn"
+                                ? "!"
+                                : "›"}
+                        </span>
+                        <span className="whitespace-pre-wrap break-words">{l.message}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {pushError && (
+                  <div className="text-xs text-destructive">{pushError}</div>
+                )}
+              </div>
             )}
           </div>
         )}
