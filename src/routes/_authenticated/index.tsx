@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload } from "lucide-react";
+import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 
@@ -85,6 +86,15 @@ function Dashboard() {
     done: number;
     failed: { full_name: string; error: string }[];
   } | null>(null);
+
+  const [helperDismissed, setHelperDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("forge-gh-helper-dismissed") === "1";
+  });
+  function dismissHelper() {
+    setHelperDismissed(true);
+    try { window.localStorage.setItem("forge-gh-helper-dismissed", "1"); } catch {}
+  }
 
   async function handleMirrorAll() {
     if (mirroring) return;
