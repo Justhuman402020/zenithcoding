@@ -147,17 +147,43 @@ function Dashboard() {
   // Refresh GitHub status when the dashboard mounts and after the popup signals back
   useEffect(() => {
     fetchGhStatus({}).then(setGhConnected).catch(() => {});
+    let lastLogin: string | null = null;
+    const refresh = () => {
+      fetchGhStatus({}).then((s) => {
+        setGhConnected(s);
+        if (s.connected) {
+          setGhConnecting(false);
+          if (s.login !== lastLogin) {
+            lastLogin = s.login;
+            toast.success(`GitHub connected${s.login ? ` as ${s.login}` : ""}`);
+          }
+        }
+      }).catch(() => {});
+    };
     function onMsg(e: MessageEvent) {
-      if (e.data?.type === "github-connected") {
-        setGhConnecting(false);
-        fetchGhStatus({}).then((s) => {
-          setGhConnected(s);
-          if (s.connected) toast.success(`GitHub connected${s.login ? ` as ${s.login}` : ""}`);
-        }).catch(() => {});
-      }
+      if (e.data?.type === "github-connected") refresh();
     }
+    function onStorage(e: StorageEvent) {
+      if (e.key === "forge-github-connected") refresh();
+    }
+    function onFocus() { refresh(); }
+    function onVisibility() { if (document.visibilityState === "visible") refresh(); }
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("forge-github");
+      bc.onmessage = (e) => { if (e.data?.type === "github-connected") refresh(); };
+    } catch {}
     window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      bc?.close();
+    };
   }, []);
 
   async function loadRepos() {
@@ -186,11 +212,28 @@ function Dashboard() {
     try {
       setGhConnecting(true);
       const { url } = await startGhAuth({});
-      const w = window.open(url, "github-oauth", "width=720,height=820");
+      // On mobile, popups usually open as a new tab and window.opener is null,
+      // so postMessage back to this tab won't fire. We rely on BroadcastChannel,
+      // a localStorage signal, and focus/visibility polling (set up in the
+      // listener above) to detect completion. As a final safety net, poll
+      // the server for connection status while we're waiting.
+      const w = window.open(url, "_blank");
       if (!w) {
         window.location.href = url;
         return;
       }
+      const started = Date.now();
+      const poll = window.setInterval(async () => {
+        if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); return; }
+        try {
+          const s = await fetchGhStatus({});
+          if (s.connected) {
+            setGhConnected(s);
+            setGhConnecting(false);
+            window.clearInterval(poll);
+          }
+        } catch {}
+      }, 2500);
     } catch (e: any) {
       setGhConnecting(false);
       toast.error(e?.message || "Could not start GitHub auth");
