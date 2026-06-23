@@ -428,6 +428,20 @@ function Dashboard() {
                 >
                   <Github className="h-4 w-4" /> Import
                 </button>
+                {ghConnected.connected && (
+                  <button
+                    type="button"
+                    onClick={handleMirrorAll}
+                    disabled={mirroring}
+                    title="Import every repo from your connected GitHub that isn't here yet"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40 disabled:opacity-60"
+                  >
+                    {mirroring ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    {mirroring && mirrorStatus
+                      ? `Mirroring ${mirrorStatus.done}/${mirrorStatus.total}`
+                      : "Mirror all"}
+                  </button>
+                )}
               </div>
               <Button
                 type="submit"
