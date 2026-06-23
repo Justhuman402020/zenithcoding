@@ -201,24 +201,6 @@ async function readGithubRepoFiles({
 
   return { branch, files };
 }
-      const r = await fetch(url, { headers });
-      if (!r.ok) {
-        const body = await r.text().catch(() => "");
-        throw new Error(`GitHub error ${r.status}: ${body.slice(0, 160) || r.statusText}`);
-      }
-      const batch = (await r.json()) as any[];
-      if (!Array.isArray(batch) || batch.length === 0) break;
-      all.push(...batch);
-      if (batch.length < 100) break;
-    }
-    return all.map((r) => ({
-      full_name: r.full_name as string,
-      private: r.private as boolean,
-      default_branch: r.default_branch as string,
-      description: r.description as string | null,
-      updated_at: r.updated_at as string,
-    }));
-  });
 
 const ALLOWED = /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|yml|yaml|vue|astro|mjs|cjs)$/i;
 const SKIP_DIR = /(^|\/)(node_modules|\.git|dist|build|\.next|\.nuxt|coverage)\//i;

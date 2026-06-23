@@ -6,7 +6,7 @@ import {
   getGithubAuthUrl,
   getGithubStatus,
   listGithubRepos,
-  importGithubRepoServer,
+  importGithubRepoAsProject,
   disconnectGithub,
 } from "@/lib/github.functions";
 import { Button } from "@/components/ui/button";
@@ -74,7 +74,7 @@ function Dashboard() {
   const startGhAuth = useServerFn(getGithubAuthUrl);
   const fetchGhStatus = useServerFn(getGithubStatus);
   const fetchGhRepos = useServerFn(listGithubRepos);
-  const importGhRepo = useServerFn(importGithubRepoServer);
+  const importGhRepo = useServerFn(importGithubRepoAsProject);
   const disconnectGh = useServerFn(disconnectGithub);
 
   async function load() {
@@ -277,55 +277,16 @@ function Dashboard() {
     }
 
     setGhImporting(true);
-    setGhProgress("Reading repo…");
+    setGhProgress("Reading and saving repo…");
     try {
-      const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) throw new Error("Not signed in");
-
-      const { branch: resolvedBranch, files } = await importGhRepo({
+      const result = await importGhRepo({
         data: { owner, repo, branch: branch || undefined, subpath: subpath || undefined },
       });
 
-      const projectName = subpath ? `${repo}/${subpath.split("/").pop()}` : repo;
-      const { data: project, error: projErr } = await supabase
-        .from("projects")
-        .insert({
-          name: projectName,
-          description: `Imported from github.com/${owner}/${repo}@${resolvedBranch}`,
-          user_id: userRes.user.id,
-        })
-        .select()
-        .single();
-      if (projErr || !project) throw projErr || new Error("Could not create project");
-
-      const rows = files.map((f) => ({
-        project_id: project.id,
-        user_id: userRes.user!.id,
-        path: f.path,
-        content: f.content,
-      }));
-      if (!rows.some((r) => r.path === "index.html")) {
-        const cand = rows.find((r) => /(^|\/)index\.html$/i.test(r.path)) || rows.find((r) => /\.html?$/i.test(r.path));
-        if (cand) rows.unshift({ ...cand, path: "index.html" });
-        else rows.push({
-          project_id: project.id,
-          user_id: userRes.user!.id,
-          path: "index.html",
-          content: `<!doctype html><html><head><meta charset="utf-8"/><title>${projectName}</title></head><body style="font-family:system-ui;padding:2rem;background:#0f0c1a;color:#e8e3f5"><h1>${projectName}</h1><p>Imported from github.com/${owner}/${repo}.</p></body></html>`,
-        });
-      }
-
-      setGhProgress(`Saving ${rows.length} files…`);
-      const chunk = 50;
-      for (let i = 0; i < rows.length; i += chunk) {
-        const { error } = await supabase.from("files").insert(rows.slice(i, i + chunk));
-        if (error) throw error;
-      }
-
-      toast.success(`Imported ${rows.length} files from ${owner}/${repo}`);
+      toast.success(`Imported ${result.fileCount} files from ${owner}/${repo}`);
       setGhOpen(false);
       setGhUrl(""); setGhSelectedRepo(""); setGhBranch(""); setGhSubpath("");
-      navigate({ to: "/p/$projectId", params: { projectId: project.id } });
+      navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
     } finally {
@@ -639,8 +600,14 @@ function Dashboard() {
                 {ghRepoError && (
                   <p className="text-[11px] text-destructive/90">{ghRepoError}</p>
                 )}
+                <Input
+                  value={ghUrl}
+                  onChange={(e) => setGhUrl(e.target.value)}
+                  placeholder="Or paste https://github.com/owner/repo"
+                  disabled={ghImporting}
+                />
                 <p className="text-[11px] text-muted-foreground">
-                  Don't see a repo? Make sure the OAuth app has <code className="px-1 rounded bg-muted/40">repo</code> scope, then click Refresh. Or paste a full <code className="px-1 rounded bg-muted/40">https://github.com/owner/repo</code> URL in Branch / Subfolder below.
+                  Don't see a repo? Click Refresh, or paste a full <code className="px-1 rounded bg-muted/40">https://github.com/owner/repo</code> URL above.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -659,7 +626,7 @@ function Dashboard() {
                 </div>
               )}
               <DialogFooter>
-                <Button type="submit" disabled={ghImporting || !ghSelectedRepo}>
+                <Button type="submit" disabled={ghImporting || (!ghSelectedRepo && !ghUrl.trim())}>
                   {ghImporting ? "Importing…" : "Import & open"}
                 </Button>
               </DialogFooter>
