@@ -208,6 +208,34 @@ function Dashboard() {
     loadRepos();
   }, [ghOpen, ghConnected.connected]);
 
+  // Auto-load repos on the page as soon as GitHub is connected
+  useEffect(() => {
+    if (!ghConnected.connected) return;
+    if (ghRepos.length > 0 || ghLoadingRepos) return;
+    loadRepos();
+  }, [ghConnected.connected]);
+
+  const [importingRepo, setImportingRepo] = useState<string | null>(null);
+  const [repoFilter, setRepoFilter] = useState("");
+
+  async function quickImportRepo(fullName: string, defaultBranch: string) {
+    if (importingRepo) return;
+    const [owner, repo] = fullName.split("/");
+    if (!owner || !repo) return;
+    setImportingRepo(fullName);
+    try {
+      const result = await importGhRepo({
+        data: { owner, repo, branch: defaultBranch || undefined },
+      });
+      toast.success(`Imported ${result.fileCount} files from ${fullName}`);
+      navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
+    } catch (err: any) {
+      toast.error(err?.message || "Import failed");
+    } finally {
+      setImportingRepo(null);
+    }
+  }
+
   async function connectGithub() {
     try {
       setGhConnecting(true);
