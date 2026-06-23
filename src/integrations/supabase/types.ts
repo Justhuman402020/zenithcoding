@@ -185,6 +185,59 @@ export type Database = {
           },
         ]
       }
+      project_github_links: {
+        Row: {
+          created_at: string
+          default_branch: string
+          id: string
+          last_pushed_at: string | null
+          last_pushed_branch: string | null
+          last_pushed_message: string | null
+          last_pushed_sha: string | null
+          owner: string
+          project_id: string
+          repo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_branch?: string
+          id?: string
+          last_pushed_at?: string | null
+          last_pushed_branch?: string | null
+          last_pushed_message?: string | null
+          last_pushed_sha?: string | null
+          owner: string
+          project_id: string
+          repo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_branch?: string
+          id?: string
+          last_pushed_at?: string | null
+          last_pushed_branch?: string | null
+          last_pushed_message?: string | null
+          last_pushed_sha?: string | null
+          owner?: string
+          project_id?: string
+          repo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_github_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_snapshots: {
         Row: {
           created_at: string

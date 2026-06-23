@@ -294,5 +294,210 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
       }
     }
 
+    // Remember GitHub origin so the user can push back later
+    await context.supabase.from("project_github_links" as any).insert({
+      project_id: (project as any).id,
+      user_id: context.userId,
+      owner: data.owner,
+      repo: data.repo,
+      default_branch: branch,
+    });
+
     return { projectId: (project as any).id as string, branch, fileCount: rows.length };
+  });
+
+// ============= Push to GitHub =============
+
+export const getProjectGithubLink = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { projectId: string }) => d)
+  .handler(async ({ data, context }) => {
+    const { data: link } = await context.supabase
+      .from("project_github_links" as any)
+      .select("owner, repo, default_branch, last_pushed_branch, last_pushed_sha, last_pushed_message, last_pushed_at")
+      .eq("project_id", data.projectId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    return link ? (link as any) : null;
+  });
+
+export const listProjectGithubBranches = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { projectId: string }) => d)
+  .handler(async ({ data, context }) => {
+    const { data: link } = await context.supabase
+      .from("project_github_links" as any)
+      .select("owner, repo, default_branch")
+      .eq("project_id", data.projectId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!link) throw new Error("This project is not linked to a GitHub repository.");
+    const { data: tok } = await context.supabase
+      .from("github_tokens" as any)
+      .select("access_token")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!tok) throw new Error("Connect GitHub first");
+    const token = (tok as any).access_token as string;
+    const l = link as any;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    const branches: { name: string; sha: string }[] = [];
+    for (let page = 1; page <= 10; page += 1) {
+      const r = await fetch(
+        `https://api.github.com/repos/${cleanGithubPathPart(l.owner)}/${cleanGithubPathPart(l.repo)}/branches?per_page=100&page=${page}`,
+        { headers },
+      );
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        throw new Error(`GitHub error ${r.status}: ${body.slice(0, 200) || r.statusText}`);
+      }
+      const batch = (await r.json()) as any[];
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      for (const b of batch) branches.push({ name: b.name, sha: b.commit?.sha });
+      if (batch.length < 100) break;
+    }
+    return {
+      owner: l.owner as string,
+      repo: l.repo as string,
+      default_branch: l.default_branch as string,
+      branches,
+    };
+  });
+
+export const pushProjectToGithub = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: {
+    projectId: string;
+    branch: string;
+    message: string;
+    createBranch?: boolean;
+    fromBranch?: string;
+  }) => d)
+  .handler(async ({ data, context }) => {
+    const branch = data.branch.trim();
+    const message = data.message.trim();
+    if (!branch) throw new Error("Pick or name a branch");
+    if (!/^[\w.\-\/]+$/.test(branch)) throw new Error("Invalid branch name");
+    if (!message) throw new Error("Write a commit message");
+
+    const { data: link } = await context.supabase
+      .from("project_github_links" as any)
+      .select("owner, repo, default_branch")
+      .eq("project_id", data.projectId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!link) throw new Error("This project is not linked to a GitHub repository.");
+    const l = link as any;
+
+    const { data: tok } = await context.supabase
+      .from("github_tokens" as any)
+      .select("access_token")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!tok) throw new Error("Connect GitHub first");
+    const token = (tok as any).access_token as string;
+
+    const { data: filesRows, error: filesErr } = await context.supabase
+      .from("files" as any)
+      .select("path, content")
+      .eq("project_id", data.projectId)
+      .eq("user_id", context.userId);
+    if (filesErr) throw new Error(filesErr.message);
+    const files = (filesRows || []) as unknown as { path: string; content: string }[];
+    if (files.length === 0) throw new Error("No files to push");
+    if (files.length > 800) throw new Error("Too many files to push in one commit (max 800)");
+
+    const owner = cleanGithubPathPart(l.owner);
+    const repo = cleanGithubPathPart(l.repo);
+    const base = `https://api.github.com/repos/${owner}/${repo}`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    };
+    async function gh<T = any>(path: string, init?: RequestInit): Promise<T> {
+      const r = await fetch(`${base}${path}`, { ...init, headers: { ...headers, ...(init?.headers || {}) } });
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        throw new Error(`GitHub ${r.status}: ${body.slice(0, 240) || r.statusText}`);
+      }
+      return r.json() as Promise<T>;
+    }
+
+    // Resolve branch ref; optionally create it from another branch
+    let refSha: string | null = null;
+    const refRes = await fetch(`${base}/git/ref/heads/${cleanGithubPathPart(branch)}`, { headers });
+    if (refRes.ok) {
+      refSha = (await refRes.json()).object?.sha ?? null;
+    } else if (refRes.status === 404) {
+      if (!data.createBranch) throw new Error(`Branch "${branch}" does not exist on GitHub. Enable "Create new branch" to add it.`);
+      const sourceBranch = (data.fromBranch || l.default_branch || "main").trim();
+      const sourceRef = await gh<any>(`/git/ref/heads/${cleanGithubPathPart(sourceBranch)}`);
+      const sourceSha = sourceRef.object?.sha as string;
+      await gh(`/git/refs`, {
+        method: "POST",
+        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: sourceSha }),
+      });
+      refSha = sourceSha;
+    } else {
+      const body = await refRes.text().catch(() => "");
+      throw new Error(`GitHub ${refRes.status}: ${body.slice(0, 240) || refRes.statusText}`);
+    }
+    if (!refSha) throw new Error("Could not resolve base commit");
+
+    const baseCommit = await gh<any>(`/git/commits/${refSha}`);
+    const baseTreeSha = baseCommit.tree?.sha as string;
+
+    // Create blobs (parallel, capped)
+    const treeEntries: { path: string; mode: string; type: string; sha: string }[] = [];
+    let idx = 0;
+    async function blobWorker() {
+      while (idx < files.length) {
+        const i = idx++;
+        const f = files[i];
+        const b = await gh<any>(`/git/blobs`, {
+          method: "POST",
+          body: JSON.stringify({ content: Buffer.from(f.content, "utf8").toString("base64"), encoding: "base64" }),
+        });
+        treeEntries.push({ path: f.path, mode: "100644", type: "blob", sha: b.sha });
+      }
+    }
+    await Promise.all(Array.from({ length: 6 }, blobWorker));
+
+    const newTree = await gh<any>(`/git/trees`, {
+      method: "POST",
+      body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
+    });
+    const commit = await gh<any>(`/git/commits`, {
+      method: "POST",
+      body: JSON.stringify({ message, tree: newTree.sha, parents: [refSha] }),
+    });
+    await gh(`/git/refs/heads/${cleanGithubPathPart(branch)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sha: commit.sha, force: false }),
+    });
+
+    await context.supabase
+      .from("project_github_links" as any)
+      .update({
+        last_pushed_branch: branch,
+        last_pushed_sha: commit.sha,
+        last_pushed_message: message,
+        last_pushed_at: new Date().toISOString(),
+      })
+      .eq("project_id", data.projectId)
+      .eq("user_id", context.userId);
+
+    return {
+      ok: true,
+      sha: commit.sha as string,
+      branch,
+      url: `https://github.com/${l.owner}/${l.repo}/commit/${commit.sha}`,
+      fileCount: files.length,
+    };
   });

@@ -53,6 +53,8 @@ import { DomainsPanel } from "@/components/DomainsPanel";
 import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
+import { GithubPushDialog } from "@/components/GithubPushDialog";
+import { Github } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
@@ -214,6 +216,10 @@ function ProjectEditor() {
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
+  // GitHub link/push state
+  const [githubLinked, setGithubLinked] = useState(false);
+  const [pushOpen, setPushOpen] = useState(false);
+
   // chat state
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -253,6 +259,12 @@ function ProjectEditor() {
       const existingSlug = (proj as any).slug ?? "";
       setSlug(existingSlug);
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
+      const { data: ghLink } = await supabase
+        .from("project_github_links" as any)
+        .select("project_id")
+        .eq("project_id", projectId)
+        .maybeSingle();
+      setGithubLinked(!!ghLink);
       const list = (fileData ?? []) as ProjectFile[];
       setFiles(list);
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
@@ -702,6 +714,18 @@ function ProjectEditor() {
           {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
           <span className="hidden xs:inline text-xs">Revert</span>
         </Button>
+        {githubLinked && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setPushOpen(true)}
+            className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
+            title="Commit and push current files to GitHub"
+          >
+            <Github className="h-4 w-4" />
+            <span className="hidden xs:inline text-xs">Push</span>
+          </Button>
+        )}
         <Button
           size="sm"
           variant={published ? "outline" : "default"}
@@ -717,6 +741,14 @@ function ProjectEditor() {
           <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
         </Button>
       </header>
+
+      {githubLinked && (
+        <GithubPushDialog
+          open={pushOpen}
+          onOpenChange={setPushOpen}
+          projectId={projectId}
+        />
+      )}
 
       {/* Tabs */}
       <nav className="flex hairline-bottom-gold shrink-0 bg-card/40">
