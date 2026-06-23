@@ -730,6 +730,14 @@ function ProjectEditor() {
         </Button>
       </header>
 
+      {githubLinked && (
+        <GithubPushDialog
+          open={pushOpen}
+          onOpenChange={setPushOpen}
+          projectId={projectId}
+        />
+      )}
+
       {/* Tabs */}
       <nav className="flex hairline-bottom-gold shrink-0 bg-card/40">
         {([
