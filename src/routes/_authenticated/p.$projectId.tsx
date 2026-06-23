@@ -714,6 +714,18 @@ function ProjectEditor() {
           {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
           <span className="hidden xs:inline text-xs">Revert</span>
         </Button>
+        {githubLinked && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setPushOpen(true)}
+            className="h-9 gap-1.5 text-muted-foreground hover:text-primary"
+            title="Commit and push current files to GitHub"
+          >
+            <Github className="h-4 w-4" />
+            <span className="hidden xs:inline text-xs">Push</span>
+          </Button>
+        )}
         <Button
           size="sm"
           variant={published ? "outline" : "default"}
