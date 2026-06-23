@@ -219,6 +219,12 @@ function ProjectEditor() {
   // GitHub link/push state
   const [githubLinked, setGithubLinked] = useState(false);
   const [pushOpen, setPushOpen] = useState(false);
+  const [lastPush, setLastPush] = useState<{
+    branch: string | null;
+    sha: string | null;
+    at: string | null;
+    message: string | null;
+  } | null>(null);
 
   // chat state
   const [input, setInput] = useState("");
@@ -261,10 +267,19 @@ function ProjectEditor() {
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
       const { data: ghLink } = await supabase
         .from("project_github_links" as any)
-        .select("project_id")
+        .select("project_id, last_pushed_branch, last_pushed_sha, last_pushed_at, last_pushed_message")
         .eq("project_id", projectId)
         .maybeSingle();
       setGithubLinked(!!ghLink);
+      if (ghLink) {
+        const g = ghLink as any;
+        setLastPush({
+          branch: g.last_pushed_branch ?? null,
+          sha: g.last_pushed_sha ?? null,
+          at: g.last_pushed_at ?? null,
+          message: g.last_pushed_message ?? null,
+        });
+      }
       const list = (fileData ?? []) as ProjectFile[];
       setFiles(list);
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
