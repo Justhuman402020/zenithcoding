@@ -249,7 +249,8 @@ function Dashboard() {
 
     // Determine owner/repo/branch/subpath from either URL or selected repo
     let owner = "", repo = "", branch = ghBranch.trim(), subpath = ghSubpath.trim();
-    if (ghSelectedRepo) {
+    const pastedRepoUrl = ghUrl.trim();
+    if (ghSelectedRepo && !pastedRepoUrl) {
       const [o, r] = ghSelectedRepo.split("/");
       owner = o; repo = r;
       if (!branch) {
@@ -257,7 +258,7 @@ function Dashboard() {
         branch = found?.default_branch || "";
       }
     } else {
-      const raw = ghUrl.trim();
+      const raw = pastedRepoUrl;
       if (!raw) return toast.error("Pick a repo or paste a URL");
       try {
         const cleaned = raw
