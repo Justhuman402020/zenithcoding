@@ -2,15 +2,28 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getRequest } from "@tanstack/react-start/server";
 
-function callbackUrl(req: Request | undefined) {
+// Always route OAuth through the PUBLISHED host — that's the one registered
+// on the GitHub OAuth App. The callback then bounces the user back to whatever
+// origin they started from (preview, custom domain, etc.) by reading it from
+// the `state` parameter.
+export const CANONICAL_CALLBACK_URL =
+  process.env.GITHUB_OAUTH_CALLBACK_URL ||
+  "https://zenithcoding.lovable.app/api/public/github/callback";
+
+function currentOrigin(req: Request | undefined): string {
   const host = req?.headers.get("x-forwarded-host") || req?.headers.get("host") || "localhost:3000";
   const proto = req?.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}/api/public/github/callback`;
+  return `${proto}://${host}`;
+}
+
+function encodeReturnOrigin(origin: string): string {
+  return btoa(origin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((input: { origin?: string } | undefined) => input ?? {})
+  .handler(async ({ context, data: input }) => {
     const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
     if (!clientId) throw new Error("GitHub OAuth not configured");
     const { data, error } = await context.supabase
@@ -19,12 +32,13 @@ export const getGithubAuthUrl = createServerFn({ method: "POST" })
       .select("state")
       .single();
     if (error || !data) throw new Error(error?.message || "Could not create OAuth state");
-    const redirectUri = callbackUrl(getRequest());
+    const returnOrigin = input?.origin || currentOrigin(getRequest());
+    const stateParam = `${(data as any).state}.${encodeReturnOrigin(returnOrigin)}`;
     const url = new URL("https://github.com/login/oauth/authorize");
     url.searchParams.set("client_id", clientId);
-    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("redirect_uri", CANONICAL_CALLBACK_URL);
     url.searchParams.set("scope", "repo read:user");
-    url.searchParams.set("state", (data as any).state);
+    url.searchParams.set("state", stateParam);
     return { url: url.toString() };
   });
 
