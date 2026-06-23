@@ -144,16 +144,17 @@ async function readGithubRepoFiles({
   subpath = (subpath || "").replace(/^\/+|\/+$/g, "");
   if (!owner || !repo || owner.includes("..") || repo.includes("..")) throw new Error("Invalid GitHub repository");
 
-  if (!branch) {
+  let resolvedBranch = branch?.trim();
+  if (!resolvedBranch) {
     const mr = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, { headers });
     if (!mr.ok) {
       const body = await mr.text().catch(() => "");
       throw new Error(`Repo not found (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
     }
-    branch = (await mr.json()).default_branch || "main";
+    resolvedBranch = (await mr.json()).default_branch || "main";
   }
 
-  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(branch)}?recursive=1`;
+  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(resolvedBranch)}?recursive=1`;
   const tr = await fetch(treeUrl, { headers });
   if (!tr.ok) {
     const body = await tr.text().catch(() => "");
@@ -199,7 +200,7 @@ async function readGithubRepoFiles({
   await Promise.all(Array.from({ length: 8 }, worker));
   files.sort((a, b) => a.path.localeCompare(b.path));
 
-  return { branch, files };
+  return { branch: resolvedBranch, files };
 }
 
 const ALLOWED = /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|yml|yaml|vue|astro|mjs|cjs)$/i;
