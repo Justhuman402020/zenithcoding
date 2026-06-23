@@ -212,28 +212,7 @@ function Dashboard() {
     try {
       setGhConnecting(true);
       const { url } = await startGhAuth({ data: { origin: window.location.origin } });
-      // On mobile, popups usually open as a new tab and window.opener is null,
-      // so postMessage back to this tab won't fire. We rely on BroadcastChannel,
-      // a localStorage signal, and focus/visibility polling (set up in the
-      // listener above) to detect completion. As a final safety net, poll
-      // the server for connection status while we're waiting.
-      const w = window.open(url, "_blank");
-      if (!w) {
-        window.location.href = url;
-        return;
-      }
-      const started = Date.now();
-      const poll = window.setInterval(async () => {
-        if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); return; }
-        try {
-          const s = await fetchGhStatus({});
-          if (s.connected) {
-            setGhConnected(s);
-            setGhConnecting(false);
-            window.clearInterval(poll);
-          }
-        } catch {}
-      }, 2500);
+      window.location.assign(url);
     } catch (e: any) {
       setGhConnecting(false);
       toast.error(e?.message || "Could not start GitHub auth");
@@ -501,10 +480,11 @@ function Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGhOpen(true)}
+                  onClick={ghConnected.connected ? () => setGhOpen(true) : connectGithub}
+                  disabled={ghConnecting}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
                 >
-                  <Github className="h-4 w-4" /> Import
+                  {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />} Import
                 </button>
                 {ghConnected.connected && (
                   <button
@@ -617,10 +597,12 @@ function Dashboard() {
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => setGhOpen(true)}
+                        onClick={connectGithub}
+                        disabled={ghConnecting}
                         className="bg-gold-gradient text-primary-foreground hover:opacity-95 h-8"
                       >
-                        <Github className="h-3.5 w-3.5 mr-1.5" /> Connect GitHub
+                        {ghConnecting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Github className="h-3.5 w-3.5 mr-1.5" />}
+                        {ghConnecting ? "Opening GitHub…" : "Connect GitHub"}
                       </Button>
                     ) : (
                       <Button
