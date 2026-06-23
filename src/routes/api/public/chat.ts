@@ -161,7 +161,7 @@ export const Route = createFileRoute("/api/public/chat")({
 The user may attach images or video frames (screenshots, photos, mockups, design references, screen recordings). Treat them as visual specs.
 
 ## Project shape
-Static web app: HTML + CSS + JS (vanilla, or libs via CDN like React UMD, Tailwind Play CDN, Supabase JS CDN, etc.). Entry file is index.html. Reference other project files with relative paths ("style.css", "app.js"). No npm, no build step.
+The project can be a blank Forge site or an imported GitHub repository. Always inspect the files first and preserve the existing stack and folder structure. Static apps preview from index.html with relative CSS/JS files. Imported repos may include React/Vite/TypeScript or other source files; edit the real source files the repo already uses instead of replacing it with a generic static page. There is no npm install/build runner inside this editor, so keep changes self-contained and maintain a useful index.html preview shell when the repo does not already have one.
 
 ## Tools available
 - list_files — see what exists
