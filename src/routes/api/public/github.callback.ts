@@ -53,11 +53,22 @@ export const Route = createFileRoute("/api/public/github/callback")({
 <body style="font-family:system-ui;background:#0f0c1a;color:#e8e3f5;display:grid;place-items:center;min-height:100vh;margin:0">
   <div style="text-align:center">
     <h1>✓ GitHub connected${me.login ? ` as ${escape(me.login)}` : ""}</h1>
-    <p>You can close this tab.</p>
+    <p>You can close this tab and return to Forge.</p>
+    <p style="margin-top:16px"><a href="/" style="color:#d4af37">← Back to Forge</a></p>
   </div>
   <script>
+    // Notify the original tab through every channel available so mobile (where
+    // window.opener is often null) still picks up the connection.
     try { window.opener && window.opener.postMessage({ type: "github-connected" }, "*"); } catch(e){}
-    setTimeout(()=>{ try { window.close(); } catch(e){} window.location.href = "/"; }, 800);
+    try { localStorage.setItem("forge-github-connected", String(Date.now())); } catch(e){}
+    try { new BroadcastChannel("forge-github").postMessage({ type: "github-connected" }); } catch(e){}
+    // If we were opened as a popup, close. Otherwise (mobile new-tab),
+    // bounce back to the dashboard so the user lands on the connected UI.
+    setTimeout(function(){
+      var opened = false;
+      try { window.close(); opened = true; } catch(e){}
+      if (!opened || !window.closed) { window.location.href = "/"; }
+    }, 1200);
   </script>
 </body>`);
       },
