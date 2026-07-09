@@ -27,6 +27,7 @@ export const Route = createFileRoute("/api/public/push-stream")({
           createBranch?: boolean;
           fromBranch?: string;
           priorBlobs?: { path: string; sha: string }[];
+          extraFiles?: { path: string; content: string }[];
         };
         try {
           body = await request.json();
@@ -39,6 +40,7 @@ export const Route = createFileRoute("/api/public/push-stream")({
         const createBranch = Boolean(body.createBranch);
         const fromBranchInput = body.fromBranch ? String(body.fromBranch).trim() : "";
         const priorBlobs = Array.isArray(body.priorBlobs) ? body.priorBlobs : [];
+        const extraFiles = Array.isArray(body.extraFiles) ? body.extraFiles : [];
         const priorMap = new Map<string, string>();
         for (const b of priorBlobs) {
           if (b && typeof b.path === "string" && typeof b.sha === "string") {
@@ -97,9 +99,21 @@ export const Route = createFileRoute("/api/public/push-stream")({
                 .from("files" as any)
                 .select("path, content")
                 .eq("project_id", projectId)
-                .eq("user_id", userId);
+                .eq("user_id", userId)
+                .eq("kind", "source");
               if (filesErr) throw new Error(filesErr.message);
-              const files = (filesRows || []) as unknown as { path: string; content: string }[];
+              const sourceFiles = (filesRows || []) as unknown as { path: string; content: string }[];
+              // Merge extraFiles (built dist) — extras override sources at same path.
+              const merged = new Map<string, string>();
+              for (const f of sourceFiles) merged.set(f.path, f.content);
+              for (const f of extraFiles) merged.set(f.path, f.content);
+              const files: { path: string; content: string }[] = Array.from(
+                merged,
+                ([path, content]) => ({ path, content }),
+              );
+              if (extraFiles.length) {
+                log("info", `Including ${extraFiles.length} built artifact(s) in commit`);
+              }
               if (files.length === 0) throw new Error("No files to push");
               if (files.length > 800)
                 throw new Error("Too many files to push in one commit (max 800)");
