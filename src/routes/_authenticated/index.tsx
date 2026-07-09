@@ -309,7 +309,11 @@ function Dashboard() {
       const result = await importGhRepo({
         data: { owner, repo, branch: defaultBranch || undefined },
       });
-      toast.success(`Imported ${result.fileCount} files from ${fullName}`);
+      toast.success(
+        (result as any).resumed
+          ? `Reopening ${fullName} — picking up where you left off`
+          : `Imported ${result.fileCount} files from ${fullName}`,
+      );
       navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
