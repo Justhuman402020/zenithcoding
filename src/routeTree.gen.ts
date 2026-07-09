@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
@@ -23,6 +24,7 @@ import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
+import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
@@ -57,6 +59,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const TransfersTokenRoute = TransfersTokenRouteImport.update({
   id: '/transfers/$token',
   path: '/transfers/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SSlugRoute = SSlugRouteImport.update({
@@ -100,6 +107,11 @@ const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   path: '/api/public/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSitesEnvRoute = ApiPublicSitesEnvRouteImport.update({
+  id: '/api/public/sites/env',
+  path: '/api/public/sites/env',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
   id: '/api/public/sites/data',
   path: '/api/public/sites/data',
@@ -141,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof TemplatesRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
+  '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
@@ -150,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
+  '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
@@ -161,6 +175,7 @@ export interface FileRoutesByTo {
   '/templates': typeof TemplatesRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
+  '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
@@ -171,6 +186,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
+  '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
@@ -184,6 +200,7 @@ export interface FileRoutesById {
   '/templates': typeof TemplatesRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
+  '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
@@ -194,6 +211,7 @@ export interface FileRoutesById {
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
+  '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
@@ -208,6 +226,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/admin'
     | '/s/$slug'
+    | '/share/$token'
     | '/transfers/$token'
     | '/account/billing'
     | '/admin/users'
@@ -217,6 +236,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
+    | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
@@ -228,6 +248,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/admin'
     | '/s/$slug'
+    | '/share/$token'
     | '/transfers/$token'
     | '/'
     | '/account/billing'
@@ -238,6 +259,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
+    | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
@@ -250,6 +272,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/_authenticated/admin'
     | '/s/$slug'
+    | '/share/$token'
     | '/transfers/$token'
     | '/_authenticated/'
     | '/_authenticated/account/billing'
@@ -260,6 +283,7 @@ export interface FileRouteTypes {
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
+    | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
@@ -272,11 +296,13 @@ export interface RootRouteChildren {
   ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
   TemplatesRoute: typeof TemplatesRoute
   SSlugRoute: typeof SSlugRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
+  ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
   ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
   ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
@@ -325,6 +351,13 @@ declare module '@tanstack/react-router' {
       path: '/transfers/$token'
       fullPath: '/transfers/$token'
       preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$slug': {
@@ -381,6 +414,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/stripe/webhook'
       fullPath: '/api/public/stripe/webhook'
       preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/env': {
+      id: '/api/public/sites/env'
+      path: '/api/public/sites/env'
+      fullPath: '/api/public/sites/env'
+      preLoaderRoute: typeof ApiPublicSitesEnvRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/sites/data': {
@@ -476,11 +516,13 @@ const rootRouteChildren: RootRouteChildren = {
   ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
   TemplatesRoute: TemplatesRoute,
   SSlugRoute: SSlugRoute,
+  ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
+  ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
   ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
   ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,

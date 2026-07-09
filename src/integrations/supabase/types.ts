@@ -301,6 +301,50 @@ export type Database = {
           },
         ]
       }
+      project_secrets: {
+        Row: {
+          created_at: string
+          description: string | null
+          expose_to_client: boolean
+          id: string
+          key: string
+          project_id: string
+          updated_at: string
+          user_id: string
+          value_encrypted: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          expose_to_client?: boolean
+          id?: string
+          key: string
+          project_id: string
+          updated_at?: string
+          user_id: string
+          value_encrypted: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          expose_to_client?: boolean
+          id?: string
+          key?: string
+          project_id?: string
+          updated_at?: string
+          user_id?: string
+          value_encrypted?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_secrets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_snapshots: {
         Row: {
           created_at: string
@@ -431,6 +475,50 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      share_links: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          label: string | null
+          project_id: string
+          revoked: boolean
+          token: string
+          user_id: string
+          view_count: number
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          label?: string | null
+          project_id: string
+          revoked?: boolean
+          token: string
+          user_id: string
+          view_count?: number
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          label?: string | null
+          project_id?: string
+          revoked?: boolean
+          token?: string
+          user_id?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "share_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
