@@ -48,7 +48,7 @@ export const Route = createFileRoute("/s/$slug")({
 
         const { data: files } = await supabase
           .from("files")
-          .select("path,content")
+          .select("path,content,kind" as any)
           .eq("project_id", project.id);
 
         // Prefer built artifacts (kind='build') when present; otherwise fall back to source.
