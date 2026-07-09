@@ -34,7 +34,10 @@ export const importLovableProject = createServerFn({ method: "POST" })
       .eq("lovable_project_id", data.lovableProjectId)
       .eq("user_id", userId)
       .maybeSingle();
-    if (existing) throw new Error("This Lovable project has already been imported.");
+    if (existing) {
+      // Resume: don't create a duplicate, just reopen the existing one.
+      return { projectId: (existing as any).id as string, resumed: true };
+    }
 
     const { data: project, error } = await supabase
       .from("projects")
@@ -84,7 +87,7 @@ export const importLovableProject = createServerFn({ method: "POST" })
       content: starter,
     });
 
-    return { projectId: project.id };
+    return { projectId: project.id, resumed: false };
   });
 
 export const deleteLovableImport = createServerFn({ method: "POST" })
