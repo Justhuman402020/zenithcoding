@@ -1,0 +1,117 @@
+type ImportedFile = { path: string; content: string };
+
+const ALLOWED = /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|yml|yaml|vue|astro|mjs|cjs)$/i;
+const SKIP_DIR = /(^|\/)(node_modules|\.git|dist|build|\.next|\.nuxt|coverage)\//i;
+
+export function cleanGithubPathPart(value: string) {
+  return encodeURIComponent(value.trim()).replace(/%2F/g, "/");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function readGithubRepoFiles({
+  owner,
+  repo,
+  branch,
+  subpath,
+  token,
+}: {
+  owner: string;
+  repo: string;
+  branch?: string;
+  subpath?: string;
+  token?: string;
+}) {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  owner = owner.trim();
+  repo = repo.trim().replace(/\.git$/i, "");
+  subpath = (subpath || "").replace(/^\/+|\/+$/g, "");
+  if (!owner || !repo || owner.includes("..") || repo.includes("..") || owner.includes("/") || repo.includes("/")) {
+    throw new Error("Invalid GitHub repository");
+  }
+
+  let resolvedBranch = branch?.trim();
+  if (!resolvedBranch) {
+    const mr = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, { headers });
+    if (!mr.ok) {
+      if (mr.status === 404) {
+        const ownerRes = await fetch(
+          `https://api.github.com/users/${cleanGithubPathPart(owner)}`,
+          { headers },
+        ).catch(() => null);
+        if (ownerRes && ownerRes.status === 404) {
+          throw new Error(
+            `GitHub user or org "${owner}" doesn't exist. Check the spelling in the URL (https://github.com/${owner}/${repo}).`,
+          );
+        }
+        if (token) {
+          throw new Error(
+            `Repo ${owner}/${repo} not found. It may be private and not visible to your connected GitHub account. Open the repo on github.com to confirm the exact owner/name, or grant access to that org/repo.`,
+          );
+        }
+        throw new Error(
+          `Repo ${owner}/${repo} not found or is private. Connect GitHub first (Import → Connect GitHub) so private repos become visible.`,
+        );
+      }
+      const body = await mr.text().catch(() => "");
+      throw new Error(`Could not read repo ${owner}/${repo} (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
+    }
+    resolvedBranch = (await mr.json()).default_branch || "main";
+  }
+
+  const treeBranch = resolvedBranch || "main";
+  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(treeBranch)}?recursive=1`;
+  const tr = await fetch(treeUrl, { headers });
+  if (!tr.ok) {
+    const body = await tr.text().catch(() => "");
+    throw new Error(`Tree read failed (${tr.status}): ${body.slice(0, 180) || tr.statusText}`);
+  }
+  const tree = await tr.json();
+  if (!tree.tree) throw new Error("Empty repo");
+
+  const blobs: { path: string; sha: string; size: number }[] = tree.tree
+    .filter((n: any) => n.type === "blob")
+    .filter((n: any) => !subpath || n.path.startsWith(subpath + "/") || n.path === subpath)
+    .filter((n: any) => !SKIP_DIR.test("/" + n.path + "/"))
+    .filter((n: any) => ALLOWED.test(n.path))
+    .filter((n: any) => (n.size ?? 0) < 250_000)
+    .slice(0, 600);
+
+  if (blobs.length === 0) throw new Error("No importable text files found in this repo or subfolder");
+
+  const stripPrefix = (p: string) => (subpath ? p.replace(new RegExp(`^${escapeRegExp(subpath)}/?`), "") : p);
+  const files: ImportedFile[] = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < blobs.length) {
+      const i = idx++;
+      const b = blobs[i];
+      try {
+        const r = await fetch(
+          `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/blobs/${b.sha}`,
+          { headers },
+        );
+        if (r.ok) {
+          const j = await r.json();
+          const content =
+            j.encoding === "base64"
+              ? Buffer.from(j.content, "base64").toString("utf8")
+              : String(j.content ?? "");
+          const path = stripPrefix(b.path);
+          if (path) files.push({ path, content });
+        }
+      } catch {}
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, worker));
+  files.sort((a, b) => a.path.localeCompare(b.path));
+
+  return { branch: treeBranch, files };
+}
