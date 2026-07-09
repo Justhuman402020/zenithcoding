@@ -72,7 +72,7 @@ export const Route = createFileRoute("/api/public/sites/data")({
             project_id: project.id,
             collection: body.collection!,
             owner_site_user_id: user.id,
-            data: payload,
+            data: payload as never,
             is_public: !!body.is_public,
           })
           .select("id, data, is_public, owner_site_user_id, created_at, updated_at")
@@ -92,11 +92,11 @@ export const Route = createFileRoute("/api/public/sites/data")({
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const patch: Record<string, unknown> = {};
-        if (body.data && typeof body.data === "object") patch.data = body.data;
+        if (body.data && typeof body.data === "object") patch.data = body.data as never;
         if (typeof body.is_public === "boolean") patch.is_public = body.is_public;
         const { data, error } = await supabaseAdmin
           .from("site_data")
-          .update(patch)
+          .update(patch as never)
           .eq("id", body.id)
           .eq("project_id", project.id)
           .eq("owner_site_user_id", user.id)
