@@ -17,14 +17,14 @@ function fromHex(hex: string): Uint8Array {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(16)));
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
     key,
     256,
   );
-  return `pbkdf2$100000$${toHex(salt.buffer)}$${toHex(bits)}`;
+  return `pbkdf2$100000$${toHex(salt.buffer as ArrayBuffer)}$${toHex(bits)}`;
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
@@ -51,8 +51,8 @@ export async function hashToken(token: string): Promise<string> {
 }
 
 export function makeSessionToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return toHex(bytes.buffer);
+  const bytes = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(32)));
+  return toHex(bytes.buffer as ArrayBuffer);
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {
