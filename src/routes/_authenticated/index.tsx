@@ -438,14 +438,18 @@ function Dashboard() {
     if (lovableImporting || !lovableImportId.trim() || !lovableImportName.trim()) return;
     setLovableImporting(true);
     try {
-      const { projectId } = await doImportLovable({
+      const res = await doImportLovable({
         data: {
           lovableProjectId: lovableImportId.trim(),
           name: lovableImportName.trim(),
           description: lovableImportDesc.trim() || undefined,
         },
       });
-      toast.success("Imported from Lovable");
+      toast.success(
+        (res as any).resumed
+          ? "Reopening your Lovable project — picking up where you left off"
+          : "Imported from Lovable",
+      );
       setLovableImportOpen(false);
       setGhOpen(false);
       setLovableImportId("");
@@ -453,7 +457,7 @@ function Dashboard() {
       setLovableImportDesc("");
       await load();
       await loadLovableImports();
-      navigate({ to: "/p/$projectId", params: { projectId } });
+      navigate({ to: "/p/$projectId", params: { projectId: res.projectId } });
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
     } finally {
