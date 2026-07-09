@@ -747,13 +747,97 @@ function ProjectEditor() {
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
       <header className="h-14 hairline-bottom-gold flex items-center px-3 gap-2 shrink-0 bg-card/30 backdrop-blur-sm">
-        <Link to="/" className="p-2 -ml-2 text-muted-foreground hover:text-primary transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <ForgeMark className="h-7 w-7 shrink-0" />
-          <span className="font-display text-lg truncate text-foreground/95">{projectName}</span>
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetTrigger asChild>
+            <button
+              className="p-2 -ml-2 rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40 transition-colors"
+              aria-label="Open projects menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0 flex flex-col">
+            <SheetHeader className="p-4 hairline-bottom-gold">
+              <SheetTitle className="flex items-center gap-2 font-display text-gold">
+                <ForgeMark className="h-6 w-6" /> Forge
+              </SheetTitle>
+            </SheetHeader>
+            <div className="p-2">
+              <Link
+                to="/"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-primary hover:bg-accent/40"
+              >
+                <ArrowLeft className="h-4 w-4" /> All projects
+              </Link>
+            </div>
+            <div className="px-3 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70">
+              Projects
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
+              {allProjects.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    if (p.id !== projectId) navigate({ to: "/p/$projectId", params: { projectId: p.id } });
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-colors ${
+                    p.id === projectId
+                      ? "bg-accent/40 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                  }`}
+                >
+                  {p.id === projectId ? <Check className="h-3.5 w-3.5" /> : <FileIcon className="h-3.5 w-3.5 opacity-60" />}
+                  <span className="truncate">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </SheetContent>
+        </Sheet>
+        <div className="flex items-center gap-2 min-w-0 flex-1 justify-center">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hairline-gold bg-card/60 hover:bg-accent/40 transition-colors max-w-[60vw]">
+                <ForgeMark className="h-5 w-5 shrink-0" />
+                <span className="font-display text-base truncate text-foreground/95">{projectName || "Untitled"}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-64 max-h-[60vh] overflow-y-auto">
+              <DropdownMenuLabel>Switch project</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {allProjects.map((p) => (
+                <DropdownMenuItem
+                  key={p.id}
+                  onSelect={() => {
+                    if (p.id !== projectId) navigate({ to: "/p/$projectId", params: { projectId: p.id } });
+                  }}
+                  className="gap-2"
+                >
+                  {p.id === projectId ? <Check className="h-3.5 w-3.5 text-primary" /> : <span className="w-3.5" />}
+                  <span className="truncate">{p.name}</span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate({ to: "/" })}>
+                <ArrowLeft className="h-3.5 w-3.5" /> All projects
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+        <button
+          onClick={() => setTab("preview")}
+          className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${
+            tab === "preview"
+              ? "bg-primary/15 text-primary"
+              : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
+          }`}
+          title="Open preview"
+          aria-label="Open preview"
+        >
+          <Play className="h-4 w-4 fill-current" />
+        </button>
         <Button
           size="sm"
           variant="ghost"
