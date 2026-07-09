@@ -204,9 +204,9 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
       .from("projects" as any)
       .select("id, name")
       .eq("user_id", context.userId)
-      .or(`name.ilike.${projectName},name.ilike.%${repo}%,name.ilike.%${owner}%`)
+      .not("lovable_project_id", "is", null)
       .order("updated_at", { ascending: false })
-      .limit(10);
+      .limit(50);
 
     const projectMatch = ((namedProject as any[]) || []).find((project) =>
       isCloseGithubProjectName(project.name || "", projectName) ||
