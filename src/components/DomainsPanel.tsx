@@ -134,39 +134,33 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
                 </button>
               </div>
 
-              {!d.verified && (
+              {!d.verified ? (
                 <div className="space-y-2 text-xs">
                   <p className="text-muted-foreground leading-relaxed">
-                    <strong className="text-primary">Step 1:</strong> Sign in to Namecheap, open your domain, then choose <em className="text-foreground">Advanced DNS</em>.
+                    <strong className="text-primary">Step 1:</strong> Sign in to Namecheap (or wherever you bought <span className="text-foreground">{d.hostname}</span>) and open <em className="text-foreground">Advanced DNS</em>.
                   </p>
                   <p className="text-muted-foreground leading-relaxed">
-                    <strong className="text-primary">Step 2:</strong> Add this TXT record exactly, then come back and tap <em>Verify now</em>:
+                    <strong className="text-primary">Step 2:</strong> Add these three records exactly as shown, then tap <em>Verify now</em>.
                   </p>
-                  <div className="rounded-md hairline-gold bg-muted/20 p-2.5 space-y-1.5 font-mono">
-                    <DnsRow label="Type" value="TXT" copy={copy} />
-                    <DnsRow label="Name / Host" value={`_forge-verify.${d.hostname.split(".").slice(-2).join(".") === d.hostname ? "" : d.hostname.split(".").slice(0, -2).join(".") + "."}${d.hostname.split(".").slice(-2).join(".")}`} display={`_forge-verify${d.hostname.split(".").length > 2 ? "." + d.hostname.split(".").slice(0, -2).join(".") : ""}`} copy={copy} />
-                    <DnsRow label="Value" value={d.verification_token} copy={copy} />
-                  </div>
+                  <DnsBlock title="A record — root domain" rows={[["Type","A"],["Name / Host","@"],["Value","185.158.133.1"],["TTL","Automatic"]]} copy={copy} />
+                  <DnsBlock title="A record — www subdomain" rows={[["Type","A"],["Name / Host","www"],["Value","185.158.133.1"],["TTL","Automatic"]]} copy={copy} />
+                  <DnsBlock title="TXT record — ownership check" rows={[["Type","TXT"],["Name / Host","_forge-verify"],["Value",d.verification_token],["TTL","Automatic"]]} copy={copy} />
                   <p className="text-[11px] text-muted-foreground/80 italic leading-relaxed">
-                    DNS changes can take a few minutes. If it doesn't verify right away, wait a moment and tap Verify again.
+                    DNS changes usually take 5–30 minutes. SSL turns on automatically once verified.
                   </p>
                   {d.last_check_error && (
-                    <p className="text-[11px] text-destructive/80 italic">Last check: {d.last_check_error}</p>
+                    <p className="text-[11px] text-destructive/80 leading-relaxed">Last check: {d.last_check_error}</p>
                   )}
                 </div>
-              )}
-
-              {d.verified && (
+              ) : (
                 <div className="text-xs text-muted-foreground space-y-2">
                   <p className="leading-relaxed">
                     <CheckCircle2 className="inline h-3 w-3 text-primary mr-1" />
-                     You own <strong className="text-foreground">{d.hostname}</strong>. <strong className="text-primary">Last step:</strong> add this CNAME record in Namecheap so visitors land on your Forge site:
+                     <strong className="text-foreground">{d.hostname}</strong> is live. SSL is provisioned automatically — usually within a few minutes.
                   </p>
-                  <div className="rounded-md hairline-gold bg-muted/20 p-2.5 space-y-1.5 font-mono">
-                    <DnsRow label="Type" value="CNAME" copy={copy} />
-                    <DnsRow label="Name" value={d.hostname} copy={copy} />
-                    <DnsRow label="Value" value={typeof window !== "undefined" ? window.location.hostname : "your-app.lovable.app"} copy={copy} />
-                  </div>
+                  {d.last_check_error && (
+                    <p className="text-[11px] text-muted-foreground/80 italic leading-relaxed">Heads up: {d.last_check_error}</p>
+                  )}
                 </div>
               )}
 
@@ -202,6 +196,17 @@ function DnsRow({ label, value, display, copy }: { label: string; value: string;
       >
         <Copy className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+function DnsBlock({ title, rows, copy }: { title: string; rows: Array<[string, string]>; copy: (t: string, l: string) => void }) {
+  return (
+    <div className="rounded-md hairline-gold bg-muted/20 p-2.5 space-y-1.5 font-mono">
+      <div className="text-[10px] uppercase tracking-wider text-primary/80 font-sans font-medium mb-1">{title}</div>
+      {rows.map(([label, value]) => (
+        <DnsRow key={label} label={label} value={value} copy={copy} />
+      ))}
     </div>
   );
 }
