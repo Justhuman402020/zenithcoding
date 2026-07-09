@@ -9,15 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
+import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
+import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
 
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -31,6 +41,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const TransfersTokenRoute = TransfersTokenRouteImport.update({
+  id: '/transfers/$token',
+  path: '/transfers/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SSlugRoute = SSlugRouteImport.update({
   id: '/s/$slug',
@@ -52,83 +67,140 @@ const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   path: '/p/$projectId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAccountBillingRoute =
+  AuthenticatedAccountBillingRouteImport.update({
+    id: '/account/billing',
+    path: '/account/billing',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
+  id: '/api/public/stripe/webhook',
+  path: '/api/public/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
   id: '/api/public/github/callback',
   path: '/api/public/github/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedPProjectIdSettingsRoute =
+  AuthenticatedPProjectIdSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedPProjectIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
+  '/templates': typeof TemplatesRoute
   '/s/$slug': typeof SSlugRoute
-  '/p/$projectId': typeof AuthenticatedPProjectIdRoute
+  '/transfers/$token': typeof TransfersTokenRoute
+  '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
+  '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/templates': typeof TemplatesRoute
   '/s/$slug': typeof SSlugRoute
+  '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
-  '/p/$projectId': typeof AuthenticatedPProjectIdRoute
+  '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
+  '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/templates': typeof TemplatesRoute
   '/s/$slug': typeof SSlugRoute
+  '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRoute
+  '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
+  '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/templates'
     | '/s/$slug'
+    | '/transfers/$token'
+    | '/account/billing'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
+    | '/p/$projectId/settings'
     | '/api/public/github/callback'
+    | '/api/public/stripe/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/templates'
     | '/s/$slug'
+    | '/transfers/$token'
     | '/'
+    | '/account/billing'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
+    | '/p/$projectId/settings'
     | '/api/public/github/callback'
+    | '/api/public/stripe/webhook'
   id:
     | '__root__'
     | '/_authenticated'
     | '/auth'
+    | '/templates'
     | '/s/$slug'
+    | '/transfers/$token'
     | '/_authenticated/'
+    | '/_authenticated/account/billing'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
+    | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
+    | '/api/public/stripe/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  TemplatesRoute: typeof TemplatesRoute
   SSlugRoute: typeof SSlugRoute
+  TransfersTokenRoute: typeof TransfersTokenRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
+  ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -149,6 +221,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/transfers/$token': {
+      id: '/transfers/$token'
+      path: '/transfers/$token'
+      fullPath: '/transfers/$token'
+      preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/s/$slug': {
       id: '/s/$slug'
@@ -178,6 +257,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/account/billing': {
+      id: '/_authenticated/account/billing'
+      path: '/account/billing'
+      fullPath: '/account/billing'
+      preLoaderRoute: typeof AuthenticatedAccountBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/stripe/webhook': {
+      id: '/api/public/stripe/webhook'
+      path: '/api/public/stripe/webhook'
+      fullPath: '/api/public/stripe/webhook'
+      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/github/callback': {
       id: '/api/public/github/callback'
       path: '/api/public/github/callback'
@@ -185,17 +278,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/p/$projectId/settings': {
+      id: '/_authenticated/p/$projectId/settings'
+      path: '/settings'
+      fullPath: '/p/$projectId/settings'
+      preLoaderRoute: typeof AuthenticatedPProjectIdSettingsRouteImport
+      parentRoute: typeof AuthenticatedPProjectIdRoute
+    }
   }
 }
 
+interface AuthenticatedPProjectIdRouteChildren {
+  AuthenticatedPProjectIdSettingsRoute: typeof AuthenticatedPProjectIdSettingsRoute
+}
+
+const AuthenticatedPProjectIdRouteChildren: AuthenticatedPProjectIdRouteChildren =
+  {
+    AuthenticatedPProjectIdSettingsRoute: AuthenticatedPProjectIdSettingsRoute,
+  }
+
+const AuthenticatedPProjectIdRouteWithChildren =
+  AuthenticatedPProjectIdRoute._addFileChildren(
+    AuthenticatedPProjectIdRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRoute
+  AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
+  AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRoute,
+  AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
+  AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -204,21 +320,14 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  TemplatesRoute: TemplatesRoute,
   SSlugRoute: SSlugRoute,
+  TransfersTokenRoute: TransfersTokenRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
+  ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

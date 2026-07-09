@@ -3,6 +3,7 @@ import { convertToModelMessages, streamText, stepCountIs, tool, type UIMessage }
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { debit, ensureWelcomeGrant } from "@/lib/credits.server";
 
 type WriteResult = { ok: true; path: string; bytes: number } | { ok: false; path: string; error: string };
 
@@ -38,6 +39,16 @@ export const Route = createFileRoute("/api/public/chat")({
           return new Response(`Unauthorized: ${userErr?.message ?? "no user"}`, { status: 401 });
         }
         const userId = userRes.user.id;
+
+        // Ensure the user has a welcome balance, then debit one credit per message.
+        await ensureWelcomeGrant(userId);
+        const debitResult = await debit(userId, 1, `chat:${projectId}`);
+        if (!debitResult.ok) {
+          return new Response(
+            JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Upgrade in /account/billing to keep building." }),
+            { status: 402, headers: { "Content-Type": "application/json" } },
+          );
+        }
 
         // confirm project belongs to user
         const { data: proj } = await supabase

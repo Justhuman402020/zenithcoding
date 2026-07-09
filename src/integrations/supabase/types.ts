@@ -49,6 +49,33 @@ export type Database = {
           },
         ]
       }
+      credit_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          id: string
+          reason: string
+          ref: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          id?: string
+          reason: string
+          ref?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          id?: string
+          reason?: string
+          ref?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       files: {
         Row: {
           content: string
@@ -132,6 +159,39 @@ export type Database = {
           scope?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      plans: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          monthly_credits: number
+          name: string
+          price_cents: number
+          slug: string
+          stripe_price_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          monthly_credits?: number
+          name: string
+          price_cents?: number
+          slug: string
+          stripe_price_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          monthly_credits?: number
+          name?: string
+          price_cents?: number
+          slug?: string
+          stripe_price_id?: string | null
         }
         Relationships: []
       }
@@ -265,6 +325,53 @@ export type Database = {
         }
         Relationships: []
       }
+      project_transfers: {
+        Row: {
+          accepted_at: string | null
+          accepted_by_user_id: string | null
+          created_at: string
+          expires_at: string
+          from_user_id: string
+          id: string
+          project_id: string
+          status: string
+          to_email: string
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by_user_id?: string | null
+          created_at?: string
+          expires_at?: string
+          from_user_id: string
+          id?: string
+          project_id: string
+          status?: string
+          to_email: string
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by_user_id?: string | null
+          created_at?: string
+          expires_at?: string
+          from_user_id?: string
+          id?: string
+          project_id?: string
+          status?: string
+          to_email?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_transfers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           created_at: string
@@ -272,9 +379,12 @@ export type Database = {
           id: string
           name: string
           published: boolean
+          remix_of_project_id: string | null
           slug: string | null
+          template_id: string | null
           updated_at: string
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           created_at?: string
@@ -282,9 +392,12 @@ export type Database = {
           id?: string
           name: string
           published?: boolean
+          remix_of_project_id?: string | null
           slug?: string | null
+          template_id?: string | null
           updated_at?: string
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           created_at?: string
@@ -292,9 +405,166 @@ export type Database = {
           id?: string
           name?: string
           published?: boolean
+          remix_of_project_id?: string | null
           slug?: string | null
+          template_id?: string | null
           updated_at?: string
           user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_remix_of_project_id_fkey"
+            columns: ["remix_of_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          created_at: string
+          current_period_end: string | null
+          id: string
+          plan_id: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_period_end?: string | null
+          id?: string
+          plan_id?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_period_end?: string | null
+          id?: string
+          plan_id?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      templates: {
+        Row: {
+          author_user_id: string | null
+          category: string | null
+          created_at: string
+          description: string | null
+          featured: boolean
+          files: Json
+          id: string
+          name: string
+          slug: string
+          thumbnail_url: string | null
+        }
+        Insert: {
+          author_user_id?: string | null
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          featured?: boolean
+          files?: Json
+          id?: string
+          name: string
+          slug: string
+          thumbnail_url?: string | null
+        }
+        Update: {
+          author_user_id?: string | null
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          featured?: boolean
+          files?: Json
+          id?: string
+          name?: string
+          slug?: string
+          thumbnail_url?: string | null
+        }
+        Relationships: []
+      }
+      workspace_members: {
+        Row: {
+          created_at: string
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          role?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_user_id: string
+          personal: boolean
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_user_id: string
+          personal?: boolean
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_user_id?: string
+          personal?: boolean
+          slug?: string
         }
         Relationships: []
       }
@@ -303,7 +573,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_credit_balance: { Args: { _user: string }; Returns: number }
+      is_workspace_member: {
+        Args: { _user: string; _ws: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
