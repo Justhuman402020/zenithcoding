@@ -309,7 +309,11 @@ function Dashboard() {
       const result = await importGhRepo({
         data: { owner, repo, branch: defaultBranch || undefined },
       });
-      toast.success(`Imported ${result.fileCount} files from ${fullName}`);
+      toast.success(
+        (result as any).resumed
+          ? `Reopening ${fullName} — picking up where you left off`
+          : `Imported ${result.fileCount} files from ${fullName}`,
+      );
       navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
@@ -434,14 +438,18 @@ function Dashboard() {
     if (lovableImporting || !lovableImportId.trim() || !lovableImportName.trim()) return;
     setLovableImporting(true);
     try {
-      const { projectId } = await doImportLovable({
+      const res = await doImportLovable({
         data: {
           lovableProjectId: lovableImportId.trim(),
           name: lovableImportName.trim(),
           description: lovableImportDesc.trim() || undefined,
         },
       });
-      toast.success("Imported from Lovable");
+      toast.success(
+        (res as any).resumed
+          ? "Reopening your Lovable project — picking up where you left off"
+          : "Imported from Lovable",
+      );
       setLovableImportOpen(false);
       setGhOpen(false);
       setLovableImportId("");
@@ -449,7 +457,7 @@ function Dashboard() {
       setLovableImportDesc("");
       await load();
       await loadLovableImports();
-      navigate({ to: "/p/$projectId", params: { projectId } });
+      navigate({ to: "/p/$projectId", params: { projectId: res.projectId } });
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
     } finally {
@@ -511,7 +519,11 @@ function Dashboard() {
         data: { owner, repo, branch: branch || undefined, subpath: subpath || undefined },
       });
 
-      toast.success(`Imported ${result.fileCount} files from ${owner}/${repo}`);
+      toast.success(
+        (result as any).resumed
+          ? `Reopening ${owner}/${repo} — picking up where you left off`
+          : `Imported ${result.fileCount} files from ${owner}/${repo}`,
+      );
       setGhOpen(false);
       setGhUrl(""); setGhSelectedRepo(""); setGhBranch(""); setGhSubpath("");
       navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
