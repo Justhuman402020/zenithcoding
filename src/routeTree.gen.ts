@@ -25,6 +25,7 @@ import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
 import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
+import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
 
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
@@ -108,6 +109,12 @@ const ApiPublicSitesAuthSignupRoute =
     path: '/api/public/sites/auth/signup',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicSitesAuthSigninRoute =
+  ApiPublicSitesAuthSigninRouteImport.update({
+    id: '/api/public/sites/auth/signin',
+    path: '/api/public/sites/auth/signin',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRoutesByTo {
@@ -141,6 +149,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRoutesById {
@@ -160,6 +169,7 @@ export interface FileRoutesById {
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRouteTypes {
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -196,6 +207,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
   id:
     | '__root__'
@@ -214,6 +226,7 @@ export interface FileRouteTypes {
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
   fileRoutesById: FileRoutesById
 }
@@ -227,6 +240,7 @@ export interface RootRouteChildren {
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
+  ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
   ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
 }
 
@@ -344,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sites/auth/signin': {
+      id: '/api/public/sites/auth/signin'
+      path: '/api/public/sites/auth/signin'
+      fullPath: '/api/public/sites/auth/signin'
+      preLoaderRoute: typeof ApiPublicSitesAuthSigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -399,6 +420,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
+  ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
   ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,
 }
 export const routeTree = rootRouteImport
