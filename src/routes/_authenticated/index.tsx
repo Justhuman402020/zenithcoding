@@ -421,6 +421,12 @@ function Dashboard() {
               <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
               <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
               <SidebarItem icon={MessageSquare} label="Chats" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
+              <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
+                <SidebarItem icon={FolderKanban} label="Templates" />
+              </Link>
+              <Link to="/account/billing" onClick={() => setSidebarOpen(false)} className="block w-full">
+                <SidebarItem icon={Globe} label="Billing & credits" />
+              </Link>
             </nav>
             <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
               <SidebarItem icon={LogOut} label="Sign out" onClick={signOut} />
