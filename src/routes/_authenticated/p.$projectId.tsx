@@ -335,6 +335,18 @@ function ProjectEditor() {
     })();
   }, [projectId, navigate]);
 
+  // load list of user's other projects for the switcher
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("id,name")
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      setAllProjects((data ?? []) as Array<{ id: string; name: string }>);
+    })();
+  }, [projectId]);
+
   const activeFile = useMemo(() => files.find((f) => f.path === activePath) ?? null, [files, activePath]);
 
   async function refreshFiles() {
