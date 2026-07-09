@@ -238,6 +238,8 @@ function ProjectEditor() {
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
+  const [allProjects, setAllProjects] = useState<Array<{ id: string; name: string }>>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(true);
