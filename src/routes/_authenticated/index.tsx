@@ -38,6 +38,34 @@ function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label:
   );
 }
 
+function ImportStatusPill({ active, label }: { active: boolean; label: string }) {
+  const [stage, setStage] = useState<"thinking" | "working">("thinking");
+  useEffect(() => {
+    if (!active) { setStage("thinking"); return; }
+    setStage("thinking");
+    const t = setTimeout(() => setStage("working"), 900);
+    return () => clearTimeout(t);
+  }, [active]);
+  if (!active) return null;
+  return (
+    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/90 backdrop-blur px-3.5 py-1.5 text-xs shadow-lg">
+      {stage === "thinking" ? (
+        <>
+          <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+          <span className="font-medium text-foreground">Thinking</span>
+          <span className="text-muted-foreground">· preparing {label}</span>
+        </>
+      ) : (
+        <>
+          <Hammer className="h-3.5 w-3.5 text-primary animate-pulse" />
+          <span className="font-medium text-foreground">Working</span>
+          <span className="text-muted-foreground">· {label}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 type Project = {
   id: string;
   name: string;
@@ -472,6 +500,20 @@ function Dashboard() {
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col relative overflow-x-hidden">
       <div className="pointer-events-none absolute inset-0 vignette" />
+      <ImportStatusPill
+        active={mirroring || ghImporting || lovableImporting || !!importingRepo}
+        label={
+          mirroring
+            ? `mirroring ${mirrorStatus ? `${mirrorStatus.done}/${mirrorStatus.total}` : "repos"}`
+            : lovableImporting
+              ? "importing from Lovable"
+              : importingRepo
+                ? `importing ${importingRepo}`
+                : ghImporting
+                  ? "importing from GitHub"
+                  : "your import"
+        }
+      />
       <header className="h-14 flex items-center justify-between px-3 shrink-0 relative">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>

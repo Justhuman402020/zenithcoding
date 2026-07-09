@@ -46,6 +46,7 @@ import {
   ChevronDown,
   ChevronUp,
   History as HistoryIcon,
+  Hammer as HammerIcon,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -873,6 +874,10 @@ function ProjectEditor() {
                   !text &&
                   !toolParts.some((t) => t.state === "output-available");
                 const thinkOpen = openThinking[m.id] ?? thinkingActive;
+                const workingActive =
+                  isLastStreaming &&
+                  (toolParts.some((t) => t.state !== "output-available") || text.length > 0);
+                const showStatusPill = isLastStreaming && m.role === "assistant";
                 return (
                   <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                     <div
@@ -882,6 +887,23 @@ function ProjectEditor() {
                           : "max-w-full text-sm space-y-2 w-full"
                       }
                     >
+                      {showStatusPill && (
+                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                          {workingActive ? (
+                            <>
+                              <HammerIcon className="h-3 w-3 text-primary animate-pulse" />
+                              <span className="text-foreground">Working</span>
+                              <span className="text-muted-foreground/70">· editing files</span>
+                            </>
+                          ) : (
+                            <>
+                              <Loader2 className="h-3 w-3 text-primary animate-spin" />
+                              <span className="text-foreground">Thinking</span>
+                              <span className="text-muted-foreground/70">· planning</span>
+                            </>
+                          )}
+                        </div>
+                      )}
                       {m.role === "assistant" && reasoningText && (
                         <div className="space-y-1.5">
                           <button
