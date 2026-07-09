@@ -199,19 +199,41 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
     const subpath = (data.subpath || "").replace(/^\/+|\/+$/g, "");
     const projectName = subpath ? `${repo}/${subpath.split("/").pop()}` : repo;
 
-    const { data: project, error: projectError } = await context.supabase
+    // Continue an existing Lovable-tracked project with the same name instead of making the user start fresh.
+    const { data: namedProject } = await context.supabase
       .from("projects" as any)
-      .insert({
-        name: projectName,
-        description: `Imported from github.com/${owner}/${repo}@${branch}`,
-        user_id: context.userId,
-      })
       .select("id")
-      .single();
-    if (projectError || !project) throw new Error(projectError?.message || "Could not create project");
+      .eq("user_id", context.userId)
+      .ilike("name", projectName)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let projectId = (namedProject as any)?.id as string | undefined;
+    const continuedExistingProject = !!projectId;
+
+    if (!projectId) {
+      const { data: project, error: projectError } = await context.supabase
+        .from("projects" as any)
+        .insert({
+          name: projectName,
+          description: `Imported from github.com/${owner}/${repo}@${branch}`,
+          user_id: context.userId,
+        })
+        .select("id")
+        .single();
+      if (projectError || !project) throw new Error(projectError?.message || "Could not create project");
+      projectId = (project as any).id as string;
+    } else {
+      await context.supabase
+        .from("projects" as any)
+        .update({ description: `Imported from github.com/${owner}/${repo}@${branch}` })
+        .eq("id", projectId)
+        .eq("user_id", context.userId);
+    }
 
     const rows = files.map((file) => ({
-      project_id: (project as any).id,
+      project_id: projectId,
       user_id: context.userId,
       path: file.path,
       content: file.content,
@@ -221,31 +243,36 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
       const candidate = rows.find((row) => /(^|\/)index\.html$/i.test(row.path)) || rows.find((row) => /\.html?$/i.test(row.path));
       if (candidate) rows.unshift({ ...candidate, path: "index.html" });
       else rows.push({
-        project_id: (project as any).id,
+        project_id: projectId,
         user_id: context.userId,
         path: "index.html",
-        content: `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${projectName}</title><style>body{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e7d18a}main{max-width:720px;padding:32px}code{color:#f0d78c}</style></head><body><main><h1>${projectName}</h1><p>This repository was imported from <code>github.com/${data.owner}/${data.repo}</code>. Edit the source files with AI or open the Code tab.</p></main></body></html>`,
+        content: `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${projectName}</title><style>body{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e7d18a}main{max-width:720px;padding:32px}code{color:#f0d78c}</style></head><body><main><h1>${projectName}</h1><p>This repository was imported from <code>github.com/${owner}/${repo}</code>. Edit the source files with AI or open the Code tab.</p></main></body></html>`,
       });
     }
 
     for (let i = 0; i < rows.length; i += 50) {
-      const { error } = await context.supabase.from("files" as any).insert(rows.slice(i, i + 50));
+      const { error } = await context.supabase
+        .from("files" as any)
+        .upsert(rows.slice(i, i + 50), { onConflict: "project_id,path" });
       if (error) {
-        await context.supabase.from("projects" as any).delete().eq("id", (project as any).id);
+        if (!continuedExistingProject) await context.supabase.from("projects" as any).delete().eq("id", projectId);
         throw new Error(error.message);
       }
     }
 
     // Remember GitHub origin so the user can push back later
-    await context.supabase.from("project_github_links" as any).insert({
-      project_id: (project as any).id,
-      user_id: context.userId,
-      owner,
-      repo,
-      default_branch: branch,
-    });
+    const { error: linkError } = await context.supabase
+      .from("project_github_links" as any)
+      .upsert({
+        project_id: projectId,
+        user_id: context.userId,
+        owner,
+        repo,
+        default_branch: branch,
+      }, { onConflict: "project_id" });
+    if (linkError) throw new Error(linkError.message);
 
-    return { projectId: (project as any).id as string, branch, fileCount: rows.length, resumed: false };
+    return { projectId, branch, fileCount: rows.length, resumed: continuedExistingProject };
   });
 
 // ============= Push to GitHub =============
