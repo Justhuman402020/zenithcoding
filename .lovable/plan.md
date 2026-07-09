@@ -1,68 +1,77 @@
-## Pure Gold — premium Lovable-style rebuild
+# Build Plan: Billing, Transfer, Templates
 
-A two-part job: a new design foundation everywhere, then four Lovable-feature passes inside the editor.
+Three independent features. I'll ship them in this order because each depends on the previous less than the reverse.
 
-### Part 1 — Design foundation (touches every screen)
+## 1. Stripe subscriptions + credits ledger
 
-Reset the visual system to Noir & Gold + Instrument Serif / Work Sans, then re-skin each surface against it. Nothing functional changes here — just the look.
+### Schema (migration)
+- `plans` — id, name, stripe_price_id, monthly_credits, price_cents.
+- `subscriptions` — user_id, stripe_customer_id, stripe_subscription_id, plan_id, status, current_period_end.
+- `credit_ledger` — id, user_id, delta (signed int), reason (`grant|debit|topup|refund`), ref (message_id / invoice_id), created_at.
+- `credit_balances` view — `SUM(delta) GROUP BY user_id`.
+- Grants + RLS: users read own rows; ledger insert only via service role.
 
-**Design tokens (`src/styles.css`)**
-- Background `#0a0a0a`, surfaces `#171717`/`#1f1f1f`, foreground `#f5efe1`, muted `#8a8275`.
-- Primary `#c9a84c` (pure gold), primary-glow `#f0d78c`, accent `#e6b948`.
-- Border `rgba(201,168,76,0.18)`, ring `#c9a84c`.
-- Gold gradient + soft "candlelight" shadow tokens reused across cards, buttons, badges.
-- Fonts: Instrument Serif (display) + Work Sans (body), loaded via `<link>` in `__root.tsx` head.
+### Backend
+- `src/routes/api/public/stripe/webhook.ts` — verify signature, handle `checkout.session.completed`, `customer.subscription.updated`, `invoice.paid` (grant monthly credits), `customer.subscription.deleted`.
+- `src/lib/billing.functions.ts` (auth'd server fns):
+  - `createCheckoutSession({ planId })` → returns Stripe Checkout URL.
+  - `createBillingPortalSession()` → returns portal URL.
+  - `getMyBalance()` → sum + recent ledger entries + active subscription.
+- `src/lib/credits.server.ts` — `debitCredits(userId, amount, ref)` used inside the existing chat route (`api/public/chat.ts`) before streaming; rejects with 402 if balance ≤ 0.
 
-**Re-skin pass (no logic changes)**
-- `src/routes/__root.tsx` — fonts, favicon meta, OG image tag.
-- `src/routes/auth.tsx` — split-screen: gold serif headline + Google + email; remove generic Sparkles.
-- `src/routes/_authenticated/index.tsx` — premium hero composer, gold project cards, sidebar in noir.
-- `src/routes/_authenticated/p.$projectId.tsx` — gold-trimmed chat rail, dark editor chrome, status pills.
-- `src/routes/s.$slug.tsx` — published shell: subtle gold "Made with Forge" badge.
-- Replace `Sparkles` brand icon with a generated gold "Forge" mark in `src/assets/`.
+### UI
+- `/account/billing` route: current plan, balance, ledger table, "Upgrade" (Checkout) and "Manage" (Portal) buttons.
+- Header pill showing remaining credits.
+- Chat error toast when credits exhausted with link to billing.
 
-### Part 2 — Lovable-grade feature polish (editor only)
+### Secrets
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` via `add_secret` (BYOK — user asked for Stripe).
+- Publishable key set client-side via env.
 
-**A. Chat polish (thinking + tool calls + diffs)**
-- Install AI Elements: `conversation`, `message`, `prompt-input`, `shimmer`, `tool`, `reasoning`.
-- Replace the hand-built transcript and composer with AI Elements primitives.
-- Render `reasoning` parts using `Reasoning` component (collapsible "Thought for Xs" — server already streams `sendReasoning: true`).
-- Render file-edit tool calls (a new `editFile` tool exposed to the model) as `<Tool>` cards with a compact unified diff preview (added/removed line counts + first 6 lines, expandable).
+## 2. Project transfer ownership
 
-**B. Live preview + device switcher + console**
-- Add a top bar above the iframe: Mobile (390) / Tablet (768) / Desktop (full) toggle, refresh, open-in-new-tab.
-- Capture iframe `console.*` + `window.onerror` via a tiny preload script injected into the served HTML; pipe to a collapsible Console drawer with level filters and clear.
+### Schema
+- `workspaces` (id, name, slug, owner_user_id) + `workspace_members` (workspace_id, user_id, role). Minimal — every user gets a personal workspace on first login (trigger).
+- Add `projects.workspace_id` (nullable → backfill → not null).
+- `project_transfers` — id, project_id, from_user_id, to_email, to_workspace_id nullable, token, status (`pending|accepted|declined|cancelled|expired`), created_at, expires_at.
 
-**C. Versions / history + restore**
-- Auto-snapshot to `project_snapshots` on every successful AI edit (label = first user prompt of the turn).
-- New "History" panel: timeline of snapshots, file-count diff vs current, "Restore" (replaces files transactionally) and "Preview" (read-only diff).
+### Backend `src/lib/transfers.functions.ts`
+- `initiateTransfer({ projectId, toEmail })` — owner-only, creates row + token, sends email (Resend if key present, else return acceptance URL directly).
+- `getTransferByToken({ token })` — public server fn.
+- `acceptTransfer({ token })` — auth'd; verifies invited email matches current user email, moves `projects.user_id` + `projects.workspace_id` to accepter's personal workspace, marks accepted.
+- `cancelTransfer`, `declineTransfer`.
 
-**D. Publish + custom domains + share**
-- Finish `DomainsPanel`: live DNS verify polling already exists — add status pill colors, copy-to-clipboard for A/TXT records, plain-English newbie helper text per step.
-- Publish dialog: visibility toggle (public/private placeholder), gold "Live" pill, share-card preview, copy link button, QR code.
+### UI
+- `/p/$projectId/settings` → "Transfer ownership" card (email input + send).
+- `/transfers/$token` public route → "Accept ownership of <project>" button; if not signed in, redirect through `/auth?next=`.
+- Toast + list of pending transfers on project settings.
 
-### Out of scope (call out, don't build)
-- GitHub two-way sync (token storage exists; push-on-edit deferred).
-- Remix/fork another user's project.
-- Project secrets UI.
+## 3. Templates gallery + Remix
 
-### Technical notes
-- TanStack Start + Tailwind v4 + shadcn already in place — no framework swap.
-- All color tokens go through `@theme inline` in `src/styles.css` so existing shadcn classes (`bg-primary`, `border-border`) re-skin automatically.
-- AI Elements installed via `bun x ai-elements@latest add conversation message prompt-input shimmer tool reasoning`.
-- New `editFile` server tool will use the existing `files` table + RLS — no schema change needed.
-- One new migration: add `snapshot_after_message_id` column to `project_snapshots` so the History panel can map snapshots back to chat turns.
-- No new secrets. Existing GitHub OAuth + Lovable AI Gateway keys cover everything.
+### Schema
+- `templates` — id, slug, name, description, category, thumbnail_url, files jsonb, author_user_id nullable, featured bool, created_at.
+- Seed migration with 6 starter templates (Vite React landing, SaaS dashboard, Blog, Portfolio, AI chatbot, Kanban) — files stored as `{ path: content }` map.
+- Add `projects.template_id` + `projects.remix_of_project_id` (already suggested).
 
-### Approximate file footprint
-- ~3 new components (DeviceSwitcher, ConsoleDrawer, HistoryPanel).
-- ~2 new server functions (snapshot create/list/restore, editFile tool).
-- Edits to 6 existing routes + `styles.css` + `__root.tsx` + chat API route.
+### Backend `src/lib/templates.functions.ts`
+- `listTemplates()` — public, returns featured + all.
+- `remixTemplate({ templateId, name })` — auth'd; creates new project row, copies `files jsonb` into `files` table rows for the new project, returns projectId.
+- `remixProject({ projectId })` — same for public projects.
 
-### Order of execution
-1. Tokens, fonts, gold logo, root head.
-2. Auth + landing/dashboard re-skin (so the user sees the new identity immediately).
-3. Editor re-skin + AI Elements swap + reasoning/tool UI.
-4. Device switcher + console drawer.
-5. History panel + auto-snapshots.
-6. Publish/domains polish.
+### UI
+- `/templates` public route — grid of cards (thumbnail, name, category, "Remix" button).
+- Add "Templates" section on `/` dashboard above recent projects (horizontal scroll).
+- Template detail modal → "Remix" → server fn → navigate to `/p/$projectId`.
+
+## Out of scope for this batch
+Workspace invites UI, multi-seat billing, Stripe tax, custom template uploads, template versioning, transfer to another workspace (only personal), refunds. Say the word and I'll add any of these next.
+
+## Order of implementation
+1. Migrations (all three feature groups in one migration for atomicity).
+2. Billing backend + UI.
+3. Transfer backend + UI.
+4. Templates seed + gallery + Remix.
+5. Wire credit debit into chat route.
+6. Playwright smoke: view /account/billing, /templates, initiate a transfer.
+
+Approve and I'll build it end to end.
