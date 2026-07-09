@@ -24,6 +24,7 @@ import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authe
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
+import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
 
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
@@ -101,6 +102,12 @@ const AuthenticatedPProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedPProjectIdRoute,
   } as any)
+const ApiPublicSitesAuthSignupRoute =
+  ApiPublicSitesAuthSignupRouteImport.update({
+    id: '/api/public/sites/auth/signup',
+    path: '/api/public/sites/auth/signup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -133,6 +141,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -151,6 +160,7 @@ export interface FileRoutesById {
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -169,6 +179,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/signup'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -185,6 +196,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/signup'
   id:
     | '__root__'
     | '/_authenticated'
@@ -202,6 +214,7 @@ export interface FileRouteTypes {
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/signup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -214,6 +227,7 @@ export interface RootRouteChildren {
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
+  ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -323,6 +337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdSettingsRouteImport
       parentRoute: typeof AuthenticatedPProjectIdRoute
     }
+    '/api/public/sites/auth/signup': {
+      id: '/api/public/sites/auth/signup'
+      path: '/api/public/sites/auth/signup'
+      fullPath: '/api/public/sites/auth/signup'
+      preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -378,6 +399,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
+  ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
