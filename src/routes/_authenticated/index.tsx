@@ -443,6 +443,7 @@ function Dashboard() {
       });
       toast.success("Imported from Lovable");
       setLovableImportOpen(false);
+      setGhOpen(false);
       setLovableImportId("");
       setLovableImportName("");
       setLovableImportDesc("");
