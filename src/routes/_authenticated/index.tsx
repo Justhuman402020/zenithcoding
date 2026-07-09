@@ -10,17 +10,20 @@ import {
   mirrorAllGithubRepos,
   disconnectGithub,
 } from "@/lib/github.functions";
+import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink } from "lucide-react";
+
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
+
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
   return (
@@ -42,12 +45,15 @@ type Project = {
   updated_at: string;
   published: boolean;
   slug: string | null;
+  lovable_project_id: string | null;
 };
 
 export const Route = createFileRoute("/_authenticated/")({
+
   head: () => ({ meta: [{ title: "Forge — your projects" }] }),
   component: Dashboard,
 });
+
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -80,12 +86,24 @@ function Dashboard() {
   const mirrorRepos = useServerFn(mirrorAllGithubRepos);
   const disconnectGh = useServerFn(disconnectGithub);
 
+  const fetchLovableImports = useServerFn(getLovableImportedProjects);
+  const doImportLovable = useServerFn(importLovableProject);
+  const doDeleteLovableImport = useServerFn(deleteLovableImport);
+
+  const [lovableImports, setLovableImports] = useState<Project[]>([]);
+  const [lovableImportOpen, setLovableImportOpen] = useState(false);
+  const [lovableImportId, setLovableImportId] = useState("");
+  const [lovableImportName, setLovableImportName] = useState("");
+  const [lovableImportDesc, setLovableImportDesc] = useState("");
+  const [lovableImporting, setLovableImporting] = useState(false);
+
   const [mirroring, setMirroring] = useState(false);
   const [mirrorStatus, setMirrorStatus] = useState<{
     total: number;
     done: number;
     failed: { full_name: string; error: string }[];
   } | null>(null);
+
 
   const [helperDismissed, setHelperDismissed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -135,14 +153,25 @@ function Dashboard() {
     setLoading(true);
     const { data, error } = await supabase
       .from("projects")
-      .select("id,name,description,updated_at,published,slug")
+      .select("id,name,description,updated_at,published,slug,lovable_project_id")
       .order("updated_at", { ascending: false });
     if (error) toast.error(error.message);
     else setProjects(data ?? []);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadLovableImports() {
+    try {
+      const { projects } = await fetchLovableImports({});
+      setLovableImports(projects);
+    } catch {
+      // silent fail
+    }
+  }
+
+
+  useEffect(() => { load(); loadLovableImports(); }, []);
+
 
   // Refresh GitHub status when the dashboard mounts and after the popup signals back
   useEffect(() => {
@@ -347,7 +376,47 @@ function Dashboard() {
     navigate({ to: "/auth" });
   }
 
+  async function handleImportLovable(e: React.FormEvent) {
+    e.preventDefault();
+    if (lovableImporting || !lovableImportId.trim() || !lovableImportName.trim()) return;
+    setLovableImporting(true);
+    try {
+      const { projectId } = await doImportLovable({
+        data: {
+          lovableProjectId: lovableImportId.trim(),
+          name: lovableImportName.trim(),
+          description: lovableImportDesc.trim() || undefined,
+        },
+      });
+      toast.success("Imported from Lovable");
+      setLovableImportOpen(false);
+      setLovableImportId("");
+      setLovableImportName("");
+      setLovableImportDesc("");
+      await load();
+      await loadLovableImports();
+      navigate({ to: "/p/$projectId", params: { projectId } });
+    } catch (err: any) {
+      toast.error(err?.message || "Import failed");
+    } finally {
+      setLovableImporting(false);
+    }
+  }
+
+  async function handleDeleteLovableImport(id: string) {
+    if (!confirm("Remove this Lovable import from Forge?")) return;
+    try {
+      await doDeleteLovableImport({ data: { projectId: id } });
+      setLovableImports((prev) => prev.filter((p) => p.id !== id));
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      toast.success("Removed Lovable import");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not remove");
+    }
+  }
+
   async function importFromGithub(e: React.FormEvent) {
+
     e.preventDefault();
     if (ghImporting) return;
 
@@ -520,6 +589,13 @@ function Dashboard() {
                 >
                   {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />} Import
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setLovableImportOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
+                >
+                  <Heart className="h-4 w-4" /> Lovable
+                </button>
                 {ghConnected.connected && (
                   <button
                     type="button"
@@ -534,6 +610,7 @@ function Dashboard() {
                       : "Mirror all"}
                   </button>
                 )}
+
               </div>
               <Button
                 type="submit"
@@ -756,7 +833,100 @@ function Dashboard() {
           </div>
         )}
 
+        {lovableImports.length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-end justify-between mb-5 hairline-bottom-gold pb-4 gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/70 mb-1">
+                  <Heart className="h-3 w-3 inline mr-1.5 -mt-0.5" />
+                  Imported from Lovable
+                </p>
+                <h2 className="font-display text-3xl">Lovable projects</h2>
+              </div>
+              <Dialog open={lovableImportOpen} onOpenChange={setLovableImportOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="hairline-gold hover:bg-accent/30 hover:text-primary">
+                    <Plus className="h-4 w-4 mr-1.5" /> Import another
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="font-display text-2xl">Import from Lovable</DialogTitle>
+                    <DialogDescription>
+                      Paste a Lovable project ID and name to create a copy in Forge. Ask the agent to copy the files afterward.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleImportLovable} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-wider text-muted-foreground">Lovable project ID</label>
+                      <Input
+                        value={lovableImportId}
+                        onChange={(e) => setLovableImportId(e.target.value)}
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-wider text-muted-foreground">Project name</label>
+                      <Input
+                        value={lovableImportName}
+                        onChange={(e) => setLovableImportName(e.target.value)}
+                        placeholder="My project"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs uppercase tracking-wider text-muted-foreground">Description (optional)</label>
+                      <Input
+                        value={lovableImportDesc}
+                        onChange={(e) => setLovableImportDesc(e.target.value)}
+                        placeholder="What is this project about?"
+                      />
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="submit"
+                        disabled={lovableImporting || !lovableImportId.trim() || !lovableImportName.trim()}
+                        className="bg-gold-gradient text-primary-foreground hover:opacity-95"
+                      >
+                        {lovableImporting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Importing…</> : "Import"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {lovableImports.map((p) => (
+                <div key={p.id} className="group relative rounded-2xl hairline-gold bg-card/70 backdrop-blur-sm p-5 hover:shadow-candlelight hover:border-primary/40 transition-all">
+                  <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-display text-xl truncate group-hover:text-gold transition-colors">{p.name}</h3>
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 font-medium border border-rose-500/30">
+                        <Heart className="h-2.5 w-2.5" /> Lovable
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2 mt-1.5 min-h-[2.5rem]">{p.description || "No description"}</p>
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 mt-3">
+                      Edited {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}
+                    </p>
+                  </Link>
+                  <button
+                    onClick={() => handleDeleteLovableImport(p.id)}
+                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                    aria-label="Remove Lovable import"
+                    title="Remove Lovable import"
+                  >
+                    <Unlink className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-end justify-between mb-8 hairline-bottom-gold pb-5">
+
           <div>
             <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-primary/70 mb-1">Atelier</p>
             <h2 className="font-display text-3xl">Your projects</h2>

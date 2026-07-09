@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN lovable_project_id TEXT;

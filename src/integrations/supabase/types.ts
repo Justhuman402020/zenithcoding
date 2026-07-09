@@ -377,6 +377,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          lovable_project_id: string | null
           name: string
           published: boolean
           remix_of_project_id: string | null
@@ -390,6 +391,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          lovable_project_id?: string | null
           name: string
           published?: boolean
           remix_of_project_id?: string | null
@@ -403,6 +405,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          lovable_project_id?: string | null
           name?: string
           published?: boolean
           remix_of_project_id?: string | null
