@@ -51,7 +51,12 @@ export const Route = createFileRoute("/s/$slug")({
           .select("path,content")
           .eq("project_id", project.id);
 
-        const map = new Map((files ?? []).map((f) => [normalizeAssetPath(f.path), f.content]));
+        // Prefer built artifacts (kind='build') when present; otherwise fall back to source.
+        const rows = (files ?? []) as Array<{ path: string; content: string; kind?: string }>;
+        const built = rows.filter((r) => (r as any).kind === "build");
+        const source = rows.filter((r) => (r as any).kind !== "build");
+        const serving = built.length > 0 ? built : source;
+        const map = new Map(serving.map((f) => [normalizeAssetPath(f.path), f.content]));
         const requestedPage = resolveProjectPath(new URL(request.url).searchParams.get("page") ?? "index.html");
         const currentPath = map.has(requestedPage) ? requestedPage : "index.html";
         const currentHtml = map.get(currentPath);
