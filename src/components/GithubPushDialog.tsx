@@ -357,6 +357,21 @@ export function GithubPushDialog({
               />
             </div>
 
+            {buildable && (
+              <label className="flex items-start gap-2.5 rounded-md border border-border/60 bg-muted/20 p-2.5 text-xs">
+                <Switch checked={buildBeforePush} onCheckedChange={setBuildBeforePush} />
+                <span className="flex-1">
+                  <span className="flex items-center gap-1.5 font-medium text-foreground">
+                    <Hammer className="h-3.5 w-3.5 text-primary" />
+                    Build before push
+                  </span>
+                  <span className="mt-0.5 block text-muted-foreground">
+                    Bundles your source in-browser and commits a <code className="rounded bg-muted/40 px-1">dist/</code> folder alongside it.
+                  </span>
+                </span>
+              </label>
+            )}
+
             {link.last_pushed_at && (
               <p className="text-xs text-muted-foreground">
                 Last push: <span className="text-foreground">{link.last_pushed_branch}</span>
