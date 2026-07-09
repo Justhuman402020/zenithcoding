@@ -1491,6 +1491,17 @@ function ProjectEditor() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BuildDialog
+        open={buildDialogOpen}
+        onOpenChange={(v) => {
+          setBuildDialogOpen(v);
+          if (!v) setPendingPublishSlug(null);
+        }}
+        files={files.map((f) => ({ path: f.path, content: f.content }))}
+        onDone={(built) => finalizePublish(built)}
+        title="Build & publish"
+        actionLabel="Publish"
+      />
     </div>
   );
 }
