@@ -47,6 +47,12 @@ import {
   ChevronUp,
   History as HistoryIcon,
   Hammer as HammerIcon,
+  Menu,
+  Play,
+  Check,
+  Zap,
+  Wand2,
+  Palette,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -56,6 +62,21 @@ import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { Github } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
