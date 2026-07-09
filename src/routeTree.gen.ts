@@ -13,6 +13,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
@@ -39,6 +40,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const TransfersTokenRoute = TransfersTokenRouteImport.update({
+  id: '/transfers/$token',
+  path: '/transfers/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SSlugRoute = SSlugRouteImport.update({
   id: '/s/$slug',
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/templates': typeof TemplatesRoute
   '/s/$slug': typeof SSlugRoute
+  '/transfers/$token': typeof TransfersTokenRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/templates': typeof TemplatesRoute
   '/s/$slug': typeof SSlugRoute
+  '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/templates': typeof TemplatesRoute
   '/s/$slug': typeof SSlugRoute
+  '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/templates'
     | '/s/$slug'
+    | '/transfers/$token'
     | '/account/billing'
     | '/p/$projectId'
     | '/api/public/chat'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/templates'
     | '/s/$slug'
+    | '/transfers/$token'
     | '/'
     | '/account/billing'
     | '/p/$projectId'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/templates'
     | '/s/$slug'
+    | '/transfers/$token'
     | '/_authenticated/'
     | '/_authenticated/account/billing'
     | '/_authenticated/p/$projectId'
@@ -160,6 +172,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   TemplatesRoute: typeof TemplatesRoute
   SSlugRoute: typeof SSlugRoute
+  TransfersTokenRoute: typeof TransfersTokenRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
@@ -195,6 +208,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/transfers/$token': {
+      id: '/transfers/$token'
+      path: '/transfers/$token'
+      fullPath: '/transfers/$token'
+      preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/s/$slug': {
       id: '/s/$slug'
@@ -268,6 +288,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   TemplatesRoute: TemplatesRoute,
   SSlugRoute: SSlugRoute,
+  TransfersTokenRoute: TransfersTokenRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
