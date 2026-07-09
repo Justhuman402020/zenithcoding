@@ -62,6 +62,8 @@ import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
+import { BuildDialog } from "@/components/BuildDialog";
+import type { BuildFile } from "@/lib/browser-build";
 import { Github } from "lucide-react";
 import {
   Sheet,
@@ -255,6 +257,8 @@ function ProjectEditor() {
   const [slugDraft, setSlugDraft] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [buildDialogOpen, setBuildDialogOpen] = useState(false);
+  const [pendingPublishSlug, setPendingPublishSlug] = useState<string | null>(null);
 
   // GitHub link/push state
   const [githubLinked, setGithubLinked] = useState(false);
@@ -639,15 +643,53 @@ function ProjectEditor() {
         return;
       }
     }
-    const { error } = await supabase
-      .from("projects")
-      .update({ slug: cleanSlug, published: true })
-      .eq("id", projectId);
+    // Open build dialog; it runs the build (or skips if not buildable) and calls back.
+    setPendingPublishSlug(cleanSlug);
+    setBuildDialogOpen(true);
     setPublishing(false);
-    if (error) return toast.error(error.message);
-    setSlug(cleanSlug);
-    setPublished(true);
-    toast.success("Site published");
+  }
+
+  async function finalizePublish(builtFiles: BuildFile[] | null) {
+    const cleanSlug = pendingPublishSlug;
+    setBuildDialogOpen(false);
+    setPendingPublishSlug(null);
+    if (!cleanSlug) return;
+    setPublishing(true);
+    try {
+      // Wipe old built artifacts.
+      await supabase.from("files").delete().eq("project_id", projectId).eq("kind" as any, "build");
+      // Insert new built artifacts (if any).
+      if (builtFiles && builtFiles.length) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const uid = userRes.user?.id;
+        if (!uid) throw new Error("Not signed in");
+        const rows = builtFiles.map((f) => ({
+          project_id: projectId,
+          user_id: uid,
+          path: f.path,
+          content: f.content,
+          kind: "build",
+        }));
+        // Insert in chunks to stay under payload limits.
+        for (let i = 0; i < rows.length; i += 50) {
+          const chunk = rows.slice(i, i + 50);
+          const { error } = await supabase.from("files").insert(chunk as any);
+          if (error) throw error;
+        }
+      }
+      const { error } = await supabase
+        .from("projects")
+        .update({ slug: cleanSlug, published: true })
+        .eq("id", projectId);
+      if (error) throw error;
+      setSlug(cleanSlug);
+      setPublished(true);
+      toast.success(builtFiles && builtFiles.length ? "Built & published" : "Site published");
+    } catch (e: any) {
+      toast.error(e?.message || "Publish failed");
+    } finally {
+      setPublishing(false);
+    }
   }
 
   async function handleUnpublish() {
