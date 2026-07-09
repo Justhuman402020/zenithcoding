@@ -562,9 +562,12 @@ function Dashboard() {
           <ForgeMark className="h-6 w-6" />
           <span className="font-display text-lg text-gold">Forge</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <AdminBadge />
+          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </header>
       {ghConnected.connected && (
         <button
