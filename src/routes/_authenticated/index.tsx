@@ -11,6 +11,7 @@ import {
   disconnectGithub,
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
+import { getAdminStatus } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -18,7 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -63,6 +64,28 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
         </>
       )}
     </div>
+  );
+}
+
+function AdminBadge() {
+  const fetchStatus = useServerFn(getAdminStatus);
+  const [unlocked, setUnlocked] = useState(false);
+  useEffect(() => {
+    fetchStatus({}).then((s) => setUnlocked(!!s.unlocked)).catch(() => {});
+  }, []);
+  return (
+    <Link
+      to="/admin"
+      title={unlocked ? "Admin unlocked" : "Unlock admin"}
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
+        unlocked
+          ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
+          : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
+      }`}
+    >
+      {unlocked ? <ShieldCheck className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+      <span className="hidden sm:inline">{unlocked ? "Admin" : "Admin locked"}</span>
+    </Link>
   );
 }
 
@@ -562,9 +585,12 @@ function Dashboard() {
           <ForgeMark className="h-6 w-6" />
           <span className="font-display text-lg text-gold">Forge</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <AdminBadge />
+          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </header>
       {ghConnected.connected && (
         <button
