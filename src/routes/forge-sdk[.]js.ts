@@ -48,6 +48,8 @@ const SDK = `(function(){
 
   var Forge = {
     slug: slug,
+    env: {},
+    envReady: null,
     auth: {
       user: function(){ return user; },
       signUp: function(o){
@@ -92,6 +94,9 @@ const SDK = `(function(){
       },
     },
   };
+  Forge.envReady = req("/api/public/sites/env?slug=" + encodeURIComponent(slug || ""))
+    .then(function(r){ Forge.env = r.env || {}; window.dispatchEvent(new CustomEvent("forge:env", { detail: Forge.env })); return Forge.env; })
+    .catch(function(){ return {}; });
   window.Forge = Forge;
 })();`;
 

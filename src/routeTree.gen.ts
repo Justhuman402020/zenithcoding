@@ -24,6 +24,7 @@ import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
+import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
@@ -106,6 +107,11 @@ const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   path: '/api/public/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSitesEnvRoute = ApiPublicSitesEnvRouteImport.update({
+  id: '/api/public/sites/env',
+  path: '/api/public/sites/env',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
   id: '/api/public/sites/data',
   path: '/api/public/sites/data',
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
+  '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
+  '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
+  '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
+    | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
+    | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
+    | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
@@ -290,6 +302,7 @@ export interface RootRouteChildren {
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
+  ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
   ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
   ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
@@ -403,6 +416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sites/env': {
+      id: '/api/public/sites/env'
+      path: '/api/public/sites/env'
+      fullPath: '/api/public/sites/env'
+      preLoaderRoute: typeof ApiPublicSitesEnvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sites/data': {
       id: '/api/public/sites/data'
       path: '/api/public/sites/data'
@@ -502,6 +522,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
+  ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
   ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
   ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
