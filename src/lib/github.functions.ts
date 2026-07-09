@@ -268,6 +268,23 @@ export const importGithubRepoServer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { owner: string; repo: string; branch?: string; subpath?: string }) => d)
   .handler(async ({ data, context }) => {
+    // Resume: if this user has already imported this repo, reopen it instead of duplicating.
+    const { data: existingLink } = await context.supabase
+      .from("project_github_links" as any)
+      .select("project_id")
+      .eq("user_id", context.userId)
+      .eq("owner", data.owner)
+      .eq("repo", data.repo)
+      .maybeSingle();
+    if (existingLink && (existingLink as any).project_id) {
+      return {
+        projectId: (existingLink as any).project_id as string,
+        branch: data.branch || "",
+        fileCount: 0,
+        resumed: true,
+      };
+    }
+
     const { data: tok } = await context.supabase
       .from("github_tokens" as any)
       .select("access_token")
@@ -337,7 +354,7 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
       default_branch: branch,
     });
 
-    return { projectId: (project as any).id as string, branch, fileCount: rows.length };
+    return { projectId: (project as any).id as string, branch, fileCount: rows.length, resumed: false };
   });
 
 // ============= Push to GitHub =============
