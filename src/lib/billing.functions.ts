@@ -12,7 +12,7 @@ export const getMyBilling = createServerFn({ method: "GET" })
     const balance = await getBalance(userId);
     const [{ data: ledger }, { data: sub }, { data: plans }] = await Promise.all([
       supabase.from("credit_ledger").select("id,delta,reason,ref,created_at").order("created_at", { ascending: false }).limit(30),
-      supabaseAdmin.from("subscriptions").select("status,current_period_end,plan_id,plans:plan_id(slug,name,monthly_credits,price_cents)").eq("user_id", userId).maybeSingle(),
+      supabaseAdmin.from("subscriptions").select("status,current_period_end,plan_id,stripe_customer_id,plans:plan_id(slug,name,monthly_credits,price_cents)").eq("user_id", userId).maybeSingle(),
       supabaseAdmin.from("plans").select("id,slug,name,price_cents,monthly_credits,stripe_price_id").eq("active", true).order("price_cents"),
     ]);
     return { balance, ledger: ledger ?? [], subscription: sub ?? null, plans: plans ?? [] };
