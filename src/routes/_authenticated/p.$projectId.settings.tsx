@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { initiateTransfer, listMyTransfers, cancelTransfer } from "@/lib/transfers.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { DomainsPanel } from "@/components/DomainsPanel";
+import { SecretsPanel } from "@/components/SecretsPanel";
+import { ShareLinksPanel } from "@/components/ShareLinksPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -189,6 +191,9 @@ function SettingsPage() {
           <DomainsPanel projectId={projectId} />
         </div>
       </div>
+
+      <ShareLinksPanel projectId={projectId} />
+      <SecretsPanel projectId={projectId} />
 
       <div className="rounded-xl border p-5 space-y-3">
         <div>
