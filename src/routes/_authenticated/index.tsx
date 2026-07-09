@@ -500,6 +500,20 @@ function Dashboard() {
   return (
     <div className="min-h-[100dvh] bg-background flex flex-col relative overflow-x-hidden">
       <div className="pointer-events-none absolute inset-0 vignette" />
+      <ImportStatusPill
+        active={mirroring || ghImporting || lovableImporting || !!importingRepo}
+        label={
+          mirroring
+            ? `mirroring ${mirrorStatus ? `${mirrorStatus.done}/${mirrorStatus.total}` : "repos"}`
+            : lovableImporting
+              ? "importing from Lovable"
+              : importingRepo
+                ? `importing ${importingRepo}`
+                : ghImporting
+                  ? "importing from GitHub"
+                  : "your import"
+        }
+      />
       <header className="h-14 flex items-center justify-between px-3 shrink-0 relative">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>
