@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
 
@@ -442,6 +443,7 @@ function Dashboard() {
       });
       toast.success("Imported from Lovable");
       setLovableImportOpen(false);
+      setGhOpen(false);
       setLovableImportId("");
       setLovableImportName("");
       setLovableImportDesc("");
@@ -650,18 +652,10 @@ function Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={ghConnected.connected ? () => setGhOpen(true) : connectGithub}
-                  disabled={ghConnecting}
+                  onClick={() => setGhOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
                 >
-                  {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />} Import
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLovableImportOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
-                >
-                  <Heart className="h-4 w-4" /> Lovable
+                  {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />} Import
                 </button>
                 {ghConnected.connected && (
                   <button
@@ -1107,9 +1101,18 @@ function Dashboard() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Github className="h-4 w-4" /> Import from GitHub
+              <CloudDownload className="h-4 w-4" /> Import a project
             </DialogTitle>
+            <DialogDescription>
+              Bring in an existing GitHub repository, or paste a Lovable project ID to mirror it here.
+            </DialogDescription>
           </DialogHeader>
+          <Tabs defaultValue="github" className="w-full">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="github"><Github className="h-3.5 w-3.5 mr-1.5" /> GitHub</TabsTrigger>
+              <TabsTrigger value="lovable"><Heart className="h-3.5 w-3.5 mr-1.5" /> Lovable</TabsTrigger>
+            </TabsList>
+            <TabsContent value="github" className="mt-4">
           {!ghConnected.connected ? (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
@@ -1219,6 +1222,50 @@ function Dashboard() {
               </DialogFooter>
             </form>
           )}
+            </TabsContent>
+            <TabsContent value="lovable" className="mt-4">
+              <form onSubmit={handleImportLovable} className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Paste a Lovable project ID and name to mirror it into Forge. You'll be able to keep editing here.
+                </p>
+                <div className="space-y-2">
+                  <label className="text-xs uppercase tracking-wider text-muted-foreground">Lovable project ID</label>
+                  <Input
+                    value={lovableImportId}
+                    onChange={(e) => setLovableImportId(e.target.value)}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs uppercase tracking-wider text-muted-foreground">Project name</label>
+                  <Input
+                    value={lovableImportName}
+                    onChange={(e) => setLovableImportName(e.target.value)}
+                    placeholder="My project"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs uppercase tracking-wider text-muted-foreground">Description (optional)</label>
+                  <Input
+                    value={lovableImportDesc}
+                    onChange={(e) => setLovableImportDesc(e.target.value)}
+                    placeholder="What is this project about?"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="submit"
+                    disabled={lovableImporting || !lovableImportId.trim() || !lovableImportName.trim()}
+                    className="bg-gold-gradient text-primary-foreground hover:opacity-95"
+                  >
+                    {lovableImporting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Importing…</> : "Import & open"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>
