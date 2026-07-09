@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
@@ -32,6 +33,11 @@ import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/si
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
+  id: '/forge-sdk.js',
+  path: '/forge-sdk.js',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -131,6 +137,7 @@ const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
+  '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/forge-sdk.js'
     | '/templates'
     | '/admin'
     | '/s/$slug'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/forge-sdk.js'
     | '/templates'
     | '/admin'
     | '/s/$slug'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/auth'
+    | '/forge-sdk.js'
     | '/templates'
     | '/_authenticated/admin'
     | '/s/$slug'
@@ -257,6 +269,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
   TemplatesRoute: typeof TemplatesRoute
   SSlugRoute: typeof SSlugRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
@@ -277,6 +290,13 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/templates'
       preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forge-sdk.js': {
+      id: '/forge-sdk.js'
+      path: '/forge-sdk.js'
+      fullPath: '/forge-sdk.js'
+      preLoaderRoute: typeof ForgeSdkDotjsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -453,6 +473,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
   TemplatesRoute: TemplatesRoute,
   SSlugRoute: SSlugRoute,
   TransfersTokenRoute: TransfersTokenRoute,

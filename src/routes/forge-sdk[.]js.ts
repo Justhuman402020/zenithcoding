@@ -95,7 +95,7 @@ const SDK = `(function(){
   window.Forge = Forge;
 })();`;
 
-export const Route = createFileRoute("/forge-sdk[.]js")({
+export const Route = createFileRoute("/forge-sdk.js")({
   server: {
     handlers: {
       GET: () => new Response(SDK, {
