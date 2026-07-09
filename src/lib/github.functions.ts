@@ -231,6 +231,7 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
         .eq("id", projectId)
         .eq("user_id", context.userId);
     }
+    if (!projectId) throw new Error("Could not create project");
 
     const rows = files.map((file) => ({
       project_id: projectId,
