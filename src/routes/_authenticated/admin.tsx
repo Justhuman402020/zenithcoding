@@ -5,7 +5,7 @@ import { getAdminStatus, unlockAdmin, lockAdmin } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ShieldCheck, Lock, KeyRound, Loader2, Unlock } from "lucide-react";
+import { ShieldCheck, Lock, KeyRound, Loader2, Unlock, Users } from "lucide-react";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -92,6 +92,13 @@ function AdminPage() {
                 <Lock className="h-4 w-4" /> Lock
               </Button>
             </div>
+            <Button
+              variant="outline"
+              onClick={() => navigate({ to: "/admin/users" })}
+              className="w-full gap-1.5"
+            >
+              <Users className="h-4 w-4" /> Manage users
+            </Button>
           </div>
         ) : (
           <form onSubmit={onUnlock} className="space-y-3">

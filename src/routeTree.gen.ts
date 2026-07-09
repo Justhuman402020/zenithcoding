@@ -19,6 +19,7 @@ import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
@@ -73,6 +74,11 @@ const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   path: '/p/$projectId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
 const AuthenticatedAccountBillingRoute =
   AuthenticatedAccountBillingRouteImport.update({
     id: '/account/billing',
@@ -100,10 +106,11 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/templates': typeof TemplatesRoute
-  '/admin': typeof AuthenticatedAdminRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
@@ -114,11 +121,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/templates': typeof TemplatesRoute
-  '/admin': typeof AuthenticatedAdminRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
@@ -131,11 +139,12 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/templates': typeof TemplatesRoute
-  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/transfers/$token'
     | '/account/billing'
+    | '/admin/users'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/transfers/$token'
     | '/'
     | '/account/billing'
+    | '/admin/users'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/transfers/$token'
     | '/_authenticated/'
     | '/_authenticated/account/billing'
+    | '/_authenticated/admin/users'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
@@ -276,6 +288,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/account/billing': {
       id: '/_authenticated/account/billing'
       path: '/account/billing'
@@ -307,6 +326,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+}
+
+const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+}
+
+const AuthenticatedAdminRouteWithChildren =
+  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
+
 interface AuthenticatedPProjectIdRouteChildren {
   AuthenticatedPProjectIdSettingsRoute: typeof AuthenticatedPProjectIdSettingsRoute
 }
@@ -322,14 +352,14 @@ const AuthenticatedPProjectIdRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
