@@ -52,7 +52,7 @@ export const Route = createFileRoute("/s/$slug")({
           .eq("project_id", project.id);
 
         // Prefer built artifacts (kind='build') when present; otherwise fall back to source.
-        const rows = (files ?? []) as Array<{ path: string; content: string; kind?: string }>;
+        const rows = ((files ?? []) as unknown) as Array<{ path: string; content: string; kind?: string }>;
         const built = rows.filter((r) => (r as any).kind === "build");
         const source = rows.filter((r) => (r as any).kind !== "build");
         const serving = built.length > 0 ? built : source;
