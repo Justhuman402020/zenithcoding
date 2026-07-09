@@ -38,6 +38,34 @@ function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label:
   );
 }
 
+function ImportStatusPill({ active, label }: { active: boolean; label: string }) {
+  const [stage, setStage] = useState<"thinking" | "working">("thinking");
+  useEffect(() => {
+    if (!active) { setStage("thinking"); return; }
+    setStage("thinking");
+    const t = setTimeout(() => setStage("working"), 900);
+    return () => clearTimeout(t);
+  }, [active]);
+  if (!active) return null;
+  return (
+    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-border bg-card/90 backdrop-blur px-3.5 py-1.5 text-xs shadow-lg">
+      {stage === "thinking" ? (
+        <>
+          <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+          <span className="font-medium text-foreground">Thinking</span>
+          <span className="text-muted-foreground">· preparing {label}</span>
+        </>
+      ) : (
+        <>
+          <Hammer className="h-3.5 w-3.5 text-primary animate-pulse" />
+          <span className="font-medium text-foreground">Working</span>
+          <span className="text-muted-foreground">· {label}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 type Project = {
   id: string;
   name: string;
