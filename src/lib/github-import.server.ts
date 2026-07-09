@@ -7,6 +7,37 @@ export function cleanGithubPathPart(value: string) {
   return encodeURIComponent(value.trim()).replace(/%2F/g, "/");
 }
 
+export function normalizeGithubProjectName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+export function isCloseGithubProjectName(a: string, b: string) {
+  const left = normalizeGithubProjectName(a);
+  const right = normalizeGithubProjectName(b);
+  if (!left || !right) return false;
+  if (left === right || left.includes(right) || right.includes(left)) return true;
+
+  const maxDistance = Math.max(left.length, right.length) <= 14 ? 2 : 3;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    let rowMin = current[0];
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      const next = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost,
+      );
+      current[j] = next;
+      rowMin = Math.min(rowMin, next);
+    }
+    if (rowMin > maxDistance) return false;
+    previous = current;
+  }
+  return previous[right.length] <= maxDistance;
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

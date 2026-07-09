@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getRequest } from "@tanstack/react-start/server";
 import { currentOrigin, encodeReturnOrigin, getCanonicalCallbackUrl } from "@/lib/github-shared";
-import { cleanGithubPathPart, readGithubRepoFiles } from "@/lib/github-import.server";
+import { cleanGithubPathPart, isCloseGithubProjectName, readGithubRepoFiles } from "@/lib/github-import.server";
 
 export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -199,17 +199,21 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
     const subpath = (data.subpath || "").replace(/^\/+|\/+$/g, "");
     const projectName = subpath ? `${repo}/${subpath.split("/").pop()}` : repo;
 
-    // Continue an existing Lovable-tracked project with the same name instead of making the user start fresh.
+    // Continue an existing Lovable-tracked project with the same/similar name instead of making the user start fresh.
     const { data: namedProject } = await context.supabase
       .from("projects" as any)
-      .select("id")
+      .select("id, name")
       .eq("user_id", context.userId)
-      .ilike("name", projectName)
+      .or(`name.ilike.${projectName},name.ilike.%${repo}%,name.ilike.%${owner}%`)
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(10);
 
-    let projectId = (namedProject as any)?.id as string | undefined;
+    const projectMatch = ((namedProject as any[]) || []).find((project) =>
+      isCloseGithubProjectName(project.name || "", projectName) ||
+      isCloseGithubProjectName(project.name || "", repo),
+    );
+
+    let projectId = projectMatch?.id as string | undefined;
     const continuedExistingProject = !!projectId;
 
     if (!projectId) {
