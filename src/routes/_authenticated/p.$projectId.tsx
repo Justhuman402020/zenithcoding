@@ -1140,14 +1140,62 @@ function ProjectEditor() {
                   </div>
                 );
               })}
-              {isStreaming && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  <span>Working…</span>
-                </div>
-              )}
+              {isStreaming && (() => {
+                const last = messages[messages.length - 1];
+                const lastTools = last?.parts.filter((p: any) => typeof p.type === "string" && p.type.startsWith("tool-")) ?? [];
+                const activeTool = [...lastTools].reverse().find((t: any) => t.state !== "output-available") as any;
+                const latestTool = lastTools[lastTools.length - 1] as any;
+                const text = last?.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("") ?? "";
+                let stage: "thinking" | "working" = "thinking";
+                let label = "Thinking…";
+                if (activeTool) {
+                  stage = "working";
+                  const name = String(activeTool.type).replace("tool-", "");
+                  label = toolLabel(name, activeTool.input, activeTool.state).label;
+                } else if (text.length > 0) {
+                  stage = "working";
+                  label = "Writing response…";
+                } else if (latestTool) {
+                  stage = "working";
+                  const name = String(latestTool.type).replace("tool-", "");
+                  label = toolLabel(name, latestTool.input, latestTool.state).label;
+                }
+                return (
+                  <div className="flex items-center gap-2 rounded-xl hairline-gold bg-card/60 px-3 py-2 text-sm">
+                    {stage === "working" ? (
+                      <HammerIcon className="h-4 w-4 text-primary animate-pulse shrink-0" />
+                    ) : (
+                      <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
+                    )}
+                    <span className="font-medium text-foreground">
+                      {stage === "working" ? "Working" : "Thinking"}
+                    </span>
+                    <span className="text-muted-foreground truncate">· {label}</span>
+                  </div>
+                );
+              })()}
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
+              {!isStreaming && (
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {[
+                    { icon: Wand2, label: "Refine the design" },
+                    { icon: Palette, label: "Change color scheme" },
+                    { icon: Zap, label: "Add a new section" },
+                    { icon: Sparkles, label: "Make it responsive" },
+                  ].map((s) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      onClick={() => { setInput(s.label); inputRef.current?.focus(); }}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-full hairline-gold bg-card/50 px-3 py-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-accent/40 transition-colors"
+                    >
+                      <s.icon className="h-3 w-3" />
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               {attachments.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto">
                   {attachments.map((a, i) => (
