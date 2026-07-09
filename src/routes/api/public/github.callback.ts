@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CANONICAL_CALLBACK_URL } from "@/lib/github.functions";
+import { getCanonicalCallbackUrl } from "@/lib/github-shared";
 
 function decodeReturnOrigin(s: string): string | null {
   try {
@@ -47,7 +47,7 @@ export const Route = createFileRoute("/api/public/github/callback")({
             client_id: process.env.GITHUB_OAUTH_CLIENT_ID,
             client_secret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
             code,
-            redirect_uri: CANONICAL_CALLBACK_URL,
+            redirect_uri: getCanonicalCallbackUrl(),
           }),
         });
         const tok = (await tokenRes.json()) as any;

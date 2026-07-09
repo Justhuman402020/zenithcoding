@@ -1,24 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getRequest } from "@tanstack/react-start/server";
-
-// Always route OAuth through the PUBLISHED host — that's the one registered
-// on the GitHub OAuth App. The callback then bounces the user back to whatever
-// origin they started from (preview, custom domain, etc.) by reading it from
-// the `state` parameter.
-export const CANONICAL_CALLBACK_URL =
-  process.env.GITHUB_OAUTH_CALLBACK_URL ||
-  "https://zenithcoding.lovable.app/api/public/github/callback";
-
-function currentOrigin(req: Request | undefined): string {
-  const host = req?.headers.get("x-forwarded-host") || req?.headers.get("host") || "localhost:3000";
-  const proto = req?.headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
-
-function encodeReturnOrigin(origin: string): string {
-  return btoa(origin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+import { currentOrigin, encodeReturnOrigin, getCanonicalCallbackUrl } from "@/lib/github-shared";
+import { cleanGithubPathPart, isCloseGithubProjectName, readGithubRepoFiles } from "@/lib/github-import.server";
 
 export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -36,7 +20,7 @@ export const getGithubAuthUrl = createServerFn({ method: "POST" })
     const stateParam = `${(data as any).state}.${encodeReturnOrigin(returnOrigin)}`;
     const url = new URL("https://github.com/login/oauth/authorize");
     url.searchParams.set("client_id", clientId);
-    url.searchParams.set("redirect_uri", CANONICAL_CALLBACK_URL);
+    url.searchParams.set("redirect_uri", getCanonicalCallbackUrl());
     url.searchParams.set("scope", "repo read:user");
     url.searchParams.set("state", stateParam);
     return { url: url.toString() };
@@ -147,134 +131,21 @@ export const listGithubRepos = createServerFn({ method: "GET" })
     }));
   });
 
-type ImportedFile = { path: string; content: string };
-
-function cleanGithubPathPart(value: string) {
-  return encodeURIComponent(value.trim()).replace(/%2F/g, "/");
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-async function readGithubRepoFiles({
-  owner,
-  repo,
-  branch,
-  subpath,
-  token,
-}: {
-  owner: string;
-  repo: string;
-  branch?: string;
-  subpath?: string;
-  token?: string;
-}) {
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  owner = owner.trim();
-  repo = repo.trim().replace(/\.git$/i, "");
-  subpath = (subpath || "").replace(/^\/+|\/+$/g, "");
-  if (!owner || !repo || owner.includes("..") || repo.includes("..")) throw new Error("Invalid GitHub repository");
-
-  let resolvedBranch = branch?.trim();
-  if (!resolvedBranch) {
-    const mr = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, { headers });
-    if (!mr.ok) {
-      if (mr.status === 404) {
-        // Probe the owner to disambiguate the cause for the user.
-        const ownerRes = await fetch(
-          `https://api.github.com/users/${cleanGithubPathPart(owner)}`,
-          { headers },
-        ).catch(() => null);
-        if (ownerRes && ownerRes.status === 404) {
-          throw new Error(
-            `GitHub user or org "${owner}" doesn't exist. Check the spelling in the URL (https://github.com/${owner}/${repo}).`,
-          );
-        }
-        if (token) {
-          throw new Error(
-            `Repo ${owner}/${repo} not found. It may be private and not visible to your connected GitHub account (${ownerRes ? "owner exists" : "owner unknown"}). Open the repo on github.com to confirm the exact owner/name, or grant the Lovable GitHub app access to that org/repo.`,
-          );
-        }
-        throw new Error(
-          `Repo ${owner}/${repo} not found or is private. Connect GitHub first (Import → Connect GitHub) so private repos become visible.`,
-        );
-      }
-      const body = await mr.text().catch(() => "");
-      throw new Error(`Could not read repo ${owner}/${repo} (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
-    }
-    resolvedBranch = (await mr.json()).default_branch || "main";
-  }
-
-  const treeBranch = resolvedBranch || "main";
-  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(treeBranch)}?recursive=1`;
-  const tr = await fetch(treeUrl, { headers });
-  if (!tr.ok) {
-    const body = await tr.text().catch(() => "");
-    throw new Error(`Tree read failed (${tr.status}): ${body.slice(0, 180) || tr.statusText}`);
-  }
-  const tree = await tr.json();
-  if (!tree.tree) throw new Error("Empty repo");
-
-  const blobs: { path: string; sha: string; size: number }[] = tree.tree
-    .filter((n: any) => n.type === "blob")
-    .filter((n: any) => !subpath || n.path.startsWith(subpath + "/") || n.path === subpath)
-    .filter((n: any) => !SKIP_DIR.test("/" + n.path + "/"))
-    .filter((n: any) => ALLOWED.test(n.path))
-    .filter((n: any) => (n.size ?? 0) < 250_000)
-    .slice(0, 600);
-
-  if (blobs.length === 0) throw new Error("No importable text files found in this repo or subfolder");
-
-  const stripPrefix = (p: string) => (subpath ? p.replace(new RegExp(`^${escapeRegExp(subpath)}/?`), "") : p);
-  const files: ImportedFile[] = [];
-  let idx = 0;
-  async function worker() {
-    while (idx < blobs.length) {
-      const i = idx++;
-      const b = blobs[i];
-      try {
-        const r = await fetch(
-          `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/blobs/${b.sha}`,
-          { headers },
-        );
-        if (r.ok) {
-          const j = await r.json();
-          const content =
-            j.encoding === "base64"
-              ? Buffer.from(j.content, "base64").toString("utf8")
-              : String(j.content ?? "");
-          const path = stripPrefix(b.path);
-          if (path) files.push({ path, content });
-        }
-      } catch {}
-    }
-  }
-  await Promise.all(Array.from({ length: 8 }, worker));
-  files.sort((a, b) => a.path.localeCompare(b.path));
-
-  return { branch: treeBranch, files };
-}
-
-const ALLOWED = /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|yml|yaml|vue|astro|mjs|cjs)$/i;
-const SKIP_DIR = /(^|\/)(node_modules|\.git|dist|build|\.next|\.nuxt|coverage)\//i;
-
 export const importGithubRepoServer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { owner: string; repo: string; branch?: string; subpath?: string }) => d)
   .handler(async ({ data, context }) => {
+    const owner = data.owner.trim();
+    const repo = data.repo.trim().replace(/\.git$/i, "");
     // Resume: if this user has already imported this repo, reopen it instead of duplicating.
     const { data: existingLink } = await context.supabase
       .from("project_github_links" as any)
       .select("project_id")
       .eq("user_id", context.userId)
-      .eq("owner", data.owner)
-      .eq("repo", data.repo)
+      .ilike("owner", owner)
+      .ilike("repo", repo)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (existingLink && (existingLink as any).project_id) {
       return {
@@ -291,36 +162,83 @@ export const importGithubRepoServer = createServerFn({ method: "POST" })
       .eq("user_id", context.userId)
       .maybeSingle();
     const token = (tok as any)?.access_token as string | undefined;
-    return readGithubRepoFiles({ ...data, token });
+    return readGithubRepoFiles({ ...data, owner, repo, token });
   });
 
 export const importGithubRepoAsProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { owner: string; repo: string; branch?: string; subpath?: string }) => d)
   .handler(async ({ data, context }) => {
+    const owner = data.owner.trim();
+    const repo = data.repo.trim().replace(/\.git$/i, "");
+    const { data: existingLink } = await context.supabase
+      .from("project_github_links" as any)
+      .select("project_id, default_branch")
+      .eq("user_id", context.userId)
+      .ilike("owner", owner)
+      .ilike("repo", repo)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingLink && (existingLink as any).project_id) {
+      return {
+        projectId: (existingLink as any).project_id as string,
+        branch: (existingLink as any).default_branch || data.branch || "",
+        fileCount: 0,
+        resumed: true,
+      };
+    }
+
     const { data: tok } = await context.supabase
       .from("github_tokens" as any)
       .select("access_token")
       .eq("user_id", context.userId)
       .maybeSingle();
     const token = (tok as any)?.access_token as string | undefined;
-    const { branch, files } = await readGithubRepoFiles({ ...data, token });
+    const { branch, files } = await readGithubRepoFiles({ ...data, owner, repo, token });
     const subpath = (data.subpath || "").replace(/^\/+|\/+$/g, "");
-    const projectName = subpath ? `${data.repo}/${subpath.split("/").pop()}` : data.repo;
+    const projectName = subpath ? `${repo}/${subpath.split("/").pop()}` : repo;
 
-    const { data: project, error: projectError } = await context.supabase
+    // Continue an existing Lovable-tracked project with the same/similar name instead of making the user start fresh.
+    const { data: namedProject } = await context.supabase
       .from("projects" as any)
-      .insert({
-        name: projectName,
-        description: `Imported from github.com/${data.owner}/${data.repo}@${branch}`,
-        user_id: context.userId,
-      })
-      .select("id")
-      .single();
-    if (projectError || !project) throw new Error(projectError?.message || "Could not create project");
+      .select("id, name")
+      .eq("user_id", context.userId)
+      .not("lovable_project_id", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(50);
+
+    const projectMatch = ((namedProject as any[]) || []).find((project) =>
+      isCloseGithubProjectName(project.name || "", projectName) ||
+      isCloseGithubProjectName(project.name || "", repo),
+    );
+
+    let projectId = projectMatch?.id as string | undefined;
+    const continuedExistingProject = !!projectId;
+
+    if (!projectId) {
+      const { data: project, error: projectError } = await context.supabase
+        .from("projects" as any)
+        .insert({
+          name: projectName,
+          description: `Imported from github.com/${owner}/${repo}@${branch}`,
+          user_id: context.userId,
+        })
+        .select("id")
+        .single();
+      if (projectError || !project) throw new Error(projectError?.message || "Could not create project");
+      projectId = (project as any).id as string;
+    } else {
+      await context.supabase
+        .from("projects" as any)
+        .update({ description: `Imported from github.com/${owner}/${repo}@${branch}` })
+        .eq("id", projectId)
+        .eq("user_id", context.userId);
+    }
+    if (!projectId) throw new Error("Could not create project");
 
     const rows = files.map((file) => ({
-      project_id: (project as any).id,
+      project_id: projectId,
       user_id: context.userId,
       path: file.path,
       content: file.content,
@@ -330,31 +248,36 @@ export const importGithubRepoAsProject = createServerFn({ method: "POST" })
       const candidate = rows.find((row) => /(^|\/)index\.html$/i.test(row.path)) || rows.find((row) => /\.html?$/i.test(row.path));
       if (candidate) rows.unshift({ ...candidate, path: "index.html" });
       else rows.push({
-        project_id: (project as any).id,
+        project_id: projectId,
         user_id: context.userId,
         path: "index.html",
-        content: `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${projectName}</title><style>body{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e7d18a}main{max-width:720px;padding:32px}code{color:#f0d78c}</style></head><body><main><h1>${projectName}</h1><p>This repository was imported from <code>github.com/${data.owner}/${data.repo}</code>. Edit the source files with AI or open the Code tab.</p></main></body></html>`,
+        content: `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${projectName}</title><style>body{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e7d18a}main{max-width:720px;padding:32px}code{color:#f0d78c}</style></head><body><main><h1>${projectName}</h1><p>This repository was imported from <code>github.com/${owner}/${repo}</code>. Edit the source files with AI or open the Code tab.</p></main></body></html>`,
       });
     }
 
     for (let i = 0; i < rows.length; i += 50) {
-      const { error } = await context.supabase.from("files" as any).insert(rows.slice(i, i + 50));
+      const { error } = await context.supabase
+        .from("files" as any)
+        .upsert(rows.slice(i, i + 50), { onConflict: "project_id,path" });
       if (error) {
-        await context.supabase.from("projects" as any).delete().eq("id", (project as any).id);
+        if (!continuedExistingProject) await context.supabase.from("projects" as any).delete().eq("id", projectId);
         throw new Error(error.message);
       }
     }
 
     // Remember GitHub origin so the user can push back later
-    await context.supabase.from("project_github_links" as any).insert({
-      project_id: (project as any).id,
-      user_id: context.userId,
-      owner: data.owner,
-      repo: data.repo,
-      default_branch: branch,
-    });
+    const { error: linkError } = await context.supabase
+      .from("project_github_links" as any)
+      .upsert({
+        project_id: projectId,
+        user_id: context.userId,
+        owner,
+        repo,
+        default_branch: branch,
+      }, { onConflict: "project_id" });
+    if (linkError) throw new Error(linkError.message);
 
-    return { projectId: (project as any).id as string, branch, fileCount: rows.length, resumed: false };
+    return { projectId, branch, fileCount: rows.length, resumed: continuedExistingProject };
   });
 
 // ============= Push to GitHub =============
@@ -556,11 +479,10 @@ export const pushProjectToGithub = createServerFn({ method: "POST" })
 // ============= Mirror every GitHub repo into Forge =============
 
 // Imports up to MIRROR_BATCH missing repos per call. Re-call until `remaining` is 0.
-const MIRROR_BATCH = 6;
-
 export const mirrorAllGithubRepos = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const MIRROR_BATCH = 6;
     const { data: tok } = await context.supabase
       .from("github_tokens" as any)
       .select("access_token, scope")

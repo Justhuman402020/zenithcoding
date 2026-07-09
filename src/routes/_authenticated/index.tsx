@@ -91,6 +91,32 @@ function AdminBadge() {
   );
 }
 
+function parseGithubRepoInput(raw: string) {
+  let value = raw.trim();
+  if (!value) throw new Error("Pick a repo or paste a URL");
+  value = value
+    .replace(/^git@github\.com:/i, "")
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
+    .replace(/^github\.com\//i, "")
+    .replace(/^\/+/, "")
+    .replace(/\.git$/i, "")
+    .replace(/\/+$/, "");
+
+  const parts = value.split("/").filter(Boolean);
+  const owner = parts[0] || "";
+  const repo = (parts[1] || "").replace(/\.git$/i, "");
+  let branch = "";
+  let subpath = "";
+  if (parts[2] === "tree" && parts[3]) {
+    branch = parts[3];
+    subpath = parts.slice(4).join("/");
+  }
+  if (!owner || !repo || owner.includes("..") || repo.includes("..")) {
+    throw new Error("Use https://github.com/owner/repo");
+  }
+  return { owner, repo, branch, subpath };
+}
+
 type Project = {
   id: string;
   name: string;
@@ -496,19 +522,13 @@ function Dashboard() {
       const raw = pastedRepoUrl;
       if (!raw) return toast.error("Pick a repo or paste a URL");
       try {
-        const cleaned = raw
-          .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
-          .replace(/\.git$/, "")
-          .replace(/\/$/, "");
-        const parts = cleaned.split("/");
-        owner = parts[0]; repo = parts[1];
-        if (parts[2] === "tree" && parts[3]) {
-          if (!branch) branch = parts[3];
-          if (!subpath) subpath = parts.slice(4).join("/");
-        }
-        if (!owner || !repo) throw new Error("bad");
-      } catch {
-        return toast.error("Use https://github.com/owner/repo");
+        const parsed = parseGithubRepoInput(raw);
+        owner = parsed.owner;
+        repo = parsed.repo;
+        if (!branch) branch = parsed.branch;
+        if (!subpath) subpath = parsed.subpath;
+      } catch (err: any) {
+        return toast.error(err?.message || "Use https://github.com/owner/repo");
       }
     }
 
