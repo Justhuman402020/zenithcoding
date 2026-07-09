@@ -88,8 +88,9 @@ export const Route = createFileRoute("/s/$slug")({
           },
         );
         const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    window.location.href = '/s/${escapeJs(params.slug)}?page=' + encodeURIComponent(href);\n  });\n})();\n<\/script>`;
+        const forgeSdk = `<script src="/forge-sdk.js" defer></script>`;
         const forgeBadge = `<a href="/" target="_blank" rel="noopener" style="position:fixed;bottom:14px;right:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;background:linear-gradient(135deg,#0a0a0a,#171717);color:#f0d78c;font:500 11px/1 'Work Sans',system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px -8px rgba(0,0,0,.6),0 0 0 1px rgba(201,168,76,.35),inset 0 1px 0 rgba(240,215,140,.12);backdrop-filter:blur(8px)" aria-label="Made with Forge"><span style="width:6px;height:6px;border-radius:999px;background:linear-gradient(135deg,#b8923a,#f0d78c);box-shadow:0 0 8px rgba(240,215,140,.7)"></span>Made with Forge</a>`;
-        const injection = `${navigationBridge}${forgeBadge}`;
+        const injection = `${forgeSdk}${navigationBridge}${forgeBadge}`;
         html = html.includes("</body>") ? html.replace(/<\/body>/i, `${injection}</body>`) : `${html}${injection}`;
 
         return new Response(html, {

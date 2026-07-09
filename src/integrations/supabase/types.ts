@@ -435,6 +435,137 @@ export type Database = {
           },
         ]
       }
+      site_data: {
+        Row: {
+          collection: string
+          created_at: string
+          data: Json
+          id: string
+          is_public: boolean
+          owner_site_user_id: string | null
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          collection: string
+          created_at?: string
+          data?: Json
+          id?: string
+          is_public?: boolean
+          owner_site_user_id?: string | null
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          collection?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          is_public?: boolean
+          owner_site_user_id?: string | null
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_data_owner_site_user_id_fkey"
+            columns: ["owner_site_user_id"]
+            isOneToOne: false
+            referencedRelation: "site_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_data_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          project_id: string
+          site_user_id: string
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          project_id: string
+          site_user_id: string
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          project_id?: string
+          site_user_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_sessions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_sessions_site_user_id_fkey"
+            columns: ["site_user_id"]
+            isOneToOne: false
+            referencedRelation: "site_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_users: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          metadata: Json
+          password_hash: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          metadata?: Json
+          password_hash: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          metadata?: Json
+          password_hash?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_users_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           created_at: string

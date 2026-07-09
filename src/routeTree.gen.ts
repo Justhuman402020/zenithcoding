@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
@@ -22,12 +23,21 @@ import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
+import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
+import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
+import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
+import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/sites.auth.me'
 
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
+  id: '/forge-sdk.js',
+  path: '/forge-sdk.js',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -90,6 +100,11 @@ const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   path: '/api/public/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
+  id: '/api/public/sites/data',
+  path: '/api/public/sites/data',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
   id: '/api/public/github/callback',
   path: '/api/public/github/callback',
@@ -101,10 +116,28 @@ const AuthenticatedPProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedPProjectIdRoute,
   } as any)
+const ApiPublicSitesAuthSignupRoute =
+  ApiPublicSitesAuthSignupRouteImport.update({
+    id: '/api/public/sites/auth/signup',
+    path: '/api/public/sites/auth/signup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicSitesAuthSigninRoute =
+  ApiPublicSitesAuthSigninRouteImport.update({
+    id: '/api/public/sites/auth/signin',
+    path: '/api/public/sites/auth/signin',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
+  id: '/api/public/sites/auth/me',
+  path: '/api/public/sites/auth/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
+  '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
@@ -116,10 +149,15 @@ export interface FileRoutesByFullPath {
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
+  '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
+  '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
@@ -132,12 +170,17 @@ export interface FileRoutesByTo {
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
+  '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
+  '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
@@ -150,13 +193,18 @@ export interface FileRoutesById {
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
+  '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
+  '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/forge-sdk.js'
     | '/templates'
     | '/admin'
     | '/s/$slug'
@@ -168,10 +216,15 @@ export interface FileRouteTypes {
     | '/api/public/push-stream'
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
+    | '/api/public/sites/data'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/me'
+    | '/api/public/sites/auth/signin'
+    | '/api/public/sites/auth/signup'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/forge-sdk.js'
     | '/templates'
     | '/admin'
     | '/s/$slug'
@@ -184,11 +237,16 @@ export interface FileRouteTypes {
     | '/api/public/push-stream'
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
+    | '/api/public/sites/data'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/me'
+    | '/api/public/sites/auth/signin'
+    | '/api/public/sites/auth/signup'
   id:
     | '__root__'
     | '/_authenticated'
     | '/auth'
+    | '/forge-sdk.js'
     | '/templates'
     | '/_authenticated/admin'
     | '/s/$slug'
@@ -201,19 +259,28 @@ export interface FileRouteTypes {
     | '/api/public/push-stream'
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
+    | '/api/public/sites/data'
     | '/api/public/stripe/webhook'
+    | '/api/public/sites/auth/me'
+    | '/api/public/sites/auth/signin'
+    | '/api/public/sites/auth/signup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
   TemplatesRoute: typeof TemplatesRoute
   SSlugRoute: typeof SSlugRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
+  ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
+  ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
+  ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
+  ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -223,6 +290,13 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/templates'
       preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forge-sdk.js': {
+      id: '/forge-sdk.js'
+      path: '/forge-sdk.js'
+      fullPath: '/forge-sdk.js'
+      preLoaderRoute: typeof ForgeSdkDotjsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -309,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sites/data': {
+      id: '/api/public/sites/data'
+      path: '/api/public/sites/data'
+      fullPath: '/api/public/sites/data'
+      preLoaderRoute: typeof ApiPublicSitesDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/github/callback': {
       id: '/api/public/github/callback'
       path: '/api/public/github/callback'
@@ -322,6 +403,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/p/$projectId/settings'
       preLoaderRoute: typeof AuthenticatedPProjectIdSettingsRouteImport
       parentRoute: typeof AuthenticatedPProjectIdRoute
+    }
+    '/api/public/sites/auth/signup': {
+      id: '/api/public/sites/auth/signup'
+      path: '/api/public/sites/auth/signup'
+      fullPath: '/api/public/sites/auth/signup'
+      preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/auth/signin': {
+      id: '/api/public/sites/auth/signin'
+      path: '/api/public/sites/auth/signin'
+      fullPath: '/api/public/sites/auth/signin'
+      preLoaderRoute: typeof ApiPublicSitesAuthSigninRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/auth/me': {
+      id: '/api/public/sites/auth/me'
+      path: '/api/public/sites/auth/me'
+      fullPath: '/api/public/sites/auth/me'
+      preLoaderRoute: typeof ApiPublicSitesAuthMeRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -371,24 +473,19 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
   TemplatesRoute: TemplatesRoute,
   SSlugRoute: SSlugRoute,
   TransfersTokenRoute: TransfersTokenRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
+  ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
+  ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
+  ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
+  ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
