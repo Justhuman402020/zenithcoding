@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
 
@@ -650,18 +651,10 @@ function Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={ghConnected.connected ? () => setGhOpen(true) : connectGithub}
-                  disabled={ghConnecting}
+                  onClick={() => setGhOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
                 >
-                  {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />} Import
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLovableImportOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
-                >
-                  <Heart className="h-4 w-4" /> Lovable
+                  {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />} Import
                 </button>
                 {ghConnected.connected && (
                   <button
