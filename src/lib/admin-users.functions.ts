@@ -1,20 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-async function assertAdmin(context: { supabase: any; userId: string }) {
-  const { data, error } = await context.supabase.rpc("has_role", {
-    _user_id: context.userId,
-    _role: "admin",
-  });
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: admin only");
-}
+import { assertAdminRole, isAdminRole } from "./admin-auth.server";
 
 export const listAllUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context);
+    await assertAdminRole(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const users: Array<{ id: string; email: string | null; created_at: string; last_sign_in_at: string | null }> = [];
@@ -36,10 +28,12 @@ export const listAllUsers = createServerFn({ method: "GET" })
     }
 
     const ids = users.map((u) => u.id);
-    const [{ data: projectRows }, { data: roleRows }] = await Promise.all([
-      supabaseAdmin.from("projects").select("user_id").in("user_id", ids),
-      supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
-    ]);
+    const [{ data: projectRows }, { data: roleRows }] = ids.length
+      ? await Promise.all([
+          supabaseAdmin.from("projects").select("user_id").in("user_id", ids),
+          supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
+        ])
+      : [{ data: [] }, { data: [] }];
     const counts = new Map<string, number>();
     for (const r of projectRows ?? []) counts.set(r.user_id as string, (counts.get(r.user_id as string) ?? 0) + 1);
     const admins = new Set<string>();
@@ -58,7 +52,7 @@ export const listUserProjects = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => z.object({ userId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context);
+    await assertAdminRole(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin
       .from("projects")
@@ -73,7 +67,7 @@ export const deleteUserAsAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => z.object({ userId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context);
+    await assertAdminRole(context);
     if (data.userId === context.userId) throw new Error("You cannot delete your own account here.");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // remove projects/files first so cascade works cleanly even if FKs are missing
@@ -87,9 +81,5 @@ export const deleteUserAsAdmin = createServerFn({ method: "POST" })
 export const getMyRole = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data } = await context.supabase.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "admin",
-    });
-    return { isAdmin: !!data };
+    return { isAdmin: await isAdminRole(context) };
   });

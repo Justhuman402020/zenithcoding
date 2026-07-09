@@ -11,7 +11,7 @@ import {
   disconnectGithub,
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
-import { getAdminStatus } from "@/lib/admin.functions";
+import { getMyRole } from "@/lib/admin-users.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -68,23 +68,24 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
 }
 
 function AdminBadge() {
-  const fetchStatus = useServerFn(getAdminStatus);
-  const [unlocked, setUnlocked] = useState(false);
+  const fetchRole = useServerFn(getMyRole);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    fetchStatus({}).then((s) => setUnlocked(!!s.unlocked)).catch(() => {});
+    fetchRole({})
+      .then((s) => setIsAdmin(!!s.isAdmin))
+      .catch(() => setIsAdmin(false))
+      .finally(() => setReady(true));
   }, []);
+  if (!ready || !isAdmin) return null;
   return (
     <Link
-      to="/admin"
-      title={unlocked ? "Admin unlocked" : "Unlock admin"}
-      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
-        unlocked
-          ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
-          : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
-      }`}
+      to="/admin/users"
+      title="Samsung admin"
+      className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
     >
-      {unlocked ? <ShieldCheck className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-      <span className="hidden sm:inline">{unlocked ? "Admin" : "Admin locked"}</span>
+      <ShieldCheck className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Samsung admin</span>
     </Link>
   );
 }
@@ -558,9 +559,7 @@ function Dashboard() {
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
               </Link>
-              <Link to="/account/billing" onClick={() => setSidebarOpen(false)} className="block w-full">
-                <SidebarItem icon={Globe} label="Billing & credits" />
-              </Link>
+              <SidebarItem icon={Globe} label="Domains & publish" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
             </nav>
             <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
               <SidebarItem icon={LogOut} label="Sign out" onClick={signOut} />
