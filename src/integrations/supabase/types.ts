@@ -81,6 +81,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          kind: string
           path: string
           project_id: string
           updated_at: string
@@ -90,6 +91,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          kind?: string
           path: string
           project_id: string
           updated_at?: string
@@ -99,6 +101,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          kind?: string
           path?: string
           project_id?: string
           updated_at?: string
