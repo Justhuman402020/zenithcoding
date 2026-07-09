@@ -11,7 +11,7 @@ import {
   disconnectGithub,
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
-import { getAdminStatus } from "@/lib/admin.functions";
+import { getMyRole } from "@/lib/admin-users.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -68,23 +68,24 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
 }
 
 function AdminBadge() {
-  const fetchStatus = useServerFn(getAdminStatus);
-  const [unlocked, setUnlocked] = useState(false);
+  const fetchRole = useServerFn(getMyRole);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    fetchStatus({}).then((s) => setUnlocked(!!s.unlocked)).catch(() => {});
+    fetchRole({})
+      .then((s) => setIsAdmin(!!s.isAdmin))
+      .catch(() => setIsAdmin(false))
+      .finally(() => setReady(true));
   }, []);
+  if (!ready || !isAdmin) return null;
   return (
     <Link
-      to="/admin"
-      title={unlocked ? "Admin unlocked" : "Unlock admin"}
-      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
-        unlocked
-          ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
-          : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
-      }`}
+      to="/admin/users"
+      title="Samsung admin"
+      className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
     >
-      {unlocked ? <ShieldCheck className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-      <span className="hidden sm:inline">{unlocked ? "Admin" : "Admin locked"}</span>
+      <ShieldCheck className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Samsung admin</span>
     </Link>
   );
 }
@@ -558,9 +559,7 @@ function Dashboard() {
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
               </Link>
-              <Link to="/account/billing" onClick={() => setSidebarOpen(false)} className="block w-full">
-                <SidebarItem icon={Globe} label="Billing & credits" />
-              </Link>
+              <SidebarItem icon={Globe} label="Domains & publish" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
             </nav>
             <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
               <SidebarItem icon={LogOut} label="Sign out" onClick={signOut} />
@@ -1054,33 +1053,43 @@ function Dashboard() {
                     Edited {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}
                   </p>
                 </Link>
-                {p.published && p.slug && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <a
-                      href={`/s/${p.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline min-w-0"
-                    >
-                      <ExternalLink className="h-3 w-3 shrink-0" />
-                      <span className="truncate">/s/{p.slug}</span>
-                    </a>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 gap-1.5 px-2.5 text-xs hairline-gold"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        shareProject(p.slug!);
-                      }}
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      Share
-                    </Button>
-                  </div>
-                )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {p.published && p.slug ? (
+                    <>
+                      <a
+                        href={`/s/${p.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline min-w-0"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        <span className="truncate">/s/{p.slug}</span>
+                      </a>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 px-2.5 text-xs hairline-gold"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          shareProject(p.slug!);
+                        }}
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                        Share
+                      </Button>
+                    </>
+                  ) : null}
+                  <Link
+                    to="/p/$projectId/settings"
+                    params={{ projectId: p.id }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs hover:bg-accent"
+                  >
+                    <Globe className="h-3.5 w-3.5" /> Domains
+                  </Link>
+                </div>
                 <button
                   onClick={() => deleteProject(p.id)}
                   className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/20 text-muted-foreground hover:text-destructive"

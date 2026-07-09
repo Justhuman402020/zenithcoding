@@ -53,6 +53,7 @@ import {
   Zap,
   Wand2,
   Palette,
+  Settings,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -909,6 +910,15 @@ function ProjectEditor() {
           <Globe className="h-4 w-4" />
           <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
         </Button>
+        <Link
+          to="/p/$projectId/settings"
+          params={{ projectId }}
+          className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40"
+          title="Project settings, domains and publishing"
+          aria-label="Project settings"
+        >
+          <Settings className="h-4 w-4" />
+        </Link>
       </header>
 
       {githubLinked && (
@@ -1360,8 +1370,8 @@ function ProjectEditor() {
             </DialogTitle>
             <DialogDescription>
               {published
-                ? "Anyone with the link can view your site. Update it any time."
-                : "Pick a URL name and we'll publish your project to the public web."}
+                ? "Anyone with the link can view your site. You can update it or connect a Namecheap domain below."
+                : "Pick a URL name, publish your Forge site, then connect a Namecheap domain below."}
             </DialogDescription>
           </DialogHeader>
 

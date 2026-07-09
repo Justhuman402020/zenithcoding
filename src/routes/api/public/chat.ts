@@ -45,7 +45,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const debitResult = await debit(userId, 1, `chat:${projectId}`);
         if (!debitResult.ok) {
           return new Response(
-            JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Upgrade in /account/billing to keep building." }),
+            JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Ask Samsung admin to add more credits." }),
             { status: 402, headers: { "Content-Type": "application/json" } },
           );
         }
