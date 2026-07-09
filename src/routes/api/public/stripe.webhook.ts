@@ -24,7 +24,13 @@ export const Route = createFileRoute("/api/public/stripe/webhook")({
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         async function grantForSubscription(subId: string) {
-          const sub = await stripe.subscriptions.retrieve(subId);
+          const sub = (await stripe.subscriptions.retrieve(subId)) as unknown as {
+            id: string;
+            customer: string;
+            status: string;
+            current_period_end: number | null;
+            metadata?: Record<string, string | undefined>;
+          };
           const userId = (sub.metadata?.user_id as string | undefined) ?? null;
           const planSlug = (sub.metadata?.plan_slug as string | undefined) ?? null;
           if (!userId || !planSlug) return;
@@ -36,7 +42,9 @@ export const Route = createFileRoute("/api/public/stripe/webhook")({
             stripe_customer_id: sub.customer as string,
             stripe_subscription_id: sub.id,
             status: sub.status,
-            current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+            current_period_end: sub.current_period_end
+              ? new Date(sub.current_period_end * 1000).toISOString()
+              : null,
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id" });
           if (plan.monthly_credits > 0 && (sub.status === "active" || sub.status === "trialing")) {
@@ -57,18 +65,18 @@ export const Route = createFileRoute("/api/public/stripe/webhook")({
               break;
             }
             case "invoice.paid": {
-              const inv = event.data.object as import("stripe").Stripe.Invoice;
-              if (inv.subscription) await grantForSubscription(inv.subscription as string);
+              const inv = event.data.object as unknown as { subscription?: string | null };
+              if (inv.subscription) await grantForSubscription(inv.subscription);
               break;
             }
             case "customer.subscription.updated":
             case "customer.subscription.created": {
-              const sub = event.data.object as import("stripe").Stripe.Subscription;
+              const sub = event.data.object as unknown as { id: string };
               await grantForSubscription(sub.id);
               break;
             }
             case "customer.subscription.deleted": {
-              const sub = event.data.object as import("stripe").Stripe.Subscription;
+              const sub = event.data.object as unknown as { metadata?: Record<string, string | undefined> };
               const userId = (sub.metadata?.user_id as string | undefined) ?? null;
               if (userId) {
                 await supabaseAdmin.from("subscriptions").update({
