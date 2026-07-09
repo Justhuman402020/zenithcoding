@@ -29,6 +29,8 @@ import { Github, Loader2, GitBranch, ExternalLink, RotateCw } from "lucide-react
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
+import { buildInBrowser, isBuildable, type BuildFile } from "@/lib/browser-build";
+import { Hammer } from "lucide-react";
 
 type LinkInfo = {
   owner: string;
@@ -77,6 +79,10 @@ export function GithubPushDialog({
   const [uploadedBlobs, setUploadedBlobs] = useState<{ path: string; sha: string }[]>([]);
   // Locked branch/message for the current attempt so Retry uses the same values.
   const [activeAttempt, setActiveAttempt] = useState<{ branch: string; message: string; createBranch: boolean; fromBranch?: string } | null>(null);
+  // Build-before-push
+  const [buildBeforePush, setBuildBeforePush] = useState(true);
+  const [buildable, setBuildable] = useState(false);
+  const [sourceFiles, setSourceFiles] = useState<BuildFile[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +104,17 @@ export function GithubPushDialog({
           setBranch(initial);
           setFromBranch(l.default_branch || initial);
         }
+        // Load source files to check if the project is buildable.
+        const { data: fRows } = await supabase
+          .from("files" as any)
+          .select("path,content,kind")
+          .eq("project_id", projectId);
+        const rows = ((fRows ?? []) as unknown) as Array<{ path: string; content: string; kind?: string }>;
+        const src = rows.filter((r) => r.kind !== "build").map((r) => ({ path: r.path, content: r.content }));
+        setSourceFiles(src);
+        const check = isBuildable(src);
+        setBuildable(check.buildable);
+        setBuildBeforePush(check.buildable);
       } catch (e: any) {
         toast.error(e?.message || "Could not load GitHub info");
       } finally {
@@ -106,7 +123,11 @@ export function GithubPushDialog({
     })();
   }, [open, projectId, getLink, listBranches]);
 
-  async function runPush(attempt: { branch: string; message: string; createBranch: boolean; fromBranch?: string }, prior: { path: string; sha: string }[]) {
+  async function runPush(
+    attempt: { branch: string; message: string; createBranch: boolean; fromBranch?: string },
+    prior: { path: string; sha: string }[],
+    extraFiles: BuildFile[] = [],
+  ) {
     setPushing(true);
     setProgress(null);
     setPushError(null);
@@ -129,6 +150,7 @@ export function GithubPushDialog({
           createBranch: attempt.createBranch,
           fromBranch: attempt.createBranch ? attempt.fromBranch || undefined : undefined,
           priorBlobs: prior,
+          extraFiles: extraFiles.map((f) => ({ path: `dist/${f.path}`, content: f.content })),
         }),
       });
 
@@ -229,7 +251,21 @@ export function GithubPushDialog({
     setActiveAttempt(attempt);
     setLogs([]);
     setUploadedBlobs([]);
-    await runPush(attempt, []);
+
+    let built: BuildFile[] = [];
+    if (buildBeforePush && buildable) {
+      setLogs((prev) => [...prev, { level: "info", message: "Building source in your browser…", ts: Date.now() }]);
+      const result = await buildInBrowser(sourceFiles, (l) =>
+        setLogs((prev) => [...prev, { level: l.level, message: l.message, ts: l.ts }]),
+      );
+      if (result.ok) {
+        built = result.files;
+        setLogs((prev) => [...prev, { level: "success", message: `Build ready · ${built.length} file(s) will be committed under dist/`, ts: Date.now() }]);
+      } else {
+        setLogs((prev) => [...prev, { level: "warn", message: `Build failed: ${result.error} — pushing source only`, ts: Date.now() }]);
+      }
+    }
+    await runPush(attempt, [], built);
   }
 
   async function handleRetry() {
@@ -238,7 +274,7 @@ export function GithubPushDialog({
       ...prev,
       { level: "info", message: `Retrying — resuming from ${uploadedBlobs.length} already-uploaded blob(s)…`, ts: Date.now() },
     ]);
-    await runPush(activeAttempt, uploadedBlobs);
+    await runPush(activeAttempt, uploadedBlobs, []);
   }
 
   return (
