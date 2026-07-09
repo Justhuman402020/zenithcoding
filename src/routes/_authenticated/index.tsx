@@ -515,7 +515,11 @@ function Dashboard() {
         data: { owner, repo, branch: branch || undefined, subpath: subpath || undefined },
       });
 
-      toast.success(`Imported ${result.fileCount} files from ${owner}/${repo}`);
+      toast.success(
+        (result as any).resumed
+          ? `Reopening ${owner}/${repo} — picking up where you left off`
+          : `Imported ${result.fileCount} files from ${owner}/${repo}`,
+      );
       setGhOpen(false);
       setGhUrl(""); setGhSelectedRepo(""); setGhBranch(""); setGhSubpath("");
       navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
