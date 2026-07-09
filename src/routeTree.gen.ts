@@ -16,6 +16,7 @@ import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
+import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 
@@ -53,6 +54,12 @@ const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   path: '/p/$projectId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAccountBillingRoute =
+  AuthenticatedAccountBillingRouteImport.update({
+    id: '/account/billing',
+    path: '/account/billing',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   id: '/api/public/stripe/webhook',
   path: '/api/public/stripe/webhook',
@@ -68,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/s/$slug': typeof SSlugRoute
+  '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
@@ -78,6 +86,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/s/$slug': typeof SSlugRoute
   '/': typeof AuthenticatedIndexRoute
+  '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
@@ -90,6 +99,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/s/$slug': typeof SSlugRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRoute
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
@@ -102,6 +112,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/s/$slug'
+    | '/account/billing'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
@@ -112,6 +123,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/s/$slug'
     | '/'
+    | '/account/billing'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
@@ -123,6 +135,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/s/$slug'
     | '/_authenticated/'
+    | '/_authenticated/account/billing'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
@@ -191,6 +204,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/account/billing': {
+      id: '/_authenticated/account/billing'
+      path: '/account/billing'
+      fullPath: '/account/billing'
+      preLoaderRoute: typeof AuthenticatedAccountBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/stripe/webhook': {
       id: '/api/public/stripe/webhook'
       path: '/api/public/stripe/webhook'
@@ -210,11 +230,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRoute,
 }
 

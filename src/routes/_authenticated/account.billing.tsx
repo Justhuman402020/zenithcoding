@@ -48,7 +48,8 @@ function BillingPage() {
 
   if (isLoading) return <div className="p-8 text-sm text-muted-foreground">Loading billing…</div>;
 
-  const currentSlug = (data?.subscription as { plans?: { slug?: string } } | null)?.plans?.slug ?? "free";
+  const sub = data?.subscription as { plans?: { slug?: string }; stripe_customer_id?: string; status?: string } | null;
+  const currentSlug = sub?.plans?.slug ?? "free";
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-8">
@@ -70,8 +71,8 @@ function BillingPage() {
           <div className="text-right">
             <div className="text-sm text-muted-foreground">Current plan</div>
             <div className="text-lg font-semibold capitalize">{currentSlug}</div>
-            {data?.subscription?.status ? <div className="text-xs text-muted-foreground">Status: {data.subscription.status}</div> : null}
-            {data?.subscription?.stripe_customer_id ? (
+            {sub?.status ? <div className="text-xs text-muted-foreground">Status: {sub.status}</div> : null}
+            {sub?.stripe_customer_id ? (
               <Button size="sm" variant="outline" className="mt-2" onClick={manage} disabled={pending === "portal"}>
                 {pending === "portal" ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ExternalLink className="h-3 w-3 mr-1" />}
                 Manage billing
