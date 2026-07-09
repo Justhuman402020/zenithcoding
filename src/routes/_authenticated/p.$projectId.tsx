@@ -46,6 +46,7 @@ import {
   ChevronDown,
   ChevronUp,
   History as HistoryIcon,
+  Hammer as HammerIcon,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
