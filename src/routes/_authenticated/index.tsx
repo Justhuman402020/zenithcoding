@@ -11,6 +11,8 @@ import {
   disconnectGithub,
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
+import { getAdminStatus } from "@/lib/admin.functions";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -63,6 +65,28 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
         </>
       )}
     </div>
+  );
+}
+
+function AdminBadge() {
+  const fetchStatus = useServerFn(getAdminStatus);
+  const [unlocked, setUnlocked] = useState(false);
+  useEffect(() => {
+    fetchStatus({}).then((s) => setUnlocked(!!s.unlocked)).catch(() => {});
+  }, []);
+  return (
+    <Link
+      to="/admin"
+      title={unlocked ? "Admin unlocked" : "Unlock admin"}
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
+        unlocked
+          ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/15"
+          : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
+      }`}
+    >
+      {unlocked ? <ShieldCheck className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+      <span className="hidden sm:inline">{unlocked ? "Admin" : "Admin locked"}</span>
+    </Link>
   );
 }
 
