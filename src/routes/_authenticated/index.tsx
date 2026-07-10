@@ -577,14 +577,11 @@ function Dashboard() {
     setGhImporting(true);
     setGhProgress("Reading and saving repo…");
     try {
-      const result = await importGhRepo({
-        data: { owner, repo, branch: branch || undefined, subpath: subpath || undefined },
-      });
-
+      const result = await runFastImport({ owner, repo, branch: branch || undefined, subpath: subpath || undefined });
       toast.success(
-        (result as any).resumed
+        result.resumed
           ? `Reopening ${owner}/${repo} — picking up where you left off`
-          : `Imported ${result.fileCount} files from ${owner}/${repo}`,
+          : `Imported ${result.total} files from ${owner}/${repo}`,
       );
       setGhOpen(false);
       setGhUrl(""); setGhSelectedRepo(""); setGhBranch(""); setGhSubpath("");
