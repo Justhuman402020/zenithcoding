@@ -164,6 +164,8 @@ function Dashboard() {
   const fetchGhStatus = useServerFn(getGithubStatus);
   const fetchGhRepos = useServerFn(listGithubRepos);
   const importGhRepo = useServerFn(importGithubRepoAsProject);
+  const startGhImport = useServerFn(startGithubImport);
+  const fetchGhBlobs = useServerFn(fetchGithubBlobBatch);
   const mirrorRepos = useServerFn(mirrorAllGithubRepos);
   const disconnectGh = useServerFn(disconnectGithub);
 
