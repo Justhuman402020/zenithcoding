@@ -191,7 +191,8 @@ export async function readGithubRepoTree({
     resolvedBranch = (await mr.json()).default_branch || "main";
   }
 
-  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(resolvedBranch)}?recursive=1`;
+  const treeBranch = resolvedBranch || "main";
+  const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(treeBranch)}?recursive=1`;
   const tr = await fetch(treeUrl, { headers });
   if (!tr.ok) {
     const body = await tr.text().catch(() => "");
@@ -211,7 +212,7 @@ export async function readGithubRepoTree({
     .map((n: any) => ({ path: n.path as string, sha: n.sha as string, size: (n.size ?? 0) as number }));
 
   if (blobs.length === 0) throw new Error("No importable text files found in this repo or subfolder");
-  return { branch: resolvedBranch, blobs, stripPrefix: strip };
+  return { branch: treeBranch, blobs, stripPrefix: strip };
 }
 
 export async function readGithubBlobBatch({
