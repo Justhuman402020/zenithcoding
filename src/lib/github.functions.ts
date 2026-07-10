@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getRequest } from "@tanstack/react-start/server";
 import { currentOrigin, encodeReturnOrigin, getCanonicalCallbackUrl } from "@/lib/github-shared";
-import { cleanGithubPathPart, isCloseGithubProjectName, readGithubRepoFiles } from "@/lib/github-import.server";
+import { cleanGithubPathPart, isCloseGithubProjectName, readGithubBlobBatch, readGithubRepoFiles, readGithubRepoTree } from "@/lib/github-import.server";
+import { z } from "zod";
 
 export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
