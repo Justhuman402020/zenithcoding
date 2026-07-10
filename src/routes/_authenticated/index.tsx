@@ -9,6 +9,8 @@ import {
   importGithubRepoAsProject,
   mirrorAllGithubRepos,
   disconnectGithub,
+  startGithubImport,
+  fetchGithubBlobBatch,
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
 import { getMyRole } from "@/lib/admin-users.functions";
