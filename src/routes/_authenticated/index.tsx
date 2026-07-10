@@ -336,13 +336,11 @@ function Dashboard() {
     if (!owner || !repo) return;
     setImportingRepo(fullName);
     try {
-      const result = await importGhRepo({
-        data: { owner, repo, branch: defaultBranch || undefined },
-      });
+      const result = await runFastImport({ owner, repo, branch: defaultBranch || undefined });
       toast.success(
-        (result as any).resumed
+        result.resumed
           ? `Reopening ${fullName} — picking up where you left off`
-          : `Imported ${result.fileCount} files from ${fullName}`,
+          : `Importing ${result.total} files from ${fullName} in the background`,
       );
       navigate({ to: "/p/$projectId", params: { projectId: result.projectId } });
     } catch (err: any) {
