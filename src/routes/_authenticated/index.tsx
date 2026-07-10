@@ -330,6 +330,46 @@ function Dashboard() {
   const [importingRepo, setImportingRepo] = useState<string | null>(null);
   const [repoFilter, setRepoFilter] = useState("");
 
+  // Two-phase GitHub import: create the project fast, then hydrate blobs in
+  // parallel client-driven batches so the worker never has to hold a long call
+  // open (which was causing the "loads and stops" symptom).
+  async function runFastImport(args: { owner: string; repo: string; branch?: string; subpath?: string }) {
+    setGhProgress("Reading repository…");
+    const start = await startGhImport({ data: args });
+    const projectId = start.projectId as string;
+    const blobs = (start as any).blobs as { path: string; sha: string }[];
+    const total = blobs.length;
+    const BATCH = 15;
+    const PARALLEL = 4;
+    let done = 0;
+    const chunks: { path: string; sha: string }[][] = [];
+    for (let i = 0; i < blobs.length; i += BATCH) chunks.push(blobs.slice(i, i + BATCH));
+    setGhProgress(`Syncing files 0 / ${total}…`);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < chunks.length) {
+        const i = cursor++;
+        try {
+          await fetchGhBlobs({
+            data: {
+              projectId,
+              owner: (start as any).owner,
+              repo: (start as any).repo,
+              stripPrefix: (start as any).stripPrefix || undefined,
+              blobs: chunks[i],
+            },
+          });
+        } catch {
+          // best-effort: keep going, missing files will be surfaced in the editor
+        }
+        done += chunks[i].length;
+        setGhProgress(`Syncing files ${Math.min(done, total)} / ${total}…`);
+      }
+    }
+    await Promise.all(Array.from({ length: PARALLEL }, worker));
+    return { projectId, resumed: !!(start as any).resumed, total };
+  }
+
   async function quickImportRepo(fullName: string, defaultBranch: string) {
     if (importingRepo) return;
     const [owner, repo] = fullName.split("/");
