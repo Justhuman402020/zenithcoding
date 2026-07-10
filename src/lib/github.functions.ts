@@ -612,3 +612,144 @@ export const mirrorAllGithubRepos = createServerFn({ method: "POST" })
       remaining,
     };
   });
+
+// ============= Fast two-phase import =============
+// Phase 1: create project + link + fetch tree only. Returns quickly so the
+// client can redirect immediately. Phase 2: client streams blob batches.
+
+export const startGithubImport = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { owner: string; repo: string; branch?: string; subpath?: string }) => d)
+  .handler(async ({ data, context }) => {
+    const owner = data.owner.trim();
+    const repo = data.repo.trim().replace(/\.git$/i, "");
+
+    const { data: existingLink } = await context.supabase
+      .from("project_github_links" as any)
+      .select("project_id, default_branch")
+      .eq("user_id", context.userId)
+      .ilike("owner", owner)
+      .ilike("repo", repo)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: tok } = await context.supabase
+      .from("github_tokens" as any)
+      .select("access_token")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const token = (tok as any)?.access_token as string | undefined;
+
+    const { branch, blobs, stripPrefix } = await readGithubRepoTree({
+      owner, repo, branch: data.branch, subpath: data.subpath, token,
+    });
+
+    let projectId: string | undefined = (existingLink as any)?.project_id;
+    let resumed = !!projectId;
+
+    if (!projectId) {
+      const subpath = (data.subpath || "").replace(/^\/+|\/+$/g, "");
+      const projectName = subpath ? `${repo}/${subpath.split("/").pop()}` : repo;
+      const { data: namedProject } = await context.supabase
+        .from("projects" as any)
+        .select("id, name")
+        .eq("user_id", context.userId)
+        .not("lovable_project_id", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      const match = ((namedProject as any[]) || []).find((p) =>
+        isCloseGithubProjectName(p.name || "", projectName) ||
+        isCloseGithubProjectName(p.name || "", repo),
+      );
+      if (match?.id) {
+        projectId = match.id as string;
+        resumed = true;
+        await context.supabase
+          .from("projects" as any)
+          .update({ description: `Imported from github.com/${owner}/${repo}@${branch}` })
+          .eq("id", projectId)
+          .eq("user_id", context.userId);
+      } else {
+        const { data: project, error } = await context.supabase
+          .from("projects" as any)
+          .insert({
+            name: projectName,
+            description: `Importing from github.com/${owner}/${repo}@${branch}…`,
+            user_id: context.userId,
+          })
+          .select("id")
+          .single();
+        if (error || !project) throw new Error(error?.message || "Could not create project");
+        projectId = (project as any).id as string;
+
+        // Seed an index.html so the preview isn't empty during hydration.
+        await context.supabase.from("files" as any).insert({
+          project_id: projectId,
+          user_id: context.userId,
+          path: "index.html",
+          content: `<!doctype html><html><head><meta charset="utf-8"/><title>${projectName}</title><style>body{font-family:system-ui;margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#e7d18a;text-align:center;padding:32px}h1{margin:0 0 8px}p{color:#c9c1a4}</style></head><body><main><h1>${projectName}</h1><p>Syncing files from github.com/${owner}/${repo}…</p></main></body></html>`,
+        });
+      }
+    }
+
+    await context.supabase
+      .from("project_github_links" as any)
+      .upsert({
+        project_id: projectId,
+        user_id: context.userId,
+        owner,
+        repo,
+        default_branch: branch,
+      }, { onConflict: "project_id" });
+
+    return { projectId: projectId!, branch, resumed, stripPrefix, blobs, owner, repo };
+  });
+
+export const fetchGithubBlobBatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: {
+    projectId: string;
+    owner: string;
+    repo: string;
+    stripPrefix?: string;
+    blobs: { path: string; sha: string }[];
+  }) => d)
+  .handler(async ({ data, context }) => {
+    // Verify the caller owns this project.
+    const { data: proj } = await context.supabase
+      .from("projects" as any)
+      .select("id")
+      .eq("id", data.projectId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!proj) throw new Error("Project not found");
+
+    const { data: tok } = await context.supabase
+      .from("github_tokens" as any)
+      .select("access_token")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const token = (tok as any)?.access_token as string | undefined;
+
+    const files = await readGithubBlobBatch({
+      owner: data.owner,
+      repo: data.repo,
+      blobs: data.blobs,
+      stripPrefix: data.stripPrefix,
+      token,
+    });
+    if (files.length === 0) return { saved: 0 };
+
+    const rows = files.map((f) => ({
+      project_id: data.projectId,
+      user_id: context.userId,
+      path: f.path,
+      content: f.content,
+    }));
+    const { error } = await context.supabase
+      .from("files" as any)
+      .upsert(rows, { onConflict: "project_id,path" });
+    if (error) throw new Error(error.message);
+    return { saved: rows.length };
+  });
