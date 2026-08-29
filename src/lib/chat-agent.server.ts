@@ -2,7 +2,7 @@
 // keeps Groq moving list -> read -> write, and the system prompt.
 // Extracted so the regression test drives the exact same logic as production.
 
-import type { UIMessage, UIMessagePart } from "ai";
+import type { UIMessage } from "ai";
 import type { TraceLogger } from "./trace.server";
 
 export function detectFileChangeIntent(text: string) {
@@ -39,7 +39,7 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIM
     const message = messages[index];
     if (!message) return [];
     const isLatestUser = index === latestUserIndex;
-    const parts: UIMessagePart[] = [];
+    const parts: UIMessage["parts"] = [];
     for (const part of message.parts) {
       if (part.type === "text") {
         const text = part.text.trim();
