@@ -602,8 +602,8 @@ function ProjectEditor() {
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
     setAttachments([]);
-    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
-    // persist user message
+    // persist user message BEFORE streaming, otherwise the assistant reply is
+    // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
       await supabase.from("chat_messages").insert({
@@ -613,6 +613,8 @@ function ProjectEditor() {
         content: messageText,
       });
     }
+    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+
   }
 
   async function onPickFiles(list: FileList | null) {
