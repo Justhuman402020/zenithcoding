@@ -141,7 +141,21 @@ export const Route = createFileRoute("/api/public/chat")({
         const preferred: ModelRef | null = requestedRef ?? adminRef;
         const availableProviders = Object.keys(providerKeys);
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
+        // Providers the admin added by pasting a key join the backup chain too.
+        const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id]);
+        if (extraProviders.length) {
+          const { listProviderModels } = await import("@/lib/model-discovery.server");
+          for (const provider of extraProviders) {
+            const models = await listProviderModels(provider.id, providerKeys[provider.id]!, provider);
+            for (const model of models.filter((m) => m.tools && (!hasImages || m.vision)).slice(0, 3)) {
+              if (!fullChain.some((r) => r.provider === provider.id && r.model === model.id)) {
+                fullChain.push({ provider: provider.id, model: model.id });
+              }
+            }
+          }
+        }
         const chain = autoFallback ? fullChain : fullChain.slice(0, 1);
+
 
         const pick = await trace.time("model.pick", () => pickAvailableModel(chain, providerKeys, providerRegistry));
         if (!pick.ok) {
