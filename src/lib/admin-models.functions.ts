@@ -139,7 +139,10 @@ export const setActiveModel = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdminRole(context);
-    if (!PROVIDERS.some((p) => p.id === data.provider)) throw new Error("Unknown provider");
+    if (!PROVIDERS.some((p) => p.id === data.provider) && !data.provider.startsWith("custom-")) {
+      throw new Error("Unknown provider");
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("ai_model_settings").upsert({
       id: "global",
