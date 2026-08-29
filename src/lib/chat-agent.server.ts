@@ -9,14 +9,28 @@ const QUESTION_INTENT =
   /\b(explain|describe|what does|what is|what's|how does|how is|why does|walk me|tell me about|summari[sz]e|show me how)\b/i;
 const NO_CHANGE_INTENT = /\b(do not|don't|without)\s+(change|modify|edit|touch|alter|update)\b/i;
 
+// Verbs that actually ask for a change. Nouns alone ("the button", "this page")
+// are NOT enough — asking "what does this button do?" is a question, not a build.
+const ACTION_INTENT =
+  /\b(build|add|create|make|fix|repair|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|redesign|remove|delete|edit|rewrite|refactor|restyle|wire|hook\s*up|connect|generate|set\s*up|apply)\b/i;
+const QUESTION_OPENER =
+  /^\s*(what|what's|whats|why|how|how's|who|when|where|which|can|could|do|does|did|is|are|should|would|will|tell|explain|describe)\b/i;
+
 export function detectFileChangeIntent(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
   // Pure explanation questions ("explain how this project is structured") must
   // not trigger the forced edit pipeline — forcing write_file when the model
   // only wants to read makes Groq reject the call and the answer never comes.
-  if (QUESTION_INTENT.test(text) || NO_CHANGE_INTENT.test(text)) return false;
-  return /\b(build|add|create|make|fix|fixed|repair|broken|failing|failed|failure|work|working|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|layout|header|footer|nav|navigation|menu|screen|image|photo|text|copy|font|color|understand)\b/i.test(
-    text,
-  );
+  if (QUESTION_INTENT.test(trimmed) || NO_CHANGE_INTENT.test(trimmed)) return false;
+  const hasAction = ACTION_INTENT.test(trimmed);
+  // A question-shaped message ("can you fix this?" is still a request, but
+  // "does this page load?" is not) only counts as an edit when it also carries
+  // an action verb.
+  if (!hasAction && (QUESTION_OPENER.test(trimmed) || trimmed.endsWith("?"))) return false;
+  if (hasAction) return true;
+  // Bare instructions like "dark mode" / "bigger header" still imply an edit.
+  return /\b(broken|failing|failed|not\s+working|doesn'?t\s+work|signup|sign\s*up|login|dark\s*mode)\b/i.test(trimmed);
 }
 
 function isVisualPart(part: UIMessage["parts"][number]) {
