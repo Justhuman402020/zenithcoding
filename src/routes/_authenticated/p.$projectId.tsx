@@ -809,7 +809,7 @@ function ProjectEditor() {
         content: text,
       });
     })();
-  }, [messages, isStreaming, projectId]);
+  }, [messages, isStreaming, projectId, initialMessages]);
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
@@ -1052,7 +1052,12 @@ function ProjectEditor() {
                 </div>
               )}
               {messages.map((m) => {
-                const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+                // Separate text parts with a blank line so multi-step replies
+                // render as distinct paragraphs instead of one jam-packed blob.
+                const text = m.parts
+                  .map((p) => (p.type === "text" ? p.text : ""))
+                  .filter((t) => t.trim())
+                  .join(m.role === "assistant" ? "\n\n" : "");
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
