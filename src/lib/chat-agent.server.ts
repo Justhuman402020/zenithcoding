@@ -103,7 +103,7 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
     // replies off with no answer. "required" keeps the agent using tools until
     // a write lands, but lets it pick which one.
     if (stepNumber === 0 || !hasListed) return { toolChoice: { type: "tool" as const, toolName: "list_files" as ForcedTool } };
-    if (!hasMutation && stepNumber < 12) return { toolChoice: { type: "required" as const } };
+    if (!hasMutation && stepNumber < 12) return { toolChoice: "required" as const };
     return undefined;
   };
 }
