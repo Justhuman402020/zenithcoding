@@ -52,3 +52,14 @@ export async function ensureWelcomeGrant(userId: string) {
   if (data) return;
   await grant(userId, 30, "welcome");
 }
+/** Admins (Samsung admin) never run out of credits — their builds must not stall. */
+export async function hasUnlimitedCredits(userId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (error) return false;
+  return !!data;
+}
