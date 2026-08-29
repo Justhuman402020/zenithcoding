@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { AiModelPanel } from "@/components/AiModelPanel";
 import { SecretsPanel } from "@/components/SecretsPanel";
+import { TracePanel } from "@/components/TracePanel";
 import { ShareLinksPanel } from "@/components/ShareLinksPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
