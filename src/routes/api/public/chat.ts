@@ -1,9 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, stepCountIs, tool, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { debit, ensureWelcomeGrant } from "@/lib/credits.server";
+
+// Groq is OpenAI-compatible. Free-tier model; swap id below to change model.
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+
+export function createGroqProvider(apiKey: string) {
+  return createOpenAICompatible({
+    name: "groq",
+    baseURL: "https://api.groq.com/openai/v1",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+}
 
 type WriteResult = { ok: true; path: string; bytes: number } | { ok: false; path: string; error: string };
 
