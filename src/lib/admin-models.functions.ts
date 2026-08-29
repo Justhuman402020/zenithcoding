@@ -95,6 +95,9 @@ export const getModelBoard = createServerFn({ method: "GET" })
           curated: model.curated,
           keyConfigured,
           active: !!active && active.provider === provider.id && active.model === model.id,
+          role: model.vision ? "coding+images" : "coding",
+          codingRank: null,
+          imageRank: null,
           lastStatus: (status?.last_status as string | null) ?? null,
           lastError: (status?.last_error as string | null) ?? null,
           lastUsedAt: (status?.last_used_at as string | null) ?? null,
@@ -106,8 +109,26 @@ export const getModelBoard = createServerFn({ method: "GET" })
       }
     }
 
+    // Show the exact order Forge will fall through when a model runs low,
+    // both for plain coding jobs and for questions that carry an image.
+    const usable = rows.filter((r) => r.keyConfigured && r.lastStatus !== "unauthorized");
+    const order = (list: ModelBoardRow[]) => {
+      const chain = [...list].sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        if (a.curated !== b.curated) return a.curated ? -1 : 1;
+        const aOut = a.lastStatus === "rate_limited" || a.remainingRequests === 0;
+        const bOut = b.lastStatus === "rate_limited" || b.remainingRequests === 0;
+        if (aOut !== bOut) return aOut ? 1 : -1;
+        return (b.remainingRequests ?? 0) - (a.remainingRequests ?? 0);
+      });
+      return chain.slice(0, 12);
+    };
+    order(usable).forEach((row, i) => (row.codingRank = i + 1));
+    order(usable.filter((r) => r.vision)).forEach((row, i) => (row.imageRank = i + 1));
+
     return { rows, providers, autoFallback, active };
   });
+
 
 export const setActiveModel = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
