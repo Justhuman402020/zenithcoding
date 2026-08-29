@@ -2,7 +2,7 @@
 // keeps Groq moving list -> read -> write, and the system prompt.
 // Extracted so the regression test drives the exact same logic as production.
 
-import type { UIMessage } from "ai";
+import type { UIMessage, UIMessagePart } from "ai";
 import type { TraceLogger } from "./trace.server";
 
 export function detectFileChangeIntent(text: string) {
@@ -23,7 +23,13 @@ function isVisualPart(part: UIMessage["parts"][number]) {
  * every later request fail even when the new turn is text-only.
  */
 export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIMessage[] {
-  const latestUserIndex = messages.findLastIndex((message) => message.role === "user");
+  let latestUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
   const recentIndexes = messages
     .map((_, index) => index)
     .filter((index) => index <= latestUserIndex)
@@ -33,16 +39,17 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIM
     const message = messages[index];
     if (!message) return [];
     const isLatestUser = index === latestUserIndex;
-    const parts = message.parts.flatMap((part) => {
+    const parts: UIMessagePart[] = [];
+    for (const part of message.parts) {
       if (part.type === "text") {
         const text = part.text.trim();
-        if (!text) return [];
+        if (!text) continue;
         const limit = isLatestUser ? 4_000 : 1_200;
-        return [{ ...part, text: text.slice(-limit) }];
+        parts.push({ ...part, text: text.slice(-limit) });
+        continue;
       }
-      if (isLatestUser && isVisualPart(part)) return [part];
-      return [];
-    });
+      if (isLatestUser && isVisualPart(part)) parts.push(part);
+    }
     return parts.length > 0 ? [{ ...message, parts } as UIMessage] : [];
   });
 }
