@@ -10,7 +10,7 @@ import {
 } from "@/lib/chat-tools.server";
 import { buildSystemPrompt, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
 
-import { buildGroqModelChain } from "@/lib/ai-models";
+import { buildGroqModelChain, modelSupportsVision } from "@/lib/ai-models";
 
 export { createGroqProvider };
 
@@ -152,9 +152,19 @@ export const Route = createFileRoute("/api/public/chat")({
           });
         }
 
+        // Does this turn carry images (screenshots, mockups, video frames)?
+        const hasImages = body.messages.some((message) =>
+          (message.parts ?? []).some(
+            (part: any) =>
+              (part?.type === "file" || part?.type === "image") &&
+              typeof part?.mediaType === "string" &&
+              part.mediaType.startsWith("image/"),
+          ),
+        );
+
         const requestedModel = request.headers.get("x-groq-model");
         const pick = await trace.time("model.pick", () =>
-          pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel)),
+          pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel, { vision: hasImages })),
         );
         if ("error" in pick) {
           trace.log("model.unavailable", { status: "error", message: pick.error });
@@ -164,17 +174,29 @@ export const Route = createFileRoute("/api/public/chat")({
             "application/json",
           );
         }
-        trace.log("model.selected", { detail: { model: pick.model } });
+        trace.log("model.selected", { detail: { model: pick.model, hasImages } });
 
         const groq = createGroqProvider(groqKey);
         const model = groq(pick.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
         const tools = createProjectFileTools(store, trace);
 
+        // A text-only model would 400 on image parts — drop them rather than fail.
+        const visionOk = modelSupportsVision(pick.model);
+        const outgoingMessages = visionOk
+          ? body.messages
+          : body.messages.map((message) => ({
+              ...message,
+              parts: (message.parts ?? []).filter(
+                (part: any) => !(typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")),
+              ),
+            }));
+
         const result = streamText({
           model,
           system: buildSystemPrompt(proj.name),
-          messages: await convertToModelMessages(body.messages),
+          messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
+
           tools,
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
