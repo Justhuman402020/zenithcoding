@@ -36,10 +36,11 @@ export const Route = createFileRoute("/api/public/chat")({
         if (!token) return new Response("Unauthorized: missing token", { status: 401 });
         if (!projectId) return new Response("Missing project", { status: 400 });
 
-        const providerKeys = loadProviderKeys();
+        const { providers: providerRegistry, keys: providerKeys } = await loadProviderRegistry();
         if (Object.keys(providerKeys).length === 0) {
           return new Response("No AI provider API key is configured", { status: 500 });
         }
+
 
         const supabaseUrl = process.env.SUPABASE_URL!;
         const supabasePublishable = process.env.SUPABASE_PUBLISHABLE_KEY!;
