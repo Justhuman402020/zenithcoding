@@ -5,7 +5,15 @@
 import type { UIMessage } from "ai";
 import type { TraceLogger } from "./trace.server";
 
+const QUESTION_INTENT =
+  /\b(explain|describe|what does|what is|what's|how does|how is|why does|walk me|tell me about|summari[sz]e|show me how)\b/i;
+const NO_CHANGE_INTENT = /\b(do not|don't|without)\s+(change|modify|edit|touch|alter|update)\b/i;
+
 export function detectFileChangeIntent(text: string) {
+  // Pure explanation questions ("explain how this project is structured") must
+  // not trigger the forced edit pipeline — forcing write_file when the model
+  // only wants to read makes Groq reject the call and the answer never comes.
+  if (QUESTION_INTENT.test(text) || NO_CHANGE_INTENT.test(text)) return false;
   return /\b(build|add|create|make|fix|fixed|repair|broken|failing|failed|failure|work|working|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|layout|header|footer|nav|navigation|menu|screen|image|photo|text|copy|font|color|understand)\b/i.test(
     text,
   );
