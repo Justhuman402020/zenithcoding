@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
-import { PROVIDERS, findModel } from "./ai-providers";
+import { PROVIDERS, findProvider } from "./ai-providers";
 
 export type ModelBoardRow = {
   provider: string;
@@ -11,6 +11,7 @@ export type ModelBoardRow = {
   label: string;
   hint: string;
   vision: boolean;
+  curated: boolean;
   keyConfigured: boolean;
   active: boolean;
   lastStatus: string | null;
@@ -22,46 +23,79 @@ export type ModelBoardRow = {
   resetAt: string | null;
 };
 
+export type ProviderSummary = {
+  provider: string;
+  providerLabel: string;
+  keyConfigured: boolean;
+  modelCount: number;
+  creditsRemaining: number | null;
+  creditsUsed: number | null;
+  creditsLimit: number | null;
+  creditsNote: string | null;
+};
+
 export const getModelBoard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdminRole(context);
     const { loadProviderKeys, readActiveModelRef } = await import("./model-router.server");
+    const { discoverAll } = await import("./model-discovery.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const keys = loadProviderKeys();
     const { ref: active, autoFallback } = await readActiveModelRef();
-    const { data: statusRows } = await supabaseAdmin.from("ai_model_status").select("*");
+    const [{ data: statusRows }, discovered] = await Promise.all([
+      supabaseAdmin.from("ai_model_status").select("*"),
+      discoverAll(keys),
+    ]);
     const statusMap = new Map<string, any>();
     for (const row of statusRows ?? []) statusMap.set(`${row.provider}:${row.model}`, row);
 
-    const rows: ModelBoardRow[] = PROVIDERS.flatMap((provider) =>
-      provider.models.map((model) => {
+    const rows: ModelBoardRow[] = [];
+    const providers: ProviderSummary[] = [];
+
+    for (const entry of discovered) {
+      const provider = findProvider(entry.provider)!;
+      const keyConfigured = !!keys[entry.provider];
+      providers.push({
+        provider: provider.id,
+        providerLabel: provider.label,
+        keyConfigured,
+        modelCount: entry.models.length,
+        creditsRemaining: entry.quota?.remaining ?? null,
+        creditsUsed: entry.quota?.usage ?? null,
+        creditsLimit: entry.quota?.limit ?? null,
+        creditsNote: entry.quota?.note ?? null,
+      });
+
+      for (const model of entry.models) {
         const status = statusMap.get(`${provider.id}:${model.id}`);
+        const used = (status?.requests_used as number) ?? 0;
         const remaining =
           (status?.remaining_requests as number | null) ??
-          (model.freeDaily != null ? Math.max(model.freeDaily - ((status?.requests_used as number) ?? 0), 0) : null);
-        return {
+          (model.freeDaily != null ? Math.max(model.freeDaily - used, 0) : null);
+        rows.push({
           provider: provider.id,
           providerLabel: provider.label,
           model: model.id,
           label: model.label,
           hint: model.hint,
           vision: model.vision,
-          keyConfigured: !!keys[provider.id],
+          curated: model.curated,
+          keyConfigured,
           active: !!active && active.provider === provider.id && active.model === model.id,
           lastStatus: (status?.last_status as string | null) ?? null,
           lastError: (status?.last_error as string | null) ?? null,
           lastUsedAt: (status?.last_used_at as string | null) ?? null,
-          requestsUsed: (status?.requests_used as number) ?? 0,
+          requestsUsed: used,
           remainingRequests: remaining,
           limitRequests: (status?.limit_requests as number | null) ?? model.freeDaily ?? null,
           resetAt: (status?.reset_at as string | null) ?? null,
-        };
-      }),
-    );
+        });
+      }
+    }
 
-    return { rows, autoFallback, active };
+    return { rows, providers, autoFallback, active };
   });
 
 export const setActiveModel = createServerFn({ method: "POST" })
@@ -73,7 +107,7 @@ export const setActiveModel = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdminRole(context);
-    if (!findModel(data.provider, data.model)) throw new Error("Unknown model");
+    if (!PROVIDERS.some((p) => p.id === data.provider)) throw new Error("Unknown provider");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("ai_model_settings").upsert({
       id: "global",
@@ -86,6 +120,7 @@ export const setActiveModel = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
 
 export const setAutoFallback = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
