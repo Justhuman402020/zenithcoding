@@ -193,9 +193,19 @@ function AdminModelsPage() {
                   </div>
                 ))}
               </div>
+              {rows.length > visible.length || (expanded && !query) ? (
+                <button
+                  className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t"
+                  onClick={() => setOpen((prev) => ({ ...prev, [providerId]: !expanded }))}
+                >
+                  {expanded ? "Show fewer models" : `Show all ${rows.length} models`}
+                </button>
+              ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
+
       )}
     </div>
   );
