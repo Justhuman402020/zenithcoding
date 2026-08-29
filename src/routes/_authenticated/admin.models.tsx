@@ -124,12 +124,27 @@ function AdminModelsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {[...groups.entries()].map(([providerLabel, rows]) => (
-            <div key={providerLabel} className="rounded-xl border overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40">
-                <span className="font-semibold text-sm">{providerLabel}</span>
+          {[...groups.entries()].map(([providerId, rows]) => {
+            const summary = summaries.get(providerId);
+            const expanded = open[providerId] ?? false;
+            const visible = expanded || query ? rows : rows.slice(0, 6);
+            return (
+            <div key={providerId} className="rounded-xl border overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 gap-3">
+                <div className="min-w-0">
+                  <span className="font-semibold text-sm">{summary?.providerLabel ?? providerId}</span>
+                  <div className="text-[11px] text-muted-foreground">
+                    {summary?.modelCount ?? rows.length} models on this key
+                    {summary?.creditsRemaining != null
+                      ? ` · $${summary.creditsRemaining.toFixed(2)} credit left`
+                      : summary?.creditsUsed != null
+                        ? ` · $${summary.creditsUsed.toFixed(2)} used`
+                        : ""}
+                    {summary?.creditsNote ? ` · ${summary.creditsNote}` : ""}
+                  </div>
+                </div>
                 <span
-                  className={`inline-flex items-center gap-1 text-xs ${
+                  className={`inline-flex items-center gap-1 text-xs shrink-0 ${
                     rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
                   }`}
                 >
@@ -137,7 +152,8 @@ function AdminModelsPage() {
                 </span>
               </div>
               <div className="divide-y">
-                {rows.map((row) => (
+                {visible.map((row) => (
+
                   <div key={`${row.provider}:${row.model}`} className="p-4 flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
