@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { AiModelPanel } from "@/components/AiModelPanel";
 import { SecretsPanel } from "@/components/SecretsPanel";
+import { TracePanel } from "@/components/TracePanel";
 import { ShareLinksPanel } from "@/components/ShareLinksPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -196,6 +197,8 @@ function SettingsPage() {
       <AiModelPanel />
       <ShareLinksPanel projectId={projectId} />
       <SecretsPanel projectId={projectId} />
+      <TracePanel projectId={projectId} />
+
 
       <div className="rounded-xl border p-5 space-y-3">
         <div>

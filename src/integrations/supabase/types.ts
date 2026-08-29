@@ -49,6 +49,48 @@ export type Database = {
           },
         ]
       }
+      chat_traces: {
+        Row: {
+          created_at: string
+          detail: Json
+          duration_ms: number | null
+          id: string
+          message: string | null
+          phase: string
+          project_id: string
+          seq: number
+          status: string
+          trace_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json
+          duration_ms?: number | null
+          id?: string
+          message?: string | null
+          phase: string
+          project_id: string
+          seq?: number
+          status?: string
+          trace_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json
+          duration_ms?: number | null
+          id?: string
+          message?: string | null
+          phase?: string
+          project_id?: string
+          seq?: number
+          status?: string
+          trace_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_ledger: {
         Row: {
           created_at: string

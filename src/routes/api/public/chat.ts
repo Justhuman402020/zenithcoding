@@ -1,29 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { convertToModelMessages, streamText, stepCountIs, tool, type UIMessage } from "ai";
+import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { z } from "zod";
 import { debit, ensureWelcomeGrant } from "@/lib/credits.server";
+import { createTrace } from "@/lib/trace.server";
+import {
+  createGroqProvider,
+  createProjectFileTools,
+  createSupabaseFileStore,
+} from "@/lib/chat-tools.server";
+import { buildSystemPrompt, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
 
 import { buildGroqModelChain } from "@/lib/ai-models";
 
-export function createGroqProvider(apiKey: string) {
-  return createOpenAICompatible({
-    name: "groq",
-    baseURL: "https://api.groq.com/openai/v1",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    transformRequestBody: (body) => ({
-      ...body,
-      messages: Array.isArray(body.messages)
-        ? body.messages.map((message: unknown) => {
-            if (!message || typeof message !== "object") return message;
-            const { reasoning_content: _unsupportedReasoning, ...supportedMessage } = message as Record<string, unknown>;
-            return supportedMessage;
-          })
-        : body.messages,
-    }),
-  });
-}
+export { createGroqProvider };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -69,14 +58,6 @@ async function pickAvailableGroqModel(apiKey: string, chain: string[]): Promise<
   return { error: "No Groq model is available for this API key right now.", status: 502 };
 }
 
-
-type WriteResult = { ok: true; path: string; bytes: number } | { ok: false; path: string; error: string };
-
-function getToolOutput(result: unknown) {
-  if (!result || typeof result !== "object") return undefined;
-  return "output" in result ? (result as { output?: unknown }).output : undefined;
-}
-
 export const Route = createFileRoute("/api/public/chat")({
   server: {
     handlers: {
@@ -105,15 +86,26 @@ export const Route = createFileRoute("/api/public/chat")({
         }
         const userId = userRes.user.id;
 
+        const trace = createTrace({ projectId, userId });
+        const traceHeaders = { "x-forge-trace-id": trace.traceId };
+        const fail = async (status: number, body: string, contentType = "text/plain") => {
+          await trace.flush();
+          return new Response(body, { status, headers: { "Content-Type": contentType, ...traceHeaders } });
+        };
+        trace.log("request.authenticated", { detail: { projectId } });
+
         // Ensure the user has a welcome balance, then debit one credit per message.
         await ensureWelcomeGrant(userId);
         const debitResult = await debit(userId, 1, `chat:${projectId}`);
         if (!debitResult.ok) {
-          return new Response(
+          trace.log("credits.debit", { status: "error", message: "out of credits" });
+          return fail(
+            402,
             JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Ask Samsung admin to add more credits." }),
-            { status: 402, headers: { "Content-Type": "application/json" } },
+            "application/json",
           );
         }
+        trace.log("credits.debit", { detail: { balance: debitResult.balance } });
 
         // confirm project belongs to user
         const { data: proj } = await supabase
@@ -121,11 +113,15 @@ export const Route = createFileRoute("/api/public/chat")({
           .select("id,name")
           .eq("id", projectId)
           .maybeSingle();
-        if (!proj) return new Response("Project not found", { status: 404 });
+        if (!proj) {
+          trace.log("project.lookup", { status: "error", message: "project not found" });
+          return fail(404, "Project not found");
+        }
 
         const body = (await request.json()) as { messages?: UIMessage[] };
         if (!Array.isArray(body.messages)) {
-          return new Response("messages required", { status: 400 });
+          trace.log("request.invalid", { status: "error", message: "messages required" });
+          return fail(400, "messages required");
         }
 
         const lastUserText = [...body.messages]
@@ -134,177 +130,79 @@ export const Route = createFileRoute("/api/public/chat")({
           ?.parts
           ?.map((part) => (part.type === "text" ? part.text : ""))
           .join(" ") ?? "";
-        const needsFileChange = /\b(build|add|create|make|fix|update|change|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|menu|screen)\b/i.test(lastUserText);
+        const needsFileChange = detectFileChangeIntent(lastUserText);
+        trace.log("request.parsed", {
+          detail: { messages: body.messages.length, needsFileChange, prompt: lastUserText },
+        });
 
         // Snapshot current files BEFORE the AI mutates anything, so the user
         // can one-click revert to this stable version if the build fails.
         if (needsFileChange) {
-          const { data: currentFiles } = await supabase
-            .from("files")
-            .select("path,content")
-            .eq("project_id", projectId);
-          await supabase.from("project_snapshots").insert({
-            project_id: projectId,
-            user_id: userId,
-            label: lastUserText.slice(0, 120) || "pre-build",
-            files: currentFiles ?? [],
+          await trace.time("snapshot.create", async () => {
+            const { data: currentFiles } = await supabase
+              .from("files")
+              .select("path,content")
+              .eq("project_id", projectId);
+            await supabase.from("project_snapshots").insert({
+              project_id: projectId,
+              user_id: userId,
+              label: lastUserText.slice(0, 120) || "pre-build",
+              files: currentFiles ?? [],
+            });
           });
-        }
-
-        function normalizePath(path: string) {
-          return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
         }
 
         const requestedModel = request.headers.get("x-groq-model");
-        const pick = await pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel));
+        const pick = await trace.time("model.pick", () =>
+          pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel)),
+        );
         if ("error" in pick) {
-          return new Response(JSON.stringify({ error: "model_unavailable", message: pick.error }), {
-            status: pick.status,
-            headers: { "Content-Type": "application/json" },
-          });
+          trace.log("model.unavailable", { status: "error", message: pick.error });
+          return fail(
+            pick.status,
+            JSON.stringify({ error: "model_unavailable", message: pick.error }),
+            "application/json",
+          );
         }
-        console.log("[chat] using groq model", pick.model);
+        trace.log("model.selected", { detail: { model: pick.model } });
 
         const groq = createGroqProvider(groqKey);
         const model = groq(pick.model);
-
-        const tools = {
-          list_files: tool({
-            description: "List all files in the current project.",
-            inputSchema: z.object({}),
-            execute: async () => {
-              const { data } = await supabase
-                .from("files")
-                .select("path")
-                .eq("project_id", projectId)
-                .order("path");
-              return { files: (data ?? []).map((f) => f.path) };
-            },
-          }),
-          read_file: tool({
-            description: "Read the contents of a file in the project.",
-            inputSchema: z.object({ path: z.string() }),
-            execute: async ({ path }) => {
-              const cleanPath = normalizePath(path);
-              const { data, error } = await supabase
-                .from("files")
-                .select("content")
-                .eq("project_id", projectId)
-                .eq("path", cleanPath)
-                .maybeSingle();
-              if (error) return { error: error.message };
-              if (!data) return { error: "not found" };
-              return { content: data.content };
-            },
-          }),
-          write_file: tool({
-            description:
-              "Create or overwrite a file in the project with the given full contents. This is the ONLY way to make user-visible changes.",
-            inputSchema: z.object({
-              path: z.string().describe("File path like index.html, app.js, style.css"),
-              content: z.string().describe("Full file contents"),
-            }),
-            execute: async ({ path, content }): Promise<WriteResult> => {
-              const cleanPath = normalizePath(path);
-              if (!cleanPath || cleanPath.includes("..")) return { ok: false, path: cleanPath || path, error: "Invalid file path" };
-              if (!content.trim()) return { ok: false, path: cleanPath, error: "Refusing to write an empty file" };
-              const { error } = await supabase
-                .from("files")
-                .upsert(
-                  { project_id: projectId, user_id: userId, path: cleanPath, content },
-                  { onConflict: "project_id,path" },
-                );
-              if (error) return { ok: false, path: cleanPath, error: error.message };
-              const { data: saved, error: verifyError } = await supabase
-                .from("files")
-                .select("content")
-                .eq("project_id", projectId)
-                .eq("path", cleanPath)
-                .maybeSingle();
-              if (verifyError) return { ok: false, path: cleanPath, error: verifyError.message };
-              if (!saved || saved.content !== content) return { ok: false, path: cleanPath, error: "File write did not persist" };
-              return { ok: true, path: cleanPath, bytes: content.length };
-            },
-          }),
-          delete_file: tool({
-            description: "Delete a file from the project.",
-            inputSchema: z.object({ path: z.string() }),
-            execute: async ({ path }) => {
-              const cleanPath = normalizePath(path);
-              const { error } = await supabase
-                .from("files")
-                .delete()
-                .eq("project_id", projectId)
-                .eq("path", cleanPath);
-              if (error) return { ok: false, error: error.message };
-              return { ok: true };
-            },
-          }),
-        };
-
-        const system = `You are Forge, an autonomous AI coding agent working on the user's project "${proj.name}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
-
-The user may attach images or video frames (screenshots, photos, mockups, design references, screen recordings). Treat them as visual specs.
-
-## Project shape
-The project can be a blank Forge site or an imported GitHub repository. Always inspect the files first and preserve the existing stack and folder structure. Static apps preview from index.html with relative CSS/JS files. Imported repos may include React/Vite/TypeScript or other source files; edit the real source files the repo already uses instead of replacing it with a generic static page. There is no npm install/build runner inside this editor, so keep changes self-contained and maintain a useful index.html preview shell when the repo does not already have one.
-
-## Tools available
-- list_files — see what exists
-- read_file — read a file's contents
-- write_file — create or overwrite a file with its FULL new contents (never diffs, never placeholders, never "...")
-- delete_file — remove a file
-
-## How you MUST work on every build request
-1. Call list_files first to see the current state.
-2. read_file index.html and any css/js file you will modify so you preserve existing work.
-3. write_file for every file you create or change — with the COMPLETE, runnable file contents. Do NOT output code in chat instead of writing it. Do NOT say "I'll add..." without calling the tool in the same turn.
-4. Make sure index.html links every css/js file you created. Prefer simple relative paths like "style.css" and "app.js".
-5. If the user asks for a signup/sign up area, build a visible signup interface in the project itself: email and password fields, clear sign-up button, validation, success/error states, and a working submit handler (local demo behavior is OK unless backend auth is specifically requested).
-6. After the changes land, reply with a 1–3 sentence summary naming the files you changed. If a write tool returns ok:false, say the exact failure instead of claiming success.
-
-## Behavior rules
-- Default to action. If the request is reasonable (e.g. "build a signup area", "add a contact form", "make it dark mode"), just build it with sensible defaults — do not ask clarifying questions first.
-- Ship complete, working features in one turn. A "signup area" means a real form with email + password fields, validation, a submit handler, and visible success/error states — not a placeholder.
-- Match the existing visual style of the project when extending it.
-- Never leave TODOs, "// your code here", or empty handlers. Wire everything up.
-- If something genuinely blocks you (missing API key, ambiguous business logic), say so plainly in one line and still ship the best default implementation.`;
+        const store = createSupabaseFileStore(supabase, projectId, userId);
+        const tools = createProjectFileTools(store, trace);
 
         const result = streamText({
           model,
-          system,
+          system: buildSystemPrompt(proj.name),
           messages: await convertToModelMessages(body.messages),
           tools,
-          prepareStep: ({ steps, stepNumber }) => {
-            if (!needsFileChange) return undefined;
-            const toolResults = steps.flatMap((step) => step.toolResults);
-            const hasListed = toolResults.some((result) => result.toolName === "list_files");
-            const hasRead = toolResults.some((result) => result.toolName === "read_file");
-            const writeResults = toolResults.filter((result) => result.toolName === "write_file");
-            const hasSuccessfulWrite = writeResults.some((result) => (getToolOutput(result) as { ok?: boolean } | undefined)?.ok === true);
-            const hasMutation = hasSuccessfulWrite || toolResults.some((result) => result.toolName === "delete_file");
-
-            if (stepNumber === 0 || !hasListed) {
-              // Keep every tool definition attached to every continuation step.
-              // Groq re-validates tool calls already present in the conversation;
-              // narrowing `activeTools` made a previous read_file disappear from
-              // request.tools and aborted the build before write_file could run.
-              return { toolChoice: { type: "tool", toolName: "list_files" } };
-            }
-            if (!hasRead && !hasMutation && stepNumber < 4) {
-              return { toolChoice: { type: "tool", toolName: "read_file" } };
-            }
-            if (!hasMutation && stepNumber < 12) {
-              return { toolChoice: { type: "tool", toolName: "write_file" } };
-            }
-            return undefined;
-          },
+          prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
+          onFinish: async ({ finishReason, usage, text }) => {
+            trace.log("stream.finish", {
+              status: needsFileChange ? "ok" : "ok",
+              detail: {
+                finishReason,
+                inputTokens: usage?.inputTokens ?? null,
+                outputTokens: usage?.outputTokens ?? null,
+                replyChars: text?.length ?? 0,
+              },
+            });
+            await trace.flush();
+          },
+          onError: async ({ error }) => {
+            trace.log("stream.error", {
+              status: "error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+            await trace.flush();
+          },
         });
 
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
+          headers: traceHeaders,
           onError: (error) => {
             const message = error instanceof Error ? error.message : String(error ?? "");
             if (/429|rate.?limit|too many requests/i.test(message)) {
