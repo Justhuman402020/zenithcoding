@@ -5,8 +5,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 import { debit, ensureWelcomeGrant } from "@/lib/credits.server";
 
-// Groq is OpenAI-compatible. Free-tier model; swap id below to change model.
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+import { buildGroqModelChain } from "@/lib/ai-models";
 
 export function createGroqProvider(apiKey: string) {
   return createOpenAICompatible({
@@ -15,6 +14,51 @@ export function createGroqProvider(apiKey: string) {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+type ModelPick = { model: string } | { error: string; status: number };
+
+/**
+ * Probes Groq with a tiny request so we can pick a model that is actually
+ * available right now. On a 429 we wait out Retry-After once, then fall
+ * through to the next model in the chain instead of failing the build.
+ */
+async function pickAvailableGroqModel(apiKey: string, chain: string[]): Promise<ModelPick> {
+  let lastRateLimited: string | null = null;
+  for (const model of chain) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
+      });
+      if (res.ok) return { model };
+      if (res.status === 429) {
+        lastRateLimited = model;
+        const retryAfter = Number(res.headers.get("retry-after") ?? "0");
+        if (attempt === 0 && retryAfter > 0 && retryAfter <= 8) {
+          await sleep(retryAfter * 1000);
+          continue;
+        }
+        break; // try the next model in the chain
+      }
+      if (res.status === 401 || res.status === 403) {
+        return { error: "The Groq API key is invalid or expired. Add a fresh key in settings.", status: 401 };
+      }
+      break; // model unavailable for this key — try the next one
+    }
+  }
+  if (lastRateLimited) {
+    return {
+      error:
+        "Every Groq model is rate limited right now (429). Your free-tier limit resets shortly — wait about a minute and send the message again.",
+      status: 429,
+    };
+  }
+  return { error: "No Groq model is available for this API key right now.", status: 502 };
+}
+
 
 type WriteResult = { ok: true; path: string; bytes: number } | { ok: false; path: string; error: string };
 
@@ -101,8 +145,18 @@ export const Route = createFileRoute("/api/public/chat")({
           return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
         }
 
+        const requestedModel = request.headers.get("x-groq-model");
+        const pick = await pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel));
+        if ("error" in pick) {
+          return new Response(JSON.stringify({ error: "model_unavailable", message: pick.error }), {
+            status: pick.status,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        console.log("[chat] using groq model", pick.model);
+
         const groq = createGroqProvider(groqKey);
-        const model = groq(GROQ_MODEL);
+        const model = groq(pick.model);
 
         const tools = {
           list_files: tool({
@@ -237,7 +291,13 @@ The project can be a blank Forge site or an imported GitHub repository. Always i
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          onError: (error) => (error instanceof Error ? error.message : "The AI build failed before it could write files."),
+          onError: (error) => {
+            const message = error instanceof Error ? error.message : String(error ?? "");
+            if (/429|rate.?limit|too many requests/i.test(message)) {
+              return "Groq hit its rate limit mid-build. Wait about a minute and send the message again — Forge will automatically try the next model.";
+            }
+            return message || "The AI build failed before it could write files.";
+          },
         });
       },
     },
