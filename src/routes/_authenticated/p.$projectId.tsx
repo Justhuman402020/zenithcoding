@@ -341,8 +341,15 @@ function ProjectEditor() {
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
       setLoadingFiles(false);
       setToken(sess.session?.access_token ?? null);
+      // Drop accidental duplicate rows saved by an earlier bug: same role +
+      // same content appearing back-to-back. Keeps one copy so each question
+      // shows with its own answer underneath.
+      const deduped = (msgs ?? []).filter(
+        (m, i, arr) =>
+          i === 0 || m.role !== arr[i - 1]!.role || m.content.trim() !== arr[i - 1]!.content.trim(),
+      );
       setInitialMessages(
-        (msgs ?? []).map((m) => ({
+        deduped.map((m) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
           parts: [{ type: "text", text: m.content }],
@@ -786,9 +793,16 @@ function ProjectEditor() {
     if (isStreaming) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant" || lastPersistedRef.current.has(last.id)) return;
+    // Messages that came from loaded chat history are ALREADY in the database —
+    // re-inserting them duplicates every reply on each reload and jam-packs the chat.
+    if (initialMessages.some((m) => m.id === last.id)) {
+      lastPersistedRef.current.add(last.id);
+      return;
+    }
     const text = last.parts
       .map((p) => (p.type === "text" ? p.text : ""))
-      .join("")
+      .filter((t) => t.trim())
+      .join("\n\n")
       .trim();
     if (!text) return;
     lastPersistedRef.current.add(last.id);
@@ -802,7 +816,7 @@ function ProjectEditor() {
         content: text,
       });
     })();
-  }, [messages, isStreaming, projectId]);
+  }, [messages, isStreaming, projectId, initialMessages]);
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
@@ -1045,7 +1059,12 @@ function ProjectEditor() {
                 </div>
               )}
               {messages.map((m) => {
-                const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+                // Separate text parts with a blank line so multi-step replies
+                // render as distinct paragraphs instead of one jam-packed blob.
+                const text = m.parts
+                  .map((p) => (p.type === "text" ? p.text : ""))
+                  .filter((t) => t.trim())
+                  .join(m.role === "assistant" ? "\n\n" : "");
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
