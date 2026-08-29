@@ -34,8 +34,8 @@ export const Route = createFileRoute("/api/public/chat")({
         if (!token) return new Response("Unauthorized: missing token", { status: 401 });
         if (!projectId) return new Response("Missing project", { status: 400 });
 
-        const lovableKey = process.env.LOVABLE_API_KEY;
-        if (!lovableKey) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const groqKey = process.env.GROQ_API_KEY;
+        if (!groqKey) return new Response("Missing GROQ_API_KEY", { status: 500 });
 
         const supabaseUrl = process.env.SUPABASE_URL!;
         const supabasePublishable = process.env.SUPABASE_PUBLISHABLE_KEY!;
@@ -101,8 +101,8 @@ export const Route = createFileRoute("/api/public/chat")({
           return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
         }
 
-        const gateway = createLovableAiGatewayProvider(lovableKey);
-        const model = gateway("google/gemini-3-flash-preview");
+        const groq = createGroqProvider(groqKey);
+        const model = groq(GROQ_MODEL);
 
         const tools = {
           list_files: tool({
