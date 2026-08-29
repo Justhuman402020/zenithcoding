@@ -73,10 +73,13 @@ function AdminModelsPage() {
 
   const groups = new Map<string, NonNullable<typeof data>["rows"]>();
   for (const row of data?.rows ?? []) {
-    const list = groups.get(row.providerLabel) ?? [];
+    if (query && !`${row.label} ${row.model}`.toLowerCase().includes(query.toLowerCase())) continue;
+    const list = groups.get(row.provider) ?? [];
     list.push(row);
-    groups.set(row.providerLabel, list);
+    groups.set(row.provider, list);
   }
+  const summaries = new Map((data?.providers ?? []).map((p) => [p.provider, p]));
+
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-6">
