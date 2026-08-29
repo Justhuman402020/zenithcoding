@@ -452,6 +452,7 @@ function ProjectEditor() {
           return {
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             "x-project-id": projectId,
+            "x-groq-model": readStoredGroqModel(),
           };
         },
       }),
