@@ -9,14 +9,28 @@ const QUESTION_INTENT =
   /\b(explain|describe|what does|what is|what's|how does|how is|why does|walk me|tell me about|summari[sz]e|show me how)\b/i;
 const NO_CHANGE_INTENT = /\b(do not|don't|without)\s+(change|modify|edit|touch|alter|update)\b/i;
 
+// Verbs that actually ask for a change. Nouns alone ("the button", "this page")
+// are NOT enough — asking "what does this button do?" is a question, not a build.
+const ACTION_INTENT =
+  /\b(build|add|create|make|fix|repair|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|redesign|remove|delete|edit|rewrite|refactor|restyle|wire|hook\s*up|connect|generate|set\s*up|apply)\b/i;
+const QUESTION_OPENER =
+  /^\s*(what|what's|whats|why|how|how's|who|when|where|which|can|could|do|does|did|is|are|should|would|will|tell|explain|describe)\b/i;
+
 export function detectFileChangeIntent(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
   // Pure explanation questions ("explain how this project is structured") must
   // not trigger the forced edit pipeline — forcing write_file when the model
   // only wants to read makes Groq reject the call and the answer never comes.
-  if (QUESTION_INTENT.test(text) || NO_CHANGE_INTENT.test(text)) return false;
-  return /\b(build|add|create|make|fix|fixed|repair|broken|failing|failed|failure|work|working|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|layout|header|footer|nav|navigation|menu|screen|image|photo|text|copy|font|color|understand)\b/i.test(
-    text,
-  );
+  if (QUESTION_INTENT.test(trimmed) || NO_CHANGE_INTENT.test(trimmed)) return false;
+  const hasAction = ACTION_INTENT.test(trimmed);
+  // A question-shaped message ("can you fix this?" is still a request, but
+  // "does this page load?" is not) only counts as an edit when it also carries
+  // an action verb.
+  if (!hasAction && (QUESTION_OPENER.test(trimmed) || trimmed.endsWith("?"))) return false;
+  if (hasAction) return true;
+  // Bare instructions like "dark mode" / "bigger header" still imply an edit.
+  return /\b(broken|failing|failed|not\s+working|doesn'?t\s+work|signup|sign\s*up|login|dark\s*mode)\b/i.test(trimmed);
 }
 
 function isVisualPart(part: UIMessage["parts"][number]) {
@@ -141,6 +155,9 @@ Talk to the user like a patient teacher: we are building a real website, so expl
 4. Make sure index.html links every css/js file you created. Prefer simple relative paths like "style.css" and "app.js".
 5. If the user asks for a signup/sign up area, build a visible signup interface in the project itself: email and password fields, clear sign-up button, validation, success/error states, and a working submit handler (local demo behavior is OK unless backend auth is specifically requested).
 6. After the changes land, reply with a 1–3 sentence summary naming the files you changed. If a write tool returns ok:false, say the exact failure instead of claiming success.
+
+## Answering questions
+When the user asks a question instead of requesting a change ("what does this do?", "how is this structured?", "why is it failing?"), ANSWER THE QUESTION directly. Read the relevant files if needed, then reply in plain language. Do not write files, do not change anything, and do not reply with an unrelated summary. Always address exactly what was asked — if an image is attached, describe what you see in it and tie your answer to it.
 
 ## Behavior rules
 - Default to action. If the request is reasonable (e.g. "build a signup area", "add a contact form", "make it dark mode"), just build it with sensible defaults — do not ask clarifying questions first.
