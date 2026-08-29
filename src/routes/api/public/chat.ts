@@ -285,13 +285,17 @@ The project can be a blank Forge site or an imported GitHub repository. Always i
             const hasMutation = hasSuccessfulWrite || toolResults.some((result) => result.toolName === "delete_file");
 
             if (stepNumber === 0 || !hasListed) {
-              return { toolChoice: { type: "tool", toolName: "list_files" }, activeTools: ["list_files"] };
+              // Keep every tool definition attached to every continuation step.
+              // Groq re-validates tool calls already present in the conversation;
+              // narrowing `activeTools` made a previous read_file disappear from
+              // request.tools and aborted the build before write_file could run.
+              return { toolChoice: { type: "tool", toolName: "list_files" } };
             }
             if (!hasRead && !hasMutation && stepNumber < 4) {
-              return { toolChoice: { type: "tool", toolName: "read_file" }, activeTools: ["read_file"] };
+              return { toolChoice: { type: "tool", toolName: "read_file" } };
             }
             if (!hasMutation && stepNumber < 12) {
-              return { toolChoice: { type: "tool", toolName: "write_file" }, activeTools: ["write_file"] };
+              return { toolChoice: { type: "tool", toolName: "write_file" } };
             }
             return undefined;
           },
