@@ -17,7 +17,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
-import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
@@ -72,9 +72,9 @@ const SSlugRoute = SSlugRouteImport.update({
   path: '/s/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
@@ -93,15 +93,15 @@ const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => AuthenticatedAdminRoute,
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminModelsRoute =
   AuthenticatedAdminModelsRouteImport.update({
-    id: '/models',
-    path: '/models',
-    getParentRoute: () => AuthenticatedAdminRoute,
+    id: '/admin/models',
+    path: '/admin/models',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAccountBillingRoute =
   AuthenticatedAccountBillingRouteImport.update({
@@ -158,7 +158,6 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
-  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
@@ -168,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
@@ -181,7 +181,6 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
-  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
@@ -192,6 +191,7 @@ export interface FileRoutesByTo {
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
@@ -207,7 +207,6 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
-  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
@@ -218,6 +217,7 @@ export interface FileRoutesById {
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
@@ -234,7 +234,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
-    | '/admin'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
@@ -244,6 +243,7 @@ export interface FileRouteTypes {
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
+    | '/admin/'
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
@@ -257,7 +257,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
-    | '/admin'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
@@ -268,6 +267,7 @@ export interface FileRouteTypes {
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
+    | '/admin'
     | '/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
@@ -282,7 +282,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
-    | '/_authenticated/admin'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
@@ -293,6 +292,7 @@ export interface FileRouteTypes {
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
+    | '/_authenticated/admin/'
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
@@ -380,11 +380,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/admin': {
-      id: '/_authenticated/admin'
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
       path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/api/public/push-stream': {
@@ -410,17 +410,17 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/admin/users': {
       id: '/_authenticated/admin/users'
-      path: '/users'
+      path: '/admin/users'
       fullPath: '/admin/users'
       preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/models': {
       id: '/_authenticated/admin/models'
-      path: '/models'
+      path: '/admin/models'
       fullPath: '/admin/models'
       preLoaderRoute: typeof AuthenticatedAdminModelsRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/account/billing': {
       id: '/_authenticated/account/billing'
@@ -488,19 +488,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AuthenticatedAdminRouteChildren {
-  AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
-  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
-}
-
-const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
-  AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
-  AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
-}
-
-const AuthenticatedAdminRouteWithChildren =
-  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
-
 interface AuthenticatedPProjectIdRouteChildren {
   AuthenticatedPProjectIdSettingsRoute: typeof AuthenticatedPProjectIdSettingsRoute
 }
@@ -516,17 +503,21 @@ const AuthenticatedPProjectIdRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
+  AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
+  AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
+  AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

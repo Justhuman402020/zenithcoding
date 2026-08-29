@@ -122,8 +122,35 @@ export type ModelPick =
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Reorders a chain so consecutive backups come from *different* API keys.
+ * Without this, a chain full of models on one key keeps hitting the same
+ * rate limit and a build stalls. The first entry (the chosen model) stays put.
+ */
+export function spreadAcrossProviders(chain: ModelRef[]): ModelRef[] {
+  if (chain.length < 3) return chain;
+  const [first, ...rest] = chain;
+  const buckets = new Map<string, ModelRef[]>();
+  for (const ref of rest) {
+    const list = buckets.get(ref.provider) ?? [];
+    list.push(ref);
+    buckets.set(ref.provider, list);
+  }
+  const out: ModelRef[] = [first!];
+  while (buckets.size) {
+    for (const [providerId, list] of [...buckets.entries()]) {
+      const next = list.shift();
+      if (next) out.push(next);
+      if (!list.length) buckets.delete(providerId);
+    }
+  }
+  return out;
+}
+
+/**
  * Probes each model in the chain with a tiny request and returns the first one
- * that answers. Rate limited models are skipped (after one Retry-After wait).
+ * that answers. Rate limited models are skipped (after one Retry-After wait),
+ * and once a key is rate limited or rejected the rest of that key's models are
+ * skipped too, so the job moves on to a different provider instead of failing.
  */
 export async function pickAvailableModel(
   chain: ModelRef[],
@@ -132,11 +159,14 @@ export async function pickAvailableModel(
 ): Promise<ModelPick> {
   let rateLimited = false;
   let lastError: string | null = null;
+  const exhaustedProviders = new Set<string>();
 
-  for (const ref of chain) {
+  for (const ref of spreadAcrossProviders(chain)) {
+    if (exhaustedProviders.has(ref.provider)) continue;
     const provider = providers?.find((p) => p.id === ref.provider) ?? findProvider(ref.provider);
     const apiKey = keys[ref.provider];
     if (!provider || !apiKey) continue;
+
 
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -170,12 +200,16 @@ export async function pickAvailableModel(
           await sleep(retryAfter * 1000);
           continue;
         }
+        // Whole key is throttled: move to a different provider.
+        if (quota?.remainingRequests === 0 || retryAfter > 8) exhaustedProviders.add(ref.provider);
         break;
       }
       if (res.status === 401 || res.status === 403) {
         await recordModelStatus(ref, "unauthorized", quota, lastError);
+        exhaustedProviders.add(ref.provider);
         break;
       }
+
       await recordModelStatus(ref, "unavailable", quota, lastError);
       break;
     }
