@@ -170,3 +170,57 @@ export const setAutoFallback = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/** Checks a pasted key by asking the service which models it can reach. */
+export const testProviderConnection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { baseUrl: string; apiKey: string }) =>
+    z.object({ baseUrl: z.string().min(3), apiKey: z.string().min(8) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { normalizeBaseUrl, testProviderKey } = await import("./custom-providers.server");
+    const baseUrl = normalizeBaseUrl(data.baseUrl);
+    const result = await testProviderKey(baseUrl, data.apiKey.trim());
+    return { ...result, baseUrl, models: result.models.slice(0, 50), modelCount: result.models.length };
+  });
+
+/** Saves a new provider (encrypted key) so it joins the automatic switching chain. */
+export const addProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { label: string; baseUrl: string; apiKey: string }) =>
+    z.object({ label: z.string().min(2), baseUrl: z.string().min(3), apiKey: z.string().min(8) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { normalizeBaseUrl, slugifyProviderId, testProviderKey } = await import("./custom-providers.server");
+    const { encryptSecret } = await import("./secrets-crypto.server");
+    const baseUrl = normalizeBaseUrl(data.baseUrl);
+    const apiKey = data.apiKey.trim();
+    const test = await testProviderKey(baseUrl, apiKey);
+    if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const id = slugifyProviderId(data.label);
+    const { error } = await supabaseAdmin.from("custom_ai_providers").upsert({
+      id,
+      label: data.label.trim(),
+      base_url: baseUrl,
+      key_encrypted: await encryptSecret(apiKey),
+      created_by: context.userId,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true, id, modelCount: test.models.length };
+  });
+
+export const removeProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("custom_ai_providers").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
