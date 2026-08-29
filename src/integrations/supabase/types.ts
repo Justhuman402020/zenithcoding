@@ -14,6 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_model_settings: {
+        Row: {
+          auto_fallback: boolean
+          id: string
+          model: string
+          provider: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          auto_fallback?: boolean
+          id?: string
+          model?: string
+          provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          auto_fallback?: boolean
+          id?: string
+          model?: string
+          provider?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      ai_model_status: {
+        Row: {
+          last_error: string | null
+          last_status: string | null
+          last_used_at: string | null
+          limit_requests: number | null
+          limit_tokens: number | null
+          model: string
+          provider: string
+          remaining_requests: number | null
+          remaining_tokens: number | null
+          requests_used: number
+          reset_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          last_error?: string | null
+          last_status?: string | null
+          last_used_at?: string | null
+          limit_requests?: number | null
+          limit_tokens?: number | null
+          model: string
+          provider: string
+          remaining_requests?: number | null
+          remaining_tokens?: number | null
+          requests_used?: number
+          reset_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          last_error?: string | null
+          last_status?: string | null
+          last_used_at?: string | null
+          limit_requests?: number | null
+          limit_tokens?: number | null
+          model?: string
+          provider?: string
+          remaining_requests?: number | null
+          remaining_tokens?: number | null
+          requests_used?: number
+          reset_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
