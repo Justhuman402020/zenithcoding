@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { getMyRole } from "@/lib/admin-users.functions";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Lock, Loader2, Users, ArrowLeft } from "lucide-react";
+import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu } from "lucide-react";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -60,6 +60,9 @@ function AdminPage() {
               className="w-full gap-1.5 bg-gold-gradient text-primary-foreground shadow-gold-glow"
             >
               <Users className="h-4 w-4" /> Manage users
+            </Button>
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/models" })} className="w-full gap-1.5">
+              <Cpu className="h-4 w-4" /> AI model board
             </Button>
           </div>
         ) : (

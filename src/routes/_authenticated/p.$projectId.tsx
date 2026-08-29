@@ -3,7 +3,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { readStoredGroqModel } from "@/lib/ai-models";
+import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -463,7 +463,10 @@ function ProjectEditor() {
           return {
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             "x-project-id": projectId,
-            "x-groq-model": readStoredGroqModel(),
+            ...(() => {
+              const ref = readStoredModelRef();
+              return ref ? { "x-forge-model": modelKey(ref) } : {};
+            })(),
           };
         },
       }),
