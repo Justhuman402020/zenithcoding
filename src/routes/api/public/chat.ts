@@ -145,8 +145,18 @@ export const Route = createFileRoute("/api/public/chat")({
           return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
         }
 
+        const requestedModel = request.headers.get("x-groq-model");
+        const pick = await pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel));
+        if ("error" in pick) {
+          return new Response(JSON.stringify({ error: "model_unavailable", message: pick.error }), {
+            status: pick.status,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        console.log("[chat] using groq model", pick.model);
+
         const groq = createGroqProvider(groqKey);
-        const model = groq(GROQ_MODEL);
+        const model = groq(pick.model);
 
         const tools = {
           list_files: tool({
