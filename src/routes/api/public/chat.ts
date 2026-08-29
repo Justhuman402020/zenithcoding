@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
-import { debit, ensureWelcomeGrant } from "@/lib/credits.server";
+import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
 import {
   createGroqProvider,
