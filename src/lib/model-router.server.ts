@@ -125,14 +125,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Probes each model in the chain with a tiny request and returns the first one
  * that answers. Rate limited models are skipped (after one Retry-After wait).
  */
-export async function pickAvailableModel(chain: ModelRef[], keys: ProviderKeys): Promise<ModelPick> {
+export async function pickAvailableModel(
+  chain: ModelRef[],
+  keys: ProviderKeys,
+  providers?: ProviderOption[],
+): Promise<ModelPick> {
   let rateLimited = false;
   let lastError: string | null = null;
 
   for (const ref of chain) {
-    const provider = findProvider(ref.provider);
+    const provider = providers?.find((p) => p.id === ref.provider) ?? findProvider(ref.provider);
     const apiKey = keys[ref.provider];
     if (!provider || !apiKey) continue;
+
 
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response;
