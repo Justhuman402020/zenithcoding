@@ -200,12 +200,16 @@ export async function pickAvailableModel(
           await sleep(retryAfter * 1000);
           continue;
         }
+        // Whole key is throttled: move to a different provider.
+        if (quota?.remainingRequests === 0 || retryAfter > 8) exhaustedProviders.add(ref.provider);
         break;
       }
       if (res.status === 401 || res.status === 403) {
         await recordModelStatus(ref, "unauthorized", quota, lastError);
+        exhaustedProviders.add(ref.provider);
         break;
       }
+
       await recordModelStatus(ref, "unavailable", quota, lastError);
       break;
     }
