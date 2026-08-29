@@ -15,53 +15,15 @@ import {
   detectFileChangeIntent,
 } from "@/lib/chat-agent.server";
 
-import { buildGroqModelChain, modelSupportsVision } from "@/lib/ai-models";
+import { buildModelChain, modelSupportsVision, parseModelKey, type ModelRef } from "@/lib/ai-providers";
+import {
+  loadProviderKeys,
+  pickAvailableModel,
+  readActiveModelRef,
+  recordModelStatus,
+} from "@/lib/model-router.server";
 
 export { createGroqProvider };
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-type ModelPick = { model: string } | { error: string; status: number };
-
-/**
- * Probes Groq with a tiny request so we can pick a model that is actually
- * available right now. On a 429 we wait out Retry-After once, then fall
- * through to the next model in the chain instead of failing the build.
- */
-async function pickAvailableGroqModel(apiKey: string, chain: string[]): Promise<ModelPick> {
-  let lastRateLimited: string | null = null;
-  for (const model of chain) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
-      });
-      if (res.ok) return { model };
-      if (res.status === 429) {
-        lastRateLimited = model;
-        const retryAfter = Number(res.headers.get("retry-after") ?? "0");
-        if (attempt === 0 && retryAfter > 0 && retryAfter <= 8) {
-          await sleep(retryAfter * 1000);
-          continue;
-        }
-        break; // try the next model in the chain
-      }
-      if (res.status === 401 || res.status === 403) {
-        return { error: "The Groq API key is invalid or expired. Add a fresh key in settings.", status: 401 };
-      }
-      break; // model unavailable for this key — try the next one
-    }
-  }
-  if (lastRateLimited) {
-    return {
-      error:
-        "Every Groq model is rate limited right now (429). Your free-tier limit resets shortly — wait about a minute and send the message again.",
-      status: 429,
-    };
-  }
-  return { error: "No Groq model is available for this API key right now.", status: 502 };
-}
 
 export const Route = createFileRoute("/api/public/chat")({
   server: {
@@ -74,8 +36,10 @@ export const Route = createFileRoute("/api/public/chat")({
         if (!token) return new Response("Unauthorized: missing token", { status: 401 });
         if (!projectId) return new Response("Missing project", { status: 400 });
 
-        const groqKey = process.env.GROQ_API_KEY;
-        if (!groqKey) return new Response("Missing GROQ_API_KEY", { status: 500 });
+        const providerKeys = loadProviderKeys();
+        if (Object.keys(providerKeys).length === 0) {
+          return new Response("No AI provider API key is configured", { status: 500 });
+        }
 
         const supabaseUrl = process.env.SUPABASE_URL!;
         const supabasePublishable = process.env.SUPABASE_PUBLISHABLE_KEY!;
@@ -171,11 +135,15 @@ export const Route = createFileRoute("/api/public/chat")({
           ),
         );
 
-        const requestedModel = request.headers.get("x-groq-model");
-        const pick = await trace.time("model.pick", () =>
-          pickAvailableGroqModel(groqKey, buildGroqModelChain(requestedModel, { vision: hasImages })),
-        );
-        if ("error" in pick) {
+        const requestedRef = parseModelKey(request.headers.get("x-forge-model"));
+        const { ref: adminRef, autoFallback } = await readActiveModelRef();
+        const preferred: ModelRef | null = requestedRef ?? adminRef;
+        const availableProviders = Object.keys(providerKeys);
+        const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
+        const chain = autoFallback ? fullChain : fullChain.slice(0, 1);
+
+        const pick = await trace.time("model.pick", () => pickAvailableModel(chain, providerKeys));
+        if (!pick.ok) {
           trace.log("model.unavailable", { status: "error", message: pick.error });
           return fail(
             pick.status,
@@ -184,16 +152,23 @@ export const Route = createFileRoute("/api/public/chat")({
           );
         }
         trace.log("model.selected", {
-          detail: { model: pick.model, hasImages, inputMessages: body.messages.length, sentMessages: compactMessages.length },
+          detail: {
+            provider: pick.ref.provider,
+            model: pick.ref.model,
+            hasImages,
+            autoFallback,
+            inputMessages: body.messages.length,
+            sentMessages: compactMessages.length,
+          },
         });
 
-        const groq = createGroqProvider(groqKey);
-        const model = groq(pick.model);
+        const provider = createGroqProvider(pick.apiKey, pick.baseURL);
+        const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
         const tools = createProjectFileTools(store, trace);
 
         // A text-only model would 400 on image parts — drop them rather than fail.
-        const visionOk = modelSupportsVision(pick.model);
+        const visionOk = modelSupportsVision(pick.ref);
         const outgoingMessages = visionOk
           ? compactMessages
           : compactMessages.map((message) => ({
@@ -224,6 +199,12 @@ export const Route = createFileRoute("/api/public/chat")({
             await trace.flush();
           },
           onError: async ({ error }) => {
+            await recordModelStatus(
+              pick.ref,
+              "unavailable",
+              null,
+              error instanceof Error ? error.message : String(error),
+            );
             trace.log("stream.error", {
               status: "error",
               message: error instanceof Error ? error.message : String(error),
