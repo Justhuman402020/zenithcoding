@@ -341,8 +341,15 @@ function ProjectEditor() {
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
       setLoadingFiles(false);
       setToken(sess.session?.access_token ?? null);
+      // Drop accidental duplicate rows saved by an earlier bug: same role +
+      // same content appearing back-to-back. Keeps one copy so each question
+      // shows with its own answer underneath.
+      const deduped = (msgs ?? []).filter(
+        (m, i, arr) =>
+          i === 0 || m.role !== arr[i - 1]!.role || m.content.trim() !== arr[i - 1]!.content.trim(),
+      );
       setInitialMessages(
-        (msgs ?? []).map((m) => ({
+        deduped.map((m) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
           parts: [{ type: "text", text: m.content }],
