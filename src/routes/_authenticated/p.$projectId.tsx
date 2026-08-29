@@ -83,9 +83,9 @@ import {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
-  validateSearch: (search: Record<string, unknown>) => ({
-    prompt: typeof search.prompt === "string" ? search.prompt : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
+    typeof search.prompt === "string" ? { prompt: search.prompt } : {},
+
   component: ProjectEditor,
 });
 
