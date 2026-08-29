@@ -2,8 +2,16 @@
 // that key can actually use, so the admin board shows all of them instead of a
 // short hand-picked list. Results are cached briefly to keep the board snappy.
 
-import { PROVIDERS, findProvider, guessModelMeta, isChatModelId, type ModelOption } from "./ai-providers";
+import {
+  PROVIDERS,
+  findProvider,
+  guessModelMeta,
+  isChatModelId,
+  type ModelOption,
+  type ProviderOption,
+} from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
+
 
 export type DiscoveredModel = ModelOption & { curated: boolean };
 
