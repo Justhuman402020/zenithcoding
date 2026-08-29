@@ -28,12 +28,17 @@ export type ProviderQuota = {
   note: string | null;
 };
 
-export async function listProviderModels(providerId: string, apiKey: string): Promise<DiscoveredModel[]> {
-  const provider = findProvider(providerId);
+export async function listProviderModels(
+  providerId: string,
+  apiKey: string,
+  option?: ProviderOption,
+): Promise<DiscoveredModel[]> {
+  const provider = option ?? findProvider(providerId);
   if (!provider) return [];
 
   const cached = cache.get(providerId);
   if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
+
 
   const curated = new Map(provider.models.map((m) => [m.id, m]));
   let ids: string[] = [];
