@@ -1213,6 +1213,28 @@ function ProjectEditor() {
                             />
                           );
                         })}
+                      {(() => {
+                        const imageParts = m.parts.filter(
+                          (p: any) =>
+                            (p?.type === "file" || p?.type === "image") &&
+                            typeof p?.mediaType === "string" &&
+                            p.mediaType.startsWith("image/") &&
+                            typeof (p.url ?? p.data) === "string",
+                        ) as any[];
+                        if (imageParts.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {imageParts.map((p, i) => (
+                              <img
+                                key={`img-${m.id}-${i}`}
+                                src={p.url ?? p.data}
+                                alt={p.filename ?? "attached image"}
+                                className="h-24 w-24 rounded-lg object-cover border border-border/60"
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {m.role === "assistant"
                         ? text && (
                             <div className="prose prose-invert prose-sm max-w-none break-words">
