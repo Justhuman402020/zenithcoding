@@ -457,17 +457,14 @@ function ProjectEditor() {
     () =>
       new DefaultChatTransport({
         api: "/api/public/chat",
-        headers: async () => {
+        headers: async (): Promise<Record<string, string>> => {
           const { data } = await supabase.auth.getSession();
           const accessToken = data.session?.access_token ?? tokenRef.current;
-          return {
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-            "x-project-id": projectId,
-            ...(() => {
-              const ref = readStoredModelRef();
-              return ref ? { "x-forge-model": modelKey(ref) } : {};
-            })(),
-          };
+          const ref = readStoredModelRef();
+          const headers: Record<string, string> = { "x-project-id": projectId };
+          if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+          if (ref) headers["x-forge-model"] = modelKey(ref);
+          return headers;
         },
       }),
     [projectId],
