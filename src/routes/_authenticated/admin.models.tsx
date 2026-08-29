@@ -124,6 +124,14 @@ function AdminModelsPage() {
         </Button>
       </div>
 
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search every model on your keys…"
+      />
+
+
+
       {isLoading ? (
         <div className="py-16 grid place-items-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
