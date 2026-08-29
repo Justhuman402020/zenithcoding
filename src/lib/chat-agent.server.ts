@@ -2,12 +2,56 @@
 // keeps Groq moving list -> read -> write, and the system prompt.
 // Extracted so the regression test drives the exact same logic as production.
 
+import type { UIMessage } from "ai";
 import type { TraceLogger } from "./trace.server";
 
 export function detectFileChangeIntent(text: string) {
-  return /\b(build|add|create|make|fix|update|change|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|menu|screen)\b/i.test(
+  return /\b(build|add|create|make|fix|fixed|repair|broken|failing|failed|failure|work|working|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|layout|header|footer|nav|navigation|menu|screen|image|photo|text|copy|font|color|understand)\b/i.test(
     text,
   );
+}
+
+function isVisualPart(part: UIMessage["parts"][number]) {
+  if (part.type !== "file") return false;
+  return typeof part.mediaType === "string" && part.mediaType.startsWith("image/");
+}
+
+/**
+ * Keep chat context useful without resending old screenshots, reasoning, and
+ * tool payloads on every turn. Groq's free vision tier has a small TPM window;
+ * replaying one old screenshot through a long conversation eventually makes
+ * every later request fail even when the new turn is text-only.
+ */
+export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIMessage[] {
+  let latestUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+  const recentIndexes = messages
+    .map((_, index) => index)
+    .filter((index) => index <= latestUserIndex)
+    .slice(-maxMessages);
+
+  return recentIndexes.flatMap((index) => {
+    const message = messages[index];
+    if (!message) return [];
+    const isLatestUser = index === latestUserIndex;
+    const parts: UIMessage["parts"] = [];
+    for (const part of message.parts) {
+      if (part.type === "text") {
+        const text = part.text.trim();
+        if (!text) continue;
+        const limit = isLatestUser ? 4_000 : 1_200;
+        parts.push({ ...part, text: text.slice(-limit) });
+        continue;
+      }
+      if (isLatestUser && isVisualPart(part)) parts.push(part);
+    }
+    return parts.length > 0 ? [{ ...message, parts } as UIMessage] : [];
+  });
 }
 
 function getToolOutput(result: unknown) {
@@ -31,10 +75,14 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
     const hasListed = toolResults.some((result) => result.toolName === "list_files");
     const hasRead = toolResults.some((result) => result.toolName === "read_file");
     const writeResults = toolResults.filter((result) => result.toolName === "write_file");
+    const deleteResults = toolResults.filter((result) => result.toolName === "delete_file");
     const hasSuccessfulWrite = writeResults.some(
       (result) => (getToolOutput(result) as { ok?: boolean } | undefined)?.ok === true,
     );
-    const hasMutation = hasSuccessfulWrite || toolResults.some((result) => result.toolName === "delete_file");
+    const hasSuccessfulDelete = deleteResults.some(
+      (result) => (getToolOutput(result) as { ok?: boolean } | undefined)?.ok === true,
+    );
+    const hasMutation = hasSuccessfulWrite || hasSuccessfulDelete;
 
     trace?.log("model.step", {
       detail: { stepNumber, toolCalls: toolResults.length, hasListed, hasRead, hasMutation },
@@ -51,6 +99,8 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
 
 export function buildSystemPrompt(projectName: string) {
   return `You are Forge, an autonomous AI coding agent working on the user's project "${projectName}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
+
+Be calm, supportive, and direct. When the user says something failed, is broken, or is not what they asked for, acknowledge that briefly, inspect the current files, and correct it. Never argue with the user, blame them, or pretend a change worked when a tool failed.
 
 The user may attach images or video frames (screenshots, photos, mockups, design references, screen recordings). Treat them as visual specs.
 

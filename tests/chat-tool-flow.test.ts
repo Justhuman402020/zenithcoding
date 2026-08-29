@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from "ai";
 
 import { createGroqProvider, createMemoryFileStore, createProjectFileTools } from "@/lib/chat-tools.server";
-import { createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
+import { compactChatMessages, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
 
 type ChatMessage = { role: string; content?: unknown; name?: string; tool_call_id?: string };
 
@@ -84,6 +84,26 @@ afterAll(async () => {
 });
 
 describe("Groq chat edit flow", () => {
+  it("treats failure reports as build requests", () => {
+    expect(detectFileChangeIntent("Nothing is working, fix that")).toBe(true);
+    expect(detectFileChangeIntent("The build keeps failing")).toBe(true);
+  });
+
+  it("keeps current screenshots but removes stale media and tool payloads", () => {
+    const staleImage = { type: "file" as const, mediaType: "image/png", url: "data:image/png;base64,old" };
+    const currentImage = { type: "file" as const, mediaType: "image/png", url: "data:image/png;base64,new" };
+    const history: UIMessage[] = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "Use this design" }, staleImage] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "I updated it" }] },
+      { id: "u2", role: "user", parts: [{ type: "text", text: "Fix the mobile layout" }, currentImage] },
+    ];
+
+    const compacted = compactChatMessages(history);
+    expect(compacted).toHaveLength(3);
+    expect(compacted[0]?.parts).toEqual([{ type: "text", text: "Use this design" }]);
+    expect(compacted[2]?.parts).toContainEqual(currentImage);
+  });
+
   it("lists, reads, writes and persists the file", async () => {
     const store = createMemoryFileStore({
       "index.html": `<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><h1>zenithvideioai</h1></body></html>`,
