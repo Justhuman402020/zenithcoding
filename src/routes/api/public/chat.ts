@@ -10,7 +10,7 @@ import {
 } from "@/lib/chat-tools.server";
 import { buildSystemPrompt, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
 
-import { buildGroqModelChain } from "@/lib/ai-models";
+import { buildGroqModelChain, modelSupportsVision } from "@/lib/ai-models";
 
 export { createGroqProvider };
 
