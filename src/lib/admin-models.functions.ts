@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
-import { PROVIDERS, findProvider } from "./ai-providers";
+import { PROVIDERS } from "./ai-providers";
 
 export type ModelBoardRow = {
   provider: string;
@@ -14,6 +14,12 @@ export type ModelBoardRow = {
   curated: boolean;
   keyConfigured: boolean;
   active: boolean;
+  /** "coding" = text edits, "coding+images" = also understands screenshots. */
+  role: "coding" | "coding+images";
+  /** 1 = used first, 2 = next backup for plain coding jobs, null = not in the chain. */
+  codingRank: number | null;
+  /** Position in the backup chain for questions that include an image. */
+  imageRank: number | null;
   lastStatus: string | null;
   lastError: string | null;
   lastUsedAt: string | null;
@@ -26,6 +32,7 @@ export type ModelBoardRow = {
 export type ProviderSummary = {
   provider: string;
   providerLabel: string;
+  custom: boolean;
   keyConfigured: boolean;
   modelCount: number;
   creditsRemaining: number | null;
@@ -33,6 +40,7 @@ export type ProviderSummary = {
   creditsLimit: number | null;
   creditsNote: string | null;
 };
+
 
 export const getModelBoard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
