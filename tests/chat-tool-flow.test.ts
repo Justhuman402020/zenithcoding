@@ -89,6 +89,36 @@ describe("Groq chat edit flow", () => {
     expect(detectFileChangeIntent("The build keeps failing")).toBe(true);
   });
 
+  it("does not force edits for explanation questions", () => {
+    expect(
+      detectFileChangeIntent(
+        "Explain in detail, in at least 10 numbered steps, how this project is structured and what every file does. Do not change any files.",
+      ),
+    ).toBe(false);
+    expect(detectFileChangeIntent("Describe what the attached image shows")).toBe(false);
+  });
+
+  it("never forces a specific tool after list_files", () => {
+    // Forcing write_file while the model wanted read_file made Groq reject the
+    // continuation ("tool call validation failed") and the reply was cut off
+    // with no answer. Only list_files may be forced; later steps use required.
+    const prepare = createPrepareStep(true);
+    const first = prepare({ steps: [], stepNumber: 0 });
+    expect(first).toEqual({ toolChoice: { type: "tool", toolName: "list_files" } });
+    const later = prepare({
+      steps: [
+        {
+          toolResults: [
+            { toolName: "list_files" },
+            { toolName: "read_file" },
+          ],
+        },
+      ],
+      stepNumber: 2,
+    });
+    expect(later).toEqual({ toolChoice: "required" });
+  });
+
   it("keeps current screenshots but removes stale media and tool payloads", () => {
     const staleImage = { type: "file" as const, mediaType: "image/png", url: "data:image/png;base64,old" };
     const currentImage = { type: "file" as const, mediaType: "image/png", url: "data:image/png;base64,new" };
