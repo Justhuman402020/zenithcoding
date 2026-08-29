@@ -517,7 +517,8 @@ function ProjectEditor() {
     if (initialMessages.length > 0) { autoSentRef.current = true; return; }
     autoSentRef.current = true;
     (async () => {
-      await sendMessage({ text: initialPrompt });
+      // Persist the user message FIRST so chat history keeps the right order
+      // (sendMessage only resolves once the assistant stream finishes).
       const { data: userRes } = await supabase.auth.getUser();
       if (userRes.user) {
         await supabase.from("chat_messages").insert({
@@ -527,8 +528,10 @@ function ProjectEditor() {
           content: initialPrompt,
         });
       }
+      await sendMessage({ text: initialPrompt });
       navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
     })();
+
   }, [initialPrompt, chatReady, token, isStreaming, initialMessages.length, sendMessage, projectId, navigate]);
 
   useEffect(() => {
@@ -599,8 +602,8 @@ function ProjectEditor() {
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
     setAttachments([]);
-    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
-    // persist user message
+    // persist user message BEFORE streaming, otherwise the assistant reply is
+    // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
       await supabase.from("chat_messages").insert({
@@ -610,6 +613,8 @@ function ProjectEditor() {
         content: messageText,
       });
     }
+    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+
   }
 
   async function onPickFiles(list: FileList | null) {
