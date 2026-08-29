@@ -6,7 +6,7 @@ import type { UIMessage, UIMessagePart } from "ai";
 import type { TraceLogger } from "./trace.server";
 
 export function detectFileChangeIntent(text: string) {
-  return /\b(build|add|create|make|fix|fixed|repair|broken|failing|failed|failure|work|working|update|change|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|menu|screen|understand)\b/i.test(
+  return /\b(build|add|create|make|fix|fixed|repair|broken|failing|failed|failure|work|working|update|change|replace|swap|tweak|adjust|improve|polish|move|resize|align|implement|design|remove|delete|edit|style|wire|connect|signup|sign\s*up|login|form|button|page|site|app|layout|header|footer|nav|navigation|menu|screen|image|photo|text|copy|font|color|understand)\b/i.test(
     text,
   );
 }
@@ -75,10 +75,14 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
     const hasListed = toolResults.some((result) => result.toolName === "list_files");
     const hasRead = toolResults.some((result) => result.toolName === "read_file");
     const writeResults = toolResults.filter((result) => result.toolName === "write_file");
+    const deleteResults = toolResults.filter((result) => result.toolName === "delete_file");
     const hasSuccessfulWrite = writeResults.some(
       (result) => (getToolOutput(result) as { ok?: boolean } | undefined)?.ok === true,
     );
-    const hasMutation = hasSuccessfulWrite || toolResults.some((result) => result.toolName === "delete_file");
+    const hasSuccessfulDelete = deleteResults.some(
+      (result) => (getToolOutput(result) as { ok?: boolean } | undefined)?.ok === true,
+    );
+    const hasMutation = hasSuccessfulWrite || hasSuccessfulDelete;
 
     trace?.log("model.step", {
       detail: { stepNumber, toolCalls: toolResults.length, hasListed, hasRead, hasMutation },
