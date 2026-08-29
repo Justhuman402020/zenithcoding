@@ -143,7 +143,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
         const chain = autoFallback ? fullChain : fullChain.slice(0, 1);
 
-        const pick = await trace.time("model.pick", () => pickAvailableModel(chain, providerKeys));
+        const pick = await trace.time("model.pick", () => pickAvailableModel(chain, providerKeys, providerRegistry));
         if (!pick.ok) {
           trace.log("model.unavailable", { status: "error", message: pick.error });
           return fail(
