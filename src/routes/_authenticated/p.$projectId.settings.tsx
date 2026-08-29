@@ -192,6 +192,7 @@ function SettingsPage() {
         </div>
       </div>
 
+      <AiModelPanel />
       <ShareLinksPanel projectId={projectId} />
       <SecretsPanel projectId={projectId} />
 
