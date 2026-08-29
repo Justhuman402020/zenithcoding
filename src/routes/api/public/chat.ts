@@ -291,7 +291,13 @@ The project can be a blank Forge site or an imported GitHub repository. Always i
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          onError: (error) => (error instanceof Error ? error.message : "The AI build failed before it could write files."),
+          onError: (error) => {
+            const message = error instanceof Error ? error.message : String(error ?? "");
+            if (/429|rate.?limit|too many requests/i.test(message)) {
+              return "Groq hit its rate limit mid-build. Wait about a minute and send the message again — Forge will automatically try the next model.";
+            }
+            return message || "The AI build failed before it could write files.";
+          },
         });
       },
     },
