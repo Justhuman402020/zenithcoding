@@ -116,7 +116,7 @@ describe("Groq chat edit flow", () => {
       ],
       stepNumber: 2,
     });
-    expect(later).toEqual({ toolChoice: { type: "required" } });
+    expect(later).toEqual({ toolChoice: "required" });
   });
 
   it("keeps current screenshots but removes stale media and tool payloads", () => {
