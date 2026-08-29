@@ -1198,6 +1198,20 @@ function ProjectEditor() {
                           )}
                         </div>
                       )}
+                      {toolParts
+                        .filter((t: any) => t.type === "tool-request_secret" && (t.output ?? t.result)?.needsInput)
+                        .map((t: any, i: number) => {
+                          const out = (t.output ?? t.result) as any;
+                          return (
+                            <SecretRequestCard
+                              key={`secret-${m.id}-${i}`}
+                              projectId={projectId}
+                              secretKey={out.key}
+                              reason={out.reason}
+                              whereToGet={out.where_to_get}
+                            />
+                          );
+                        })}
                       {m.role === "assistant"
                         ? text && (
                             <div className="prose prose-invert prose-sm max-w-none break-words">
