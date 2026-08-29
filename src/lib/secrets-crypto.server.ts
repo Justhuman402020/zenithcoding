@@ -21,9 +21,20 @@ function b64decode(s: string): Uint8Array {
 }
 
 async function getKey(): Promise<CryptoKey> {
-  const hex = process.env.FORGE_SECRETS_ENCRYPTION_KEY;
-  if (!hex) throw new Error("FORGE_SECRETS_ENCRYPTION_KEY missing");
-  const raw = hexToBytes(hex).slice(0, 32);
+  const secret = process.env.FORGE_SECRETS_ENCRYPTION_KEY;
+  if (!secret) throw new Error("FORGE_SECRETS_ENCRYPTION_KEY missing");
+
+  // Accept any secret: exact 64-char hex is used as-is, anything else is
+  // hashed to a valid 32-byte AES key so importKey never gets a bad length.
+  let raw: Uint8Array;
+  const clean = secret.trim();
+  if (/^[0-9a-f]{64}$/i.test(clean)) {
+    raw = hexToBytes(clean);
+  } else {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clean));
+    raw = new Uint8Array(digest);
+  }
+
   return crypto.subtle.importKey("raw", raw as unknown as BufferSource, { name: "AES-GCM" }, false, [
     "encrypt",
     "decrypt",
