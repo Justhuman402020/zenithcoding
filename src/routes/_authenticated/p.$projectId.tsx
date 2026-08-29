@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { SecretRequestCard } from "@/components/SecretRequestCard";
 import {
   ArrowLeft,
   File as FileIcon,
