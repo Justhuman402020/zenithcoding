@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu } from "lucide-react";
 import { ForgeMark } from "@/components/ForgeMark";
 
-export const Route = createFileRoute("/_authenticated/admin")({
+export const Route = createFileRoute("/_authenticated/admin/")({
   head: () => ({ meta: [{ title: "Forge — Admin" }] }),
   component: AdminPage,
 });
