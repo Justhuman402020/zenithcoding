@@ -23,6 +23,8 @@ type StepLike = { toolResults: Array<{ toolName: string }> };
  * `activeTools` made earlier tool calls disappear from the continuation request
  * and Groq aborted the build before write_file could run.
  */
+type ForcedTool = "list_files" | "read_file" | "write_file";
+
 export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger) {
   return ({ steps, stepNumber }: { steps: StepLike[]; stepNumber: number }) => {
     const toolResults = steps.flatMap((step) => step.toolResults);
@@ -39,10 +41,10 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
     });
 
     if (!needsFileChange) return undefined;
-    if (stepNumber === 0 || !hasListed) return { toolChoice: { type: "tool" as const, toolName: "list_files" } };
+    if (stepNumber === 0 || !hasListed) return { toolChoice: { type: "tool" as const, toolName: "list_files" as ForcedTool } };
     if (!hasRead && !hasMutation && stepNumber < 4)
-      return { toolChoice: { type: "tool" as const, toolName: "read_file" } };
-    if (!hasMutation && stepNumber < 12) return { toolChoice: { type: "tool" as const, toolName: "write_file" } };
+      return { toolChoice: { type: "tool" as const, toolName: "read_file" as ForcedTool } };
+    if (!hasMutation && stepNumber < 12) return { toolChoice: { type: "tool" as const, toolName: "write_file" as ForcedTool } };
     return undefined;
   };
 }

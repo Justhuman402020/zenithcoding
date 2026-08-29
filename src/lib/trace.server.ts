@@ -69,7 +69,7 @@ export function createTrace(params: {
     const batch = pending;
     pending = [];
     inFlight = inFlight.then(async () => {
-      const { error } = await supabaseAdmin.from("chat_traces").insert(batch);
+      const { error } = await supabaseAdmin.from("chat_traces").insert(batch as never);
       if (error) console.error(`[trace ${traceId}] persist failed`, error.message);
     });
     await inFlight;
