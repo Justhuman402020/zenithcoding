@@ -64,15 +64,60 @@ function AdminModelsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [form, setForm] = useState({ label: "", baseUrl: "", apiKey: "" });
+  const [busy, setBusy] = useState<"test" | "save" | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
   const choose = useServerFn(setActiveModel);
   const toggleFallback = useServerFn(setAutoFallback);
+  const testKey = useServerFn(testProviderConnection);
+  const addKey = useServerFn(addProviderKey);
+  const removeKey = useServerFn(removeProviderKey);
 
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["admin", "model-board"],
     queryFn: () => board({}),
   });
+
+  async function onTest() {
+    setBusy("test");
+    setTestResult(null);
+    try {
+      const res = await testKey({ data: { baseUrl: form.baseUrl, apiKey: form.apiKey } });
+      setTestResult(res.ok ? `Works — ${res.modelCount} models found` : `Did not work — ${res.error}`);
+    } catch (e) {
+      setTestResult(e instanceof Error ? e.message : "Could not test that key");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onSave() {
+    setBusy("save");
+    try {
+      const res = await addKey({ data: form });
+      toast.success(`Saved — ${res.modelCount} models added`);
+      setForm({ label: "", baseUrl: "", apiKey: "" });
+      setTestResult(null);
+      refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save that key");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onRemove(id: string, label: string) {
+    try {
+      await removeKey({ data: { id } });
+      toast.success(`${label} removed`);
+      refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove");
+    }
+  }
+
 
   async function activate(provider: string, model: string, label: string) {
     try {
