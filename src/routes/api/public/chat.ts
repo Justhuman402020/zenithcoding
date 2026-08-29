@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
-import { debit, ensureWelcomeGrant } from "@/lib/credits.server";
+import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
 import {
   createGroqProvider,
@@ -65,17 +65,23 @@ export const Route = createFileRoute("/api/public/chat")({
         trace.log("request.authenticated", { detail: { projectId } });
 
         // Ensure the user has a welcome balance, then debit one credit per message.
+        // Admins build for free — their jobs must never be blocked by credits.
         await ensureWelcomeGrant(userId);
-        const debitResult = await debit(userId, 1, `chat:${projectId}`);
-        if (!debitResult.ok) {
-          trace.log("credits.debit", { status: "error", message: "out of credits" });
-          return fail(
-            402,
-            JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Ask Samsung admin to add more credits." }),
-            "application/json",
-          );
+        const unlimited = await hasUnlimitedCredits(userId);
+        if (unlimited) {
+          trace.log("credits.debit", { detail: { unlimited: true } });
+        } else {
+          const debitResult = await debit(userId, 1, `chat:${projectId}`);
+          if (!debitResult.ok) {
+            trace.log("credits.debit", { status: "error", message: "out of credits" });
+            return fail(
+              402,
+              JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Ask Samsung admin to add more credits." }),
+              "application/json",
+            );
+          }
+          trace.log("credits.debit", { detail: { balance: debitResult.balance } });
         }
-        trace.log("credits.debit", { detail: { balance: debitResult.balance } });
 
         // confirm project belongs to user
         const { data: proj } = await supabase
