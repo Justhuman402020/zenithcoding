@@ -2,7 +2,7 @@
 // now, record what each provider reports about remaining quota, and fall back
 // automatically so a coding job never cuts off half way.
 
-import { PROVIDERS, findProvider, type ModelRef } from "./ai-providers";
+import { PROVIDERS, findProvider, type ModelRef, type ProviderOption } from "./ai-providers";
 
 export type ProviderKeys = Record<string, string>;
 
@@ -15,6 +15,20 @@ export function loadProviderKeys(): ProviderKeys {
   }
   return keys;
 }
+
+/** Built-in providers (env keys) plus any provider the admin added in the panel. */
+export async function loadProviderRegistry(): Promise<{ providers: ProviderOption[]; keys: ProviderKeys }> {
+  const keys = loadProviderKeys();
+  const providers: ProviderOption[] = [...PROVIDERS];
+  const { loadCustomProviders } = await import("./custom-providers.server");
+  for (const custom of await loadCustomProviders()) {
+    const { apiKey, ...option } = custom;
+    providers.push(option);
+    keys[option.id] = apiKey;
+  }
+  return { providers, keys };
+}
+
 
 export type QuotaSnapshot = {
   remainingRequests: number | null;
@@ -111,14 +125,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Probes each model in the chain with a tiny request and returns the first one
  * that answers. Rate limited models are skipped (after one Retry-After wait).
  */
-export async function pickAvailableModel(chain: ModelRef[], keys: ProviderKeys): Promise<ModelPick> {
+export async function pickAvailableModel(
+  chain: ModelRef[],
+  keys: ProviderKeys,
+  providers?: ProviderOption[],
+): Promise<ModelPick> {
   let rateLimited = false;
   let lastError: string | null = null;
 
   for (const ref of chain) {
-    const provider = findProvider(ref.provider);
+    const provider = providers?.find((p) => p.id === ref.provider) ?? findProvider(ref.provider);
     const apiKey = keys[ref.provider];
     if (!provider || !apiKey) continue;
+
 
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response;

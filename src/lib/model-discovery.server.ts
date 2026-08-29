@@ -2,8 +2,16 @@
 // that key can actually use, so the admin board shows all of them instead of a
 // short hand-picked list. Results are cached briefly to keep the board snappy.
 
-import { PROVIDERS, findProvider, guessModelMeta, isChatModelId, type ModelOption } from "./ai-providers";
+import {
+  PROVIDERS,
+  findProvider,
+  guessModelMeta,
+  isChatModelId,
+  type ModelOption,
+  type ProviderOption,
+} from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
+
 
 export type DiscoveredModel = ModelOption & { curated: boolean };
 
@@ -20,12 +28,17 @@ export type ProviderQuota = {
   note: string | null;
 };
 
-export async function listProviderModels(providerId: string, apiKey: string): Promise<DiscoveredModel[]> {
-  const provider = findProvider(providerId);
+export async function listProviderModels(
+  providerId: string,
+  apiKey: string,
+  option?: ProviderOption,
+): Promise<DiscoveredModel[]> {
+  const provider = option ?? findProvider(providerId);
   if (!provider) return [];
 
   const cached = cache.get(providerId);
   if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
+
 
   const curated = new Map(provider.models.map((m) => [m.id, m]));
   let ids: string[] = [];
@@ -85,23 +98,26 @@ export async function readProviderQuota(providerId: string, apiKey: string): Pro
   }
 }
 
-export async function discoverAll(keys: ProviderKeys) {
+export async function discoverAll(keys: ProviderKeys, providerList?: ProviderOption[]) {
+  const list = providerList ?? PROVIDERS;
   const entries = await Promise.all(
-    PROVIDERS.map(async (provider) => {
+    list.map(async (provider) => {
       const key = keys[provider.id];
       if (!key) {
         return {
           provider: provider.id,
+          option: provider,
           models: provider.models.map((m) => ({ ...m, curated: true })) as DiscoveredModel[],
           quota: null as ProviderQuota | null,
         };
       }
       const [models, quota] = await Promise.all([
-        listProviderModels(provider.id, key),
+        listProviderModels(provider.id, key, provider),
         readProviderQuota(provider.id, key),
       ]);
-      return { provider: provider.id, models, quota };
+      return { provider: provider.id, option: provider, models, quota };
     }),
   );
+
   return entries;
 }

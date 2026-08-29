@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
-import { PROVIDERS, findProvider } from "./ai-providers";
+import { PROVIDERS } from "./ai-providers";
 
 export type ModelBoardRow = {
   provider: string;
@@ -14,6 +14,12 @@ export type ModelBoardRow = {
   curated: boolean;
   keyConfigured: boolean;
   active: boolean;
+  /** "coding" = text edits, "coding+images" = also understands screenshots. */
+  role: "coding" | "coding+images";
+  /** 1 = used first, 2 = next backup for plain coding jobs, null = not in the chain. */
+  codingRank: number | null;
+  /** Position in the backup chain for questions that include an image. */
+  imageRank: number | null;
   lastStatus: string | null;
   lastError: string | null;
   lastUsedAt: string | null;
@@ -26,6 +32,7 @@ export type ModelBoardRow = {
 export type ProviderSummary = {
   provider: string;
   providerLabel: string;
+  custom: boolean;
   keyConfigured: boolean;
   modelCount: number;
   creditsRemaining: number | null;
@@ -34,19 +41,20 @@ export type ProviderSummary = {
   creditsNote: string | null;
 };
 
+
 export const getModelBoard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdminRole(context);
-    const { loadProviderKeys, readActiveModelRef } = await import("./model-router.server");
+    const { loadProviderRegistry, readActiveModelRef } = await import("./model-router.server");
     const { discoverAll } = await import("./model-discovery.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const keys = loadProviderKeys();
+    const { providers: registry, keys } = await loadProviderRegistry();
     const { ref: active, autoFallback } = await readActiveModelRef();
     const [{ data: statusRows }, discovered] = await Promise.all([
       supabaseAdmin.from("ai_model_status").select("*"),
-      discoverAll(keys),
+      discoverAll(keys, registry),
     ]);
     const statusMap = new Map<string, any>();
     for (const row of statusRows ?? []) statusMap.set(`${row.provider}:${row.model}`, row);
@@ -55,11 +63,14 @@ export const getModelBoard = createServerFn({ method: "GET" })
     const providers: ProviderSummary[] = [];
 
     for (const entry of discovered) {
-      const provider = findProvider(entry.provider)!;
+      const provider = entry.option;
       const keyConfigured = !!keys[entry.provider];
+      const custom = !PROVIDERS.some((p) => p.id === provider.id);
       providers.push({
         provider: provider.id,
         providerLabel: provider.label,
+        custom,
+
         keyConfigured,
         modelCount: entry.models.length,
         creditsRemaining: entry.quota?.remaining ?? null,
@@ -84,6 +95,9 @@ export const getModelBoard = createServerFn({ method: "GET" })
           curated: model.curated,
           keyConfigured,
           active: !!active && active.provider === provider.id && active.model === model.id,
+          role: model.vision ? "coding+images" : "coding",
+          codingRank: null,
+          imageRank: null,
           lastStatus: (status?.last_status as string | null) ?? null,
           lastError: (status?.last_error as string | null) ?? null,
           lastUsedAt: (status?.last_used_at as string | null) ?? null,
@@ -95,8 +109,26 @@ export const getModelBoard = createServerFn({ method: "GET" })
       }
     }
 
+    // Show the exact order Forge will fall through when a model runs low,
+    // both for plain coding jobs and for questions that carry an image.
+    const usable = rows.filter((r) => r.keyConfigured && r.lastStatus !== "unauthorized");
+    const order = (list: ModelBoardRow[]) => {
+      const chain = [...list].sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        if (a.curated !== b.curated) return a.curated ? -1 : 1;
+        const aOut = a.lastStatus === "rate_limited" || a.remainingRequests === 0;
+        const bOut = b.lastStatus === "rate_limited" || b.remainingRequests === 0;
+        if (aOut !== bOut) return aOut ? 1 : -1;
+        return (b.remainingRequests ?? 0) - (a.remainingRequests ?? 0);
+      });
+      return chain.slice(0, 12);
+    };
+    order(usable).forEach((row, i) => (row.codingRank = i + 1));
+    order(usable.filter((r) => r.vision)).forEach((row, i) => (row.imageRank = i + 1));
+
     return { rows, providers, autoFallback, active };
   });
+
 
 export const setActiveModel = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -107,7 +139,10 @@ export const setActiveModel = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdminRole(context);
-    if (!PROVIDERS.some((p) => p.id === data.provider)) throw new Error("Unknown provider");
+    if (!PROVIDERS.some((p) => p.id === data.provider) && !data.provider.startsWith("custom-")) {
+      throw new Error("Unknown provider");
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("ai_model_settings").upsert({
       id: "global",
@@ -132,6 +167,60 @@ export const setAutoFallback = createServerFn({ method: "POST" })
       .from("ai_model_settings")
       .update({ auto_fallback: data.enabled, updated_at: new Date().toISOString(), updated_by: context.userId })
       .eq("id", "global");
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Checks a pasted key by asking the service which models it can reach. */
+export const testProviderConnection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { baseUrl: string; apiKey: string }) =>
+    z.object({ baseUrl: z.string().min(3), apiKey: z.string().min(8) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { normalizeBaseUrl, testProviderKey } = await import("./custom-providers.server");
+    const baseUrl = normalizeBaseUrl(data.baseUrl);
+    const result = await testProviderKey(baseUrl, data.apiKey.trim());
+    return { ...result, baseUrl, models: result.models.slice(0, 50), modelCount: result.models.length };
+  });
+
+/** Saves a new provider (encrypted key) so it joins the automatic switching chain. */
+export const addProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { label: string; baseUrl: string; apiKey: string }) =>
+    z.object({ label: z.string().min(2), baseUrl: z.string().min(3), apiKey: z.string().min(8) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { normalizeBaseUrl, slugifyProviderId, testProviderKey } = await import("./custom-providers.server");
+    const { encryptSecret } = await import("./secrets-crypto.server");
+    const baseUrl = normalizeBaseUrl(data.baseUrl);
+    const apiKey = data.apiKey.trim();
+    const test = await testProviderKey(baseUrl, apiKey);
+    if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const id = slugifyProviderId(data.label);
+    const { error } = await supabaseAdmin.from("custom_ai_providers").upsert({
+      id,
+      label: data.label.trim(),
+      base_url: baseUrl,
+      key_encrypted: await encryptSecret(apiKey),
+      created_by: context.userId,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true, id, modelCount: test.models.length };
+  });
+
+export const removeProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("custom_ai_providers").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

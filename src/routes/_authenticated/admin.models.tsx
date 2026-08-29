@@ -3,10 +3,27 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getModelBoard, setActiveModel, setAutoFallback } from "@/lib/admin-models.functions";
+import {
+  addProviderKey,
+  getModelBoard,
+  removeProviderKey,
+  setActiveModel,
+  setAutoFallback,
+  testProviderConnection,
+} from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Cpu, Loader2, ShieldAlert, CheckCircle2, KeyRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Cpu,
+  Loader2,
+  ShieldAlert,
+  CheckCircle2,
+  KeyRound,
+  PlusCircle,
+  Trash2,
+} from "lucide-react";
+
 
 
 export const Route = createFileRoute("/_authenticated/admin/models")({
@@ -47,15 +64,60 @@ function AdminModelsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [form, setForm] = useState({ label: "", baseUrl: "", apiKey: "" });
+  const [busy, setBusy] = useState<"test" | "save" | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
   const choose = useServerFn(setActiveModel);
   const toggleFallback = useServerFn(setAutoFallback);
+  const testKey = useServerFn(testProviderConnection);
+  const addKey = useServerFn(addProviderKey);
+  const removeKey = useServerFn(removeProviderKey);
 
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["admin", "model-board"],
     queryFn: () => board({}),
   });
+
+  async function onTest() {
+    setBusy("test");
+    setTestResult(null);
+    try {
+      const res = await testKey({ data: { baseUrl: form.baseUrl, apiKey: form.apiKey } });
+      setTestResult(res.ok ? `Works — ${res.modelCount} models found` : `Did not work — ${res.error}`);
+    } catch (e) {
+      setTestResult(e instanceof Error ? e.message : "Could not test that key");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onSave() {
+    setBusy("save");
+    try {
+      const res = await addKey({ data: form });
+      toast.success(`Saved — ${res.modelCount} models added`);
+      setForm({ label: "", baseUrl: "", apiKey: "" });
+      setTestResult(null);
+      refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save that key");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onRemove(id: string, label: string) {
+    try {
+      await removeKey({ data: { id } });
+      toast.success(`${label} removed`);
+      refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove");
+    }
+  }
+
 
   async function activate(provider: string, model: string, label: string) {
     try {
@@ -124,11 +186,38 @@ function AdminModelsPage() {
         </Button>
       </div>
 
+      <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <PlusCircle className="h-4 w-4 text-primary" />
+          <div className="font-medium text-sm">Add a new key</div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Type the website name, paste its address and your API key, then press Test. If it works, save it and its
+          models join the list below and the automatic switching straight away.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Input placeholder="Name (e.g. Together)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+          <Input placeholder="https://api.together.xyz/v1" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
+          <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null}>
+            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
+          </Button>
+          <Button size="sm" onClick={onSave} disabled={busy !== null}>
+            {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
+          </Button>
+          {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
+        </div>
+      </div>
+
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search every model on your keys…"
       />
+
+
 
 
 
@@ -157,24 +246,48 @@ function AdminModelsPage() {
                     {summary?.creditsNote ? ` · ${summary.creditsNote}` : ""}
                   </div>
                 </div>
-                <span
-                  className={`inline-flex items-center gap-1 text-xs shrink-0 ${
-                    rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
-                  }`}
-                >
-                  <KeyRound className="h-3 w-3" /> {rows[0]?.keyConfigured ? "API key saved" : "No API key"}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${
+                      rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
+                    }`}
+                  >
+                    <KeyRound className="h-3 w-3" /> {rows[0]?.keyConfigured ? "API key saved" : "No API key"}
+                  </span>
+                  {summary?.custom ? (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => onRemove(providerId, summary.providerLabel)}
+                      aria-label={`Remove ${summary.providerLabel}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <div className="divide-y">
                 {visible.map((row) => (
 
                   <div key={`${row.provider}:${row.model}`} className="p-4 flex items-center gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium truncate">{row.label}</span>
-                        {row.vision ? (
-                          <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">images</span>
+                        <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
+                          {row.role === "coding+images" ? "coding + understands images" : "coding only"}
+                        </span>
+                        {row.codingRank ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary">
+                            coding #{row.codingRank}
+                          </span>
                         ) : null}
+                        {row.imageRank ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
+                            image questions #{row.imageRank}
+                          </span>
+                        ) : null}
+
                         {row.active ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-primary">
                             <CheckCircle2 className="h-3 w-3" /> Active

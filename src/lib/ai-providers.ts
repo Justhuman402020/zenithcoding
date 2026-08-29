@@ -115,7 +115,7 @@ export function parseModelKey(value: string | null | undefined): ModelRef | null
   if (idx <= 0) return null;
   const provider = value.slice(0, idx);
   const model = value.slice(idx + 1);
-  if (!model || !findProvider(provider)) return null;
+  if (!model || (!findProvider(provider) && !provider.startsWith("custom-"))) return null;
   return { provider, model };
 }
 
