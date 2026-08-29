@@ -197,6 +197,8 @@ function SettingsPage() {
       <AiModelPanel />
       <ShareLinksPanel projectId={projectId} />
       <SecretsPanel projectId={projectId} />
+      <TracePanel projectId={projectId} />
+
 
       <div className="rounded-xl border p-5 space-y-3">
         <div>
