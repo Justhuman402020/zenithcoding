@@ -517,7 +517,8 @@ function ProjectEditor() {
     if (initialMessages.length > 0) { autoSentRef.current = true; return; }
     autoSentRef.current = true;
     (async () => {
-      await sendMessage({ text: initialPrompt });
+      // Persist the user message FIRST so chat history keeps the right order
+      // (sendMessage only resolves once the assistant stream finishes).
       const { data: userRes } = await supabase.auth.getUser();
       if (userRes.user) {
         await supabase.from("chat_messages").insert({
@@ -527,8 +528,10 @@ function ProjectEditor() {
           content: initialPrompt,
         });
       }
+      await sendMessage({ text: initialPrompt });
       navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
     })();
+
   }, [initialPrompt, chatReady, token, isStreaming, initialMessages.length, sendMessage, projectId, navigate]);
 
   useEffect(() => {
