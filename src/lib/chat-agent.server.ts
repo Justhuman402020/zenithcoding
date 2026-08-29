@@ -97,10 +97,13 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
     });
 
     if (!needsFileChange) return undefined;
+    // Only ever force list_files. Forcing a SPECIFIC later tool (read_file /
+    // write_file) hard-fails the whole stream when the model legitimately
+    // wants a different one ("tool call validation failed"), which is what cut
+    // replies off with no answer. "required" keeps the agent using tools until
+    // a write lands, but lets it pick which one.
     if (stepNumber === 0 || !hasListed) return { toolChoice: { type: "tool" as const, toolName: "list_files" as ForcedTool } };
-    if (!hasRead && !hasMutation && stepNumber < 4)
-      return { toolChoice: { type: "tool" as const, toolName: "read_file" as ForcedTool } };
-    if (!hasMutation && stepNumber < 12) return { toolChoice: { type: "tool" as const, toolName: "write_file" as ForcedTool } };
+    if (!hasMutation && stepNumber < 12) return { toolChoice: { type: "required" as const } };
     return undefined;
   };
 }
