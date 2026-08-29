@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getModelBoard, setActiveModel, setAutoFallback } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ArrowLeft, Cpu, Loader2, ShieldAlert, CheckCircle2, KeyRound } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/admin/models")({
   head: () => ({
@@ -42,9 +45,12 @@ function statusLabel(status: string | null) {
 
 function AdminModelsPage() {
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const board = useServerFn(getModelBoard);
   const choose = useServerFn(setActiveModel);
   const toggleFallback = useServerFn(setAutoFallback);
+
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["admin", "model-board"],
@@ -73,10 +79,13 @@ function AdminModelsPage() {
 
   const groups = new Map<string, NonNullable<typeof data>["rows"]>();
   for (const row of data?.rows ?? []) {
-    const list = groups.get(row.providerLabel) ?? [];
+    if (query && !`${row.label} ${row.model}`.toLowerCase().includes(query.toLowerCase())) continue;
+    const list = groups.get(row.provider) ?? [];
     list.push(row);
-    groups.set(row.providerLabel, list);
+    groups.set(row.provider, list);
   }
+  const summaries = new Map((data?.providers ?? []).map((p) => [p.provider, p]));
+
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-6">
@@ -115,18 +124,41 @@ function AdminModelsPage() {
         </Button>
       </div>
 
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search every model on your keys…"
+      />
+
+
+
       {isLoading ? (
         <div className="py-16 grid place-items-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : (
         <div className="space-y-6">
-          {[...groups.entries()].map(([providerLabel, rows]) => (
-            <div key={providerLabel} className="rounded-xl border overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40">
-                <span className="font-semibold text-sm">{providerLabel}</span>
+          {[...groups.entries()].map(([providerId, rows]) => {
+            const summary = summaries.get(providerId);
+            const expanded = open[providerId] ?? false;
+            const visible = expanded || query ? rows : rows.slice(0, 6);
+            return (
+            <div key={providerId} className="rounded-xl border overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 gap-3">
+                <div className="min-w-0">
+                  <span className="font-semibold text-sm">{summary?.providerLabel ?? providerId}</span>
+                  <div className="text-[11px] text-muted-foreground">
+                    {summary?.modelCount ?? rows.length} models on this key
+                    {summary?.creditsRemaining != null
+                      ? ` · $${summary.creditsRemaining.toFixed(2)} credit left`
+                      : summary?.creditsUsed != null
+                        ? ` · $${summary.creditsUsed.toFixed(2)} used`
+                        : ""}
+                    {summary?.creditsNote ? ` · ${summary.creditsNote}` : ""}
+                  </div>
+                </div>
                 <span
-                  className={`inline-flex items-center gap-1 text-xs ${
+                  className={`inline-flex items-center gap-1 text-xs shrink-0 ${
                     rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
                   }`}
                 >
@@ -134,7 +166,8 @@ function AdminModelsPage() {
                 </span>
               </div>
               <div className="divide-y">
-                {rows.map((row) => (
+                {visible.map((row) => (
+
                   <div key={`${row.provider}:${row.model}`} className="p-4 flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -174,9 +207,19 @@ function AdminModelsPage() {
                   </div>
                 ))}
               </div>
+              {rows.length > visible.length || (expanded && !query) ? (
+                <button
+                  className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t"
+                  onClick={() => setOpen((prev) => ({ ...prev, [providerId]: !expanded }))}
+                >
+                  {expanded ? "Show fewer models" : `Show all ${rows.length} models`}
+                </button>
+              ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
+
       )}
     </div>
   );

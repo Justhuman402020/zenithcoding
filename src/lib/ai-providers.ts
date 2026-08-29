@@ -108,13 +108,15 @@ export function modelKey(ref: ModelRef) {
   return `${ref.provider}:${ref.model}`;
 }
 
+/** Accepts any model id belonging to a known provider (live-discovered ones included). */
 export function parseModelKey(value: string | null | undefined): ModelRef | null {
   if (!value) return null;
   const idx = value.indexOf(":");
   if (idx <= 0) return null;
   const provider = value.slice(0, idx);
   const model = value.slice(idx + 1);
-  return findModel(provider, model) ? { provider, model } : null;
+  if (!model || !findProvider(provider)) return null;
+  return { provider, model };
 }
 
 export function findProvider(id: string) {
@@ -123,6 +125,27 @@ export function findProvider(id: string) {
 
 export function findModel(provider: string, model: string) {
   return findProvider(provider)?.models.find((m) => m.id === model);
+}
+
+const VISION_HINT = /(vl|vision|gemini|pixtral|llava|maverick|scout|multimodal|image|omni|gpt-4o|qwen3\.\d)/i;
+const NON_CHAT_HINT =
+  /(whisper|tts|embed|embedding|rerank|guard|moderation|safety|bge|clip|stable-diffusion|flux|sdxl|image-gen|transcribe|speech|audio|prompt-guard)/i;
+
+/** Best-effort capabilities for a model we discovered from a provider's API. */
+export function guessModelMeta(provider: string, id: string): ModelOption {
+  const known = findModel(provider, id);
+  if (known) return known;
+  return {
+    id,
+    label: id,
+    hint: "Discovered from your API key.",
+    vision: VISION_HINT.test(id),
+    tools: !NON_CHAT_HINT.test(id),
+  };
+}
+
+export function isChatModelId(id: string) {
+  return !NON_CHAT_HINT.test(id);
 }
 
 export function allModelRefs(): Array<ModelRef & ModelOption & { providerLabel: string }> {
@@ -140,7 +163,8 @@ export function allModelRefs(): Array<ModelRef & ModelOption & { providerLabel: 
  * Preferred model first, then every other usable model as automatic fallback,
  * so a job never cuts off when one provider runs out. `availableProviders`
  * filters out providers with no API key configured. When the message carries
- * images only vision models are used.
+ * images only vision models are used. The preferred model is always kept
+ * first, even when it was discovered live rather than curated here.
  */
 export function buildModelChain(
   preferred: ModelRef | null,
@@ -153,20 +177,23 @@ export function buildModelChain(
       (!opts.availableProviders || opts.availableProviders.includes(entry.provider)),
   );
   const chain = usable.map((entry) => ({ provider: entry.provider, model: entry.model }));
-  const preferredOk =
-    preferred && chain.some((ref) => ref.provider === preferred.provider && ref.model === preferred.model);
-  if (!preferredOk) return chain;
+  if (!preferred) return chain;
+  const providerOk = !opts.availableProviders || opts.availableProviders.includes(preferred.provider);
+  const meta = guessModelMeta(preferred.provider, preferred.model);
+  const preferredUsable = providerOk && meta.tools && (!opts.vision || meta.vision);
+  if (!preferredUsable) return chain;
   return [
-    preferred!,
-    ...chain.filter((ref) => !(ref.provider === preferred!.provider && ref.model === preferred!.model)),
+    preferred,
+    ...chain.filter((ref) => !(ref.provider === preferred.provider && ref.model === preferred.model)),
   ];
 }
 
 export function modelSupportsVision(ref: ModelRef) {
-  return findModel(ref.provider, ref.model)?.vision ?? false;
+  return guessModelMeta(ref.provider, ref.model).vision;
 }
 
 export function readStoredModelRef(): ModelRef | null {
   if (typeof window === "undefined") return null;
   return parseModelKey(window.localStorage.getItem(MODEL_STORAGE_KEY));
 }
+
