@@ -190,3 +190,65 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
     }),
   };
 }
+
+export type SecretStore = {
+  listKeys: () => Promise<string[]>;
+};
+
+/** Reads which API keys the project already has saved (names only, never values). */
+export function createSupabaseSecretStore(supabase: SupabaseLike, projectId: string): SecretStore {
+  return {
+    async listKeys() {
+      const { data } = await supabase.from("project_secrets").select("key").eq("project_id", projectId);
+      return (data ?? []).map((row: { key: string }) => row.key);
+    },
+  };
+}
+
+/**
+ * Lets the agent ask the user for an API key instead of failing or writing a
+ * fake placeholder. The chat UI turns a `needsInput` result into a secure
+ * paste box; the value is saved encrypted in the project's secrets.
+ */
+export function createSecretTools(store: SecretStore, trace?: TraceLogger) {
+  return {
+    list_secrets: tool({
+      description:
+        "List the names of API keys/secrets already saved for this project (values are never shown). Call this before assuming a key is missing.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const keys = await store.listKeys();
+        trace?.log("tool.list_secrets", { detail: { count: keys.length } });
+        return { keys };
+      },
+    }),
+    request_secret: tool({
+      description:
+        "Ask the user to paste an API key or secret this feature needs. Shows the user a secure paste box in chat. Use SCREAMING_SNAKE_CASE names like OPENAI_API_KEY or STRIPE_SECRET_KEY.",
+      inputSchema: z.object({
+        key: z.string().describe("Secret name, e.g. OPENAI_API_KEY"),
+        reason: z.string().describe("One plain-English sentence explaining what it is used for"),
+        where_to_get: z.string().optional().describe("Where the user can find/create this key"),
+      }),
+      execute: async ({ key, reason, where_to_get }) => {
+        const name = key.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+        const existing = await store.listKeys();
+        if (existing.includes(name)) {
+          trace?.log("tool.request_secret", { detail: { key: name, alreadySaved: true } });
+          return { key: name, alreadySaved: true, needsInput: false, message: `${name} is already saved for this project.` };
+        }
+        trace?.log("tool.request_secret", { detail: { key: name, alreadySaved: false } });
+        return {
+          key: name,
+          alreadySaved: false,
+          needsInput: true,
+          reason,
+          where_to_get: where_to_get ?? null,
+          message:
+            `A secure paste box for ${name} is now shown to the user in the chat. Continue building the feature and read the key from the project's secrets at runtime — never hardcode a placeholder value.`,
+        };
+      },
+    }),
+  };
+}
+
