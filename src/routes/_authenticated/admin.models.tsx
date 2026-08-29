@@ -124,11 +124,38 @@ function AdminModelsPage() {
         </Button>
       </div>
 
+      <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <PlusCircle className="h-4 w-4 text-primary" />
+          <div className="font-medium text-sm">Add a new key</div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Type the website name, paste its address and your API key, then press Test. If it works, save it and its
+          models join the list below and the automatic switching straight away.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Input placeholder="Name (e.g. Together)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+          <Input placeholder="https://api.together.xyz/v1" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
+          <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null}>
+            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
+          </Button>
+          <Button size="sm" onClick={onSave} disabled={busy !== null}>
+            {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
+          </Button>
+          {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
+        </div>
+      </div>
+
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search every model on your keys…"
       />
+
+
 
 
 
