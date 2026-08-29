@@ -12,6 +12,16 @@ export function createGroqProvider(apiKey: string) {
     name: "groq",
     baseURL: "https://api.groq.com/openai/v1",
     headers: { Authorization: `Bearer ${apiKey}` },
+    transformRequestBody: (body) => ({
+      ...body,
+      messages: Array.isArray(body.messages)
+        ? body.messages.map((message: unknown) => {
+            if (!message || typeof message !== "object") return message;
+            const { reasoning_content: _unsupportedReasoning, ...supportedMessage } = message as Record<string, unknown>;
+            return supportedMessage;
+          })
+        : body.messages,
+    }),
   });
 }
 

@@ -121,6 +121,16 @@ function formatRelativeTime(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
+function getChatErrorMessage(error: Error): string {
+  try {
+    const parsed = JSON.parse(error.message) as { message?: unknown };
+    if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+  } catch {
+    // Plain-text and stream errors are already suitable for display.
+  }
+  return error.message || "The AI build failed. Please try again.";
+}
+
 async function sampleVideoFrames(file: File, maxFrames = 4): Promise<AttachmentFrame[]> {
   const objectUrl = URL.createObjectURL(file);
   try {
@@ -464,7 +474,7 @@ function ProjectEditor() {
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(getChatErrorMessage(err)),
     onFinish: () => {
       // AI may have written files via tools
       refreshFiles();
