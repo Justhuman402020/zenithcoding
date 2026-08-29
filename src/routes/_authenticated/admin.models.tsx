@@ -246,24 +246,48 @@ function AdminModelsPage() {
                     {summary?.creditsNote ? ` · ${summary.creditsNote}` : ""}
                   </div>
                 </div>
-                <span
-                  className={`inline-flex items-center gap-1 text-xs shrink-0 ${
-                    rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
-                  }`}
-                >
-                  <KeyRound className="h-3 w-3" /> {rows[0]?.keyConfigured ? "API key saved" : "No API key"}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${
+                      rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
+                    }`}
+                  >
+                    <KeyRound className="h-3 w-3" /> {rows[0]?.keyConfigured ? "API key saved" : "No API key"}
+                  </span>
+                  {summary?.custom ? (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => onRemove(providerId, summary.providerLabel)}
+                      aria-label={`Remove ${summary.providerLabel}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               <div className="divide-y">
                 {visible.map((row) => (
 
                   <div key={`${row.provider}:${row.model}`} className="p-4 flex items-center gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium truncate">{row.label}</span>
-                        {row.vision ? (
-                          <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">images</span>
+                        <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
+                          {row.role === "coding+images" ? "coding + understands images" : "coding only"}
+                        </span>
+                        {row.codingRank ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary">
+                            coding #{row.codingRank}
+                          </span>
                         ) : null}
+                        {row.imageRank ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
+                            image questions #{row.imageRank}
+                          </span>
+                        ) : null}
+
                         {row.active ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-primary">
                             <CheckCircle2 className="h-3 w-3" /> Active
