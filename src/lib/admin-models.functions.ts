@@ -38,15 +38,15 @@ export const getModelBoard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdminRole(context);
-    const { loadProviderKeys, readActiveModelRef } = await import("./model-router.server");
+    const { loadProviderRegistry, readActiveModelRef } = await import("./model-router.server");
     const { discoverAll } = await import("./model-discovery.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const keys = loadProviderKeys();
+    const { providers: registry, keys } = await loadProviderRegistry();
     const { ref: active, autoFallback } = await readActiveModelRef();
     const [{ data: statusRows }, discovered] = await Promise.all([
       supabaseAdmin.from("ai_model_status").select("*"),
-      discoverAll(keys),
+      discoverAll(keys, registry),
     ]);
     const statusMap = new Map<string, any>();
     for (const row of statusRows ?? []) statusMap.set(`${row.provider}:${row.model}`, row);
@@ -55,11 +55,14 @@ export const getModelBoard = createServerFn({ method: "GET" })
     const providers: ProviderSummary[] = [];
 
     for (const entry of discovered) {
-      const provider = findProvider(entry.provider)!;
+      const provider = entry.option;
       const keyConfigured = !!keys[entry.provider];
+      const custom = !PROVIDERS.some((p) => p.id === provider.id);
       providers.push({
         provider: provider.id,
         providerLabel: provider.label,
+        custom,
+
         keyConfigured,
         modelCount: entry.models.length,
         creditsRemaining: entry.quota?.remaining ?? null,
