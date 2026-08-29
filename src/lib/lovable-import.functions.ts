@@ -73,7 +73,7 @@ export const importLovableProject = createServerFn({ method: "POST" })
 </head>
 <body>
 <main>
-  <span class="tag">Imported from Lovable · ready to edit</span>
+  
   <h1>${data.name}</h1>
   <p>${desc}</p>
   <a class="cta" href="#">Start editing →</a>
