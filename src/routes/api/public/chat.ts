@@ -6,7 +6,9 @@ import { createTrace } from "@/lib/trace.server";
 import {
   createGroqProvider,
   createProjectFileTools,
+  createSecretTools,
   createSupabaseFileStore,
+  createSupabaseSecretStore,
 } from "@/lib/chat-tools.server";
 import {
   buildSystemPrompt,
@@ -186,7 +188,10 @@ export const Route = createFileRoute("/api/public/chat")({
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
-        const tools = createProjectFileTools(store, trace);
+        const tools = {
+          ...createProjectFileTools(store, trace),
+          ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
+        };
 
         // A text-only model would 400 on image parts — drop them rather than fail.
         const visionOk = modelSupportsVision(pick.ref);
