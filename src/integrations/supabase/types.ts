@@ -190,6 +190,36 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_ai_providers: {
+        Row: {
+          base_url: string
+          created_at: string
+          created_by: string | null
+          id: string
+          key_encrypted: string
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          base_url: string
+          created_at?: string
+          created_by?: string | null
+          id: string
+          key_encrypted: string
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_encrypted?: string
+          label?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       files: {
         Row: {
           content: string
