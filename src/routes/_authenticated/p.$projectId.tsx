@@ -786,9 +786,16 @@ function ProjectEditor() {
     if (isStreaming) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant" || lastPersistedRef.current.has(last.id)) return;
+    // Messages that came from loaded chat history are ALREADY in the database —
+    // re-inserting them duplicates every reply on each reload and jam-packs the chat.
+    if (initialMessages.some((m) => m.id === last.id)) {
+      lastPersistedRef.current.add(last.id);
+      return;
+    }
     const text = last.parts
       .map((p) => (p.type === "text" ? p.text : ""))
-      .join("")
+      .filter((t) => t.trim())
+      .join("\n\n")
       .trim();
     if (!text) return;
     lastPersistedRef.current.add(last.id);
