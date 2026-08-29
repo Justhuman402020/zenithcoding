@@ -3,10 +3,27 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getModelBoard, setActiveModel, setAutoFallback } from "@/lib/admin-models.functions";
+import {
+  addProviderKey,
+  getModelBoard,
+  removeProviderKey,
+  setActiveModel,
+  setAutoFallback,
+  testProviderConnection,
+} from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Cpu, Loader2, ShieldAlert, CheckCircle2, KeyRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Cpu,
+  Loader2,
+  ShieldAlert,
+  CheckCircle2,
+  KeyRound,
+  PlusCircle,
+  Trash2,
+} from "lucide-react";
+
 
 
 export const Route = createFileRoute("/_authenticated/admin/models")({
