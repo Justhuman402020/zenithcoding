@@ -17,7 +17,7 @@ import {
 
 import { buildModelChain, modelSupportsVision, parseModelKey, type ModelRef } from "@/lib/ai-providers";
 import {
-  loadProviderKeys,
+  loadProviderRegistry,
   pickAvailableModel,
   readActiveModelRef,
   recordModelStatus,
