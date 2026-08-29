@@ -98,23 +98,26 @@ export async function readProviderQuota(providerId: string, apiKey: string): Pro
   }
 }
 
-export async function discoverAll(keys: ProviderKeys) {
+export async function discoverAll(keys: ProviderKeys, providerList?: ProviderOption[]) {
+  const list = providerList ?? PROVIDERS;
   const entries = await Promise.all(
-    PROVIDERS.map(async (provider) => {
+    list.map(async (provider) => {
       const key = keys[provider.id];
       if (!key) {
         return {
           provider: provider.id,
+          option: provider,
           models: provider.models.map((m) => ({ ...m, curated: true })) as DiscoveredModel[],
           quota: null as ProviderQuota | null,
         };
       }
       const [models, quota] = await Promise.all([
-        listProviderModels(provider.id, key),
+        listProviderModels(provider.id, key, provider),
         readProviderQuota(provider.id, key),
       ]);
-      return { provider: provider.id, models, quota };
+      return { provider: provider.id, option: provider, models, quota };
     }),
   );
+
   return entries;
 }
