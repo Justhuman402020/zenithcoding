@@ -42,9 +42,12 @@ function statusLabel(status: string | null) {
 
 function AdminModelsPage() {
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const board = useServerFn(getModelBoard);
   const choose = useServerFn(setActiveModel);
   const toggleFallback = useServerFn(setAutoFallback);
+
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["admin", "model-board"],
