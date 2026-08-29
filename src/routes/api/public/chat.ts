@@ -8,7 +8,12 @@ import {
   createProjectFileTools,
   createSupabaseFileStore,
 } from "@/lib/chat-tools.server";
-import { buildSystemPrompt, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
+import {
+  buildSystemPrompt,
+  compactChatMessages,
+  createPrepareStep,
+  detectFileChangeIntent,
+} from "@/lib/chat-agent.server";
 
 import { buildGroqModelChain, modelSupportsVision } from "@/lib/ai-models";
 
@@ -152,8 +157,12 @@ export const Route = createFileRoute("/api/public/chat")({
           });
         }
 
-        // Does this turn carry images (screenshots, mockups, video frames)?
-        const hasImages = body.messages.some((message) =>
+        // Old image/tool/reasoning parts made every later request larger until
+        // Groq rejected it. Keep recent text context and only this turn's media.
+        const compactMessages = compactChatMessages(body.messages);
+
+        // Does the current turn carry images (screenshots, mockups, video frames)?
+        const hasImages = compactMessages.some((message) =>
           (message.parts ?? []).some(
             (part: any) =>
               (part?.type === "file" || part?.type === "image") &&
@@ -174,7 +183,9 @@ export const Route = createFileRoute("/api/public/chat")({
             "application/json",
           );
         }
-        trace.log("model.selected", { detail: { model: pick.model, hasImages } });
+        trace.log("model.selected", {
+          detail: { model: pick.model, hasImages, inputMessages: body.messages.length, sentMessages: compactMessages.length },
+        });
 
         const groq = createGroqProvider(groqKey);
         const model = groq(pick.model);
@@ -184,8 +195,8 @@ export const Route = createFileRoute("/api/public/chat")({
         // A text-only model would 400 on image parts — drop them rather than fail.
         const visionOk = modelSupportsVision(pick.model);
         const outgoingMessages = visionOk
-          ? body.messages
-          : body.messages.map((message) => ({
+          ? compactMessages
+          : compactMessages.map((message) => ({
               ...message,
               parts: (message.parts ?? []).filter(
                 (part: any) => !(typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")),
@@ -227,6 +238,9 @@ export const Route = createFileRoute("/api/public/chat")({
           headers: traceHeaders,
           onError: (error) => {
             const message = error instanceof Error ? error.message : String(error ?? "");
+            if (/request too large|tokens per minute|TPM/i.test(message)) {
+              return "This request was too large for Groq's free limit. Forge shortened the chat context; please send the instruction once more.";
+            }
             if (/429|rate.?limit|too many requests/i.test(message)) {
               return "Groq hit its rate limit mid-build. Wait about a minute and send the message again — Forge will automatically try the next model.";
             }
