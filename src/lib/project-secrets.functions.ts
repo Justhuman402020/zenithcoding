@@ -1,16 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-async function assertOwnsProject(supabase: any, userId: string, projectId: string) {
-  const { data, error } = await supabase
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error || !data) throw new Error("Project not found");
-}
+import { assertOwnsProject } from "./project-secrets.server";
 
 export const listProjectSecrets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -58,8 +49,9 @@ export const upsertProjectSecret = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwnsProject(context.supabase, context.userId, data.projectId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { encryptSecret } = await import("./secrets-crypto.server");
-    const value_encrypted = await encryptSecret(data.value);
+    const { encryptSecret, decryptSecret } = await import("./secrets-crypto.server");
+    const cleanValue = data.value.trim();
+    const value_encrypted = await encryptSecret(cleanValue);
     const { error } = await supabaseAdmin
       .from("project_secrets")
       .upsert(
@@ -74,7 +66,16 @@ export const upsertProjectSecret = createServerFn({ method: "POST" })
         { onConflict: "project_id,key" },
       );
     if (error) throw new Error(error.message);
-    return { ok: true };
+    const { data: saved, error: verifyError } = await supabaseAdmin
+      .from("project_secrets")
+      .select("value_encrypted")
+      .eq("project_id", data.projectId)
+      .eq("key", data.key)
+      .maybeSingle();
+    if (verifyError || !saved) throw new Error(verifyError?.message ?? "The API key was not saved");
+    const verified = await decryptSecret(saved.value_encrypted);
+    if (verified !== cleanValue) throw new Error("The API key could not be verified after saving");
+    return { ok: true, key: data.key };
   });
 
 export const deleteProjectSecret = createServerFn({ method: "POST" })

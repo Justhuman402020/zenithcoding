@@ -2,22 +2,26 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { KeyRound, Loader2, CheckCircle2, ExternalLink } from "lucide-react";
 import { upsertProjectSecret } from "@/lib/project-secrets.functions";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   projectId: string;
   secretKey: string;
   reason?: string | null;
   whereToGet?: string | null;
+  onSaved?: (key: string) => void;
 };
 
 /**
  * Rendered inline in chat whenever the AI calls `request_secret`. It gives the
  * user the one thing they were missing: a safe place to paste the API key.
  */
-export function SecretRequestCard({ projectId, secretKey, reason, whereToGet }: Props) {
+export function SecretRequestCard({ projectId, secretKey, reason, whereToGet, onSaved }: Props) {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const queryClient = useQueryClient();
 
   async function save() {
     if (!value.trim()) return;
@@ -34,6 +38,8 @@ export function SecretRequestCard({ projectId, secretKey, reason, whereToGet }: 
       });
       setSaved(true);
       setValue("");
+      await queryClient.invalidateQueries({ queryKey: ["project-secrets", projectId] });
+      onSaved?.(secretKey);
       toast.success(`${secretKey} saved securely`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save that key");
@@ -75,15 +81,15 @@ export function SecretRequestCard({ projectId, secretKey, reason, whereToGet }: 
           placeholder={`Paste ${secretKey} here`}
           className="flex-1 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm outline-none focus:border-primary"
         />
-        <button
+        <Button
           type="button"
           onClick={save}
           disabled={saving || !value.trim()}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          className="shrink-0"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save
-        </button>
+        </Button>
       </div>
       <p className="text-[11px] text-muted-foreground/70">
         Stored encrypted in this project's Settings → Secrets. It is never shown in chat or in your code.
