@@ -14,6 +14,7 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 
 import { createGroqProvider, createMemoryFileStore, createProjectFileTools } from "@/lib/chat-tools.server";
 import { compactChatMessages, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
+import { buildFollowUpSuggestion, detectSecretIntent } from "@/lib/chat-followups";
 
 type ChatMessage = { role: string; content?: unknown; name?: string; tool_call_id?: string };
 
@@ -96,6 +97,17 @@ describe("Groq chat edit flow", () => {
       ),
     ).toBe(false);
     expect(detectFileChangeIntent("Describe what the attached image shows")).toBe(false);
+  });
+
+  it("detects secure API-key paste requests without waiting for the model", () => {
+    expect(detectSecretIntent("I want to paste my Groq api key")?.key).toBe("GROQ_API_KEY");
+    expect(detectSecretIntent("let me add a Google AI Studio key")?.key).toBe("GOOGLE_AI_STUDIO_API_KEY");
+    expect(detectSecretIntent("make the header larger")).toBeNull();
+  });
+
+  it("creates a contextual next-build suggestion", () => {
+    expect(buildFollowUpSuggestion("change the home menu", ["index.html"])).toContain("home menu");
+    expect(buildFollowUpSuggestion("connect an api key", ["app.js"])).toContain("saved key");
   });
 
   it("never forces a specific tool after list_files", () => {

@@ -127,7 +127,7 @@ export function findModel(provider: string, model: string) {
   return findProvider(provider)?.models.find((m) => m.id === model);
 }
 
-const VISION_HINT = /(vl|vision|gemini|pixtral|llava|maverick|scout|multimodal|image|omni|gpt-4o|qwen3\.\d)/i;
+const VISION_HINT = /(?:^|[-_/.])(vl|vision|gemini|pixtral|llava|maverick|scout|multimodal|image|omni)(?:$|[-_/.])|gpt-4o|qwen[^/]*(?:vl|vision)/i;
 const NON_CHAT_HINT =
   /(whisper|tts|embed|embedding|rerank|guard|moderation|safety|bge|clip|stable-diffusion|flux|sdxl|image-gen|transcribe|speech|audio|prompt-guard)/i;
 
