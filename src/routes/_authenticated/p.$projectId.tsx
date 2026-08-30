@@ -4,6 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
+import { buildFollowUpSuggestion, detectSecretIntent, type SecretIntent } from "@/lib/chat-followups";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -291,6 +292,8 @@ function ProjectEditor() {
   const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({});
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
+  const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
+  const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -298,6 +301,7 @@ function ProjectEditor() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const refreshedToolResultsRef = useRef<Set<string>>(new Set());
+  const suggestedMessagesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
@@ -493,6 +497,24 @@ function ProjectEditor() {
 
   const isStreaming = status === "submitted" || status === "streaming";
 
+  // Once a real file edit completes, offer one contextual next step based on
+  // that exact request and the files just changed. It is never a static prompt.
+  useEffect(() => {
+    if (isStreaming) return;
+    const assistant = [...messages].reverse().find((message) => message.role === "assistant");
+    if (!assistant || suggestedMessagesRef.current.has(assistant.id)) return;
+    const changedPaths = assistant.parts.flatMap((part: any) => {
+      if (part?.type !== "tool-write_file" || part?.state !== "output-available" || part?.output?.ok !== true) return [];
+      return [String(part.output.path ?? part.input?.path ?? "")].filter(Boolean);
+    });
+    if (changedPaths.length === 0) return;
+    const assistantIndex = messages.findIndex((message) => message.id === assistant.id);
+    const user = messages.slice(0, assistantIndex).reverse().find((message) => message.role === "user");
+    const prompt = user?.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ") ?? "";
+    suggestedMessagesRef.current.add(assistant.id);
+    setNextBuildPrompt(buildFollowUpSuggestion(prompt, changedPaths));
+  }, [messages, isStreaming]);
+
   // Track how long the AI spent "thinking" per assistant message, so we can
   // show "Thought for Xs" once it finishes.
   useEffect(() => {
@@ -583,6 +605,21 @@ function ProjectEditor() {
     const text = input.trim();
     if ((!text && attachments.length === 0) || isStreaming || !token) return;
     setInput("");
+    setNextBuildPrompt(null);
+    const secretIntent = detectSecretIntent(text);
+    if (secretIntent && attachments.length === 0) {
+      setPendingSecret(secretIntent);
+      const { data: userRes } = await supabase.auth.getUser();
+      if (userRes.user) {
+        await supabase.from("chat_messages").insert({
+          project_id: projectId,
+          user_id: userRes.user.id,
+          role: "user",
+          content: text,
+        });
+      }
+      return;
+    }
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
     const filesAtSend = files.map((f) => ({ path: f.path, content: f.content }));
@@ -1299,6 +1336,32 @@ function ProjectEditor() {
                   </div>
                 );
               })()}
+              {pendingSecret && !isStreaming ? (
+                <SecretRequestCard
+                  projectId={projectId}
+                  secretKey={pendingSecret.key}
+                  reason={pendingSecret.reason}
+                  onSaved={(key) => {
+                    setPendingSecret(null);
+                    setInput(`Use my saved ${key} to finish the integration and test one real request`);
+                    setTimeout(() => inputRef.current?.focus(), 50);
+                  }}
+                />
+              ) : null}
+              {nextBuildPrompt && !isStreaming ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInput(nextBuildPrompt);
+                    setNextBuildPrompt(null);
+                    inputRef.current?.focus();
+                  }}
+                  className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left text-sm text-primary hover:bg-primary/10 transition-colors"
+                >
+                  <span className="block text-[10px] uppercase text-muted-foreground mb-1">Continue building</span>
+                  {nextBuildPrompt}
+                </button>
+              ) : null}
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {!isStreaming && (
