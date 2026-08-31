@@ -4,7 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
-import { buildFollowUpSuggestion, detectSecretIntent, type SecretIntent } from "@/lib/chat-followups";
+import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
