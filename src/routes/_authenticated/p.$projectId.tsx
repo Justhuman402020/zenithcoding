@@ -610,20 +610,24 @@ function ProjectEditor() {
     if ((!text && attachments.length === 0) || isStreaming || !token) return;
     setInput("");
     setNextBuildPrompt(null);
-    const secretIntent = detectSecretIntent(text);
+    const pasted = detectPastedApiKey(text);
+    const secretIntent = pasted ?? detectSecretIntent(text);
     if (secretIntent && attachments.length === 0) {
       setPendingSecret(secretIntent);
       const { data: userRes } = await supabase.auth.getUser();
+      // Never store or send the raw key itself.
+      const safeText = pasted ? stripApiKey(text, pasted.value!) || `Save my ${pasted.key}` : text;
       if (userRes.user) {
         await supabase.from("chat_messages").insert({
           project_id: projectId,
           user_id: userRes.user.id,
           role: "user",
-          content: text,
+          content: safeText,
         });
       }
       return;
     }
+
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
     const filesAtSend = files.map((f) => ({ path: f.path, content: f.content }));
