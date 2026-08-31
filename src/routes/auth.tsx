@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
   head: () => ({ meta: [{ title: "Sign in — Forge" }] }),
   component: AuthPage,
 });
