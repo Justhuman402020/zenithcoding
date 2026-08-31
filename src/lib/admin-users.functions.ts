@@ -9,17 +9,32 @@ export const listAllUsers = createServerFn({ method: "GET" })
     await assertAdminRole(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const users: Array<{ id: string; email: string | null; created_at: string; last_sign_in_at: string | null }> = [];
+    const users: Array<{
+      id: string;
+      email: string | null;
+      created_at: string;
+      last_sign_in_at: string | null;
+      email_confirmed_at: string | null;
+      display_name: string | null;
+      phone: string | null;
+      is_admin: boolean;
+    }> = [];
     let page = 1;
     for (;;) {
       const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
       if (error) throw new Error(error.message);
       for (const u of data.users) {
+        const metadata = (u.user_metadata ?? {}) as Record<string, unknown>;
+        const displayName = metadata.display_name ?? metadata.full_name ?? metadata.name;
         users.push({
           id: u.id,
           email: u.email ?? null,
           created_at: u.created_at,
           last_sign_in_at: u.last_sign_in_at ?? null,
+          email_confirmed_at: u.email_confirmed_at ?? null,
+          display_name: typeof displayName === "string" ? displayName.slice(0, 120) : null,
+          phone: u.phone ?? null,
+          is_admin: metadata.is_admin === true || metadata.role === "admin",
         });
       }
       if (data.users.length < 200) break;
@@ -27,24 +42,15 @@ export const listAllUsers = createServerFn({ method: "GET" })
       if (page > 50) break;
     }
 
-    const ids = users.map((u) => u.id);
-    const [{ data: projectRows }, { data: roleRows }] = ids.length
-      ? await Promise.all([
-          supabaseAdmin.from("projects").select("user_id").in("user_id", ids),
-          supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
-        ])
-      : [{ data: [] }, { data: [] }];
-    const counts = new Map<string, number>();
-    for (const r of projectRows ?? []) counts.set(r.user_id as string, (counts.get(r.user_id as string) ?? 0) + 1);
-    const admins = new Set<string>();
-    for (const r of roleRows ?? []) if (r.role === "admin") admins.add(r.user_id as string);
-
     return {
-      users: users.map((u) => ({
-        ...u,
-        project_count: counts.get(u.id) ?? 0,
-        is_admin: admins.has(u.id),
-      })),
+      users: users.map((u) => {
+        const metadata = (u as typeof u & { user_metadata?: Record<string, unknown> }).user_metadata ?? {};
+        return {
+          ...u,
+          project_count: 0,
+          is_admin: metadata.is_admin === true || metadata.role === "admin",
+        };
+      }),
     };
   });
 

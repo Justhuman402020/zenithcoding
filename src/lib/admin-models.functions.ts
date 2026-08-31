@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertAdminRole } from "./admin-auth.server";
+import { assertModelsAdmin, isModelsAdmin } from "./admin-auth.server";
 import { PROVIDERS } from "./ai-providers";
 
 export type ModelBoardRow = {
@@ -29,6 +29,10 @@ export type ModelBoardRow = {
   resetAt: string | null;
 };
 
+export const getModelAccess = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => ({ allowed: await isModelsAdmin(context) }));
+
 export type ProviderSummary = {
   provider: string;
   providerLabel: string;
@@ -45,12 +49,28 @@ export type ProviderSummary = {
 export const getModelBoard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdminRole(context);
+    await assertModelsAdmin(context);
     const { loadProviderRegistry, readActiveModelRef } = await import("./model-router.server");
     const { discoverAll } = await import("./model-discovery.server");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { decryptSecret } = await import("./secrets-crypto.server");
+  const { providerBaseUrlForKey } = await import("./chat-followups");
 
-    const { providers: registry, keys } = await loadProviderRegistry();
+  const { providers: registry, keys } = await loadProviderRegistry();
+  const { data: savedKeys } = await supabaseAdmin
+    .from("project_secrets")
+    .select("key, value_encrypted")
+    .eq("user_id", context.userId);
+  for (const saved of savedKeys ?? []) {
+    const providerId = PROVIDERS.find((provider) => provider.envKey === saved.key)?.id;
+    if (!providerId || keys[providerId] || !providerBaseUrlForKey(saved.key)) continue;
+    try {
+      const value = await decryptSecret(saved.value_encrypted);
+      if (value.trim()) keys[providerId] = value.trim();
+    } catch {
+      // Do not surface secret or decryption details to the browser.
+    }
+  }
     const { ref: active, autoFallback } = await readActiveModelRef();
     const [{ data: statusRows }, discovered] = await Promise.all([
       supabaseAdmin.from("ai_model_status").select("*"),
@@ -138,7 +158,7 @@ export const setActiveModel = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdminRole(context);
+    await assertModelsAdmin(context);
     if (!PROVIDERS.some((p) => p.id === data.provider) && !data.provider.startsWith("custom-")) {
       throw new Error("Unknown provider");
     }
@@ -161,7 +181,7 @@ export const setAutoFallback = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { enabled: boolean }) => z.object({ enabled: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdminRole(context);
+    await assertModelsAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("ai_model_settings")
@@ -178,7 +198,7 @@ export const testProviderConnection = createServerFn({ method: "POST" })
     z.object({ baseUrl: z.string().min(3), apiKey: z.string().min(8) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdminRole(context);
+    await assertModelsAdmin(context);
     const { normalizeBaseUrl, testProviderKey } = await import("./custom-providers.server");
     const baseUrl = normalizeBaseUrl(data.baseUrl);
     const result = await testProviderKey(baseUrl, data.apiKey.trim());
@@ -192,7 +212,7 @@ export const addProviderKey = createServerFn({ method: "POST" })
     z.object({ label: z.string().min(2), baseUrl: z.string().min(3), apiKey: z.string().min(8) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdminRole(context);
+    await assertModelsAdmin(context);
     const { normalizeBaseUrl, slugifyProviderId, testProviderKey } = await import("./custom-providers.server");
     const { encryptSecret } = await import("./secrets-crypto.server");
     const baseUrl = normalizeBaseUrl(data.baseUrl);
@@ -218,7 +238,7 @@ export const removeProviderKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdminRole(context);
+    await assertModelsAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("custom_ai_providers").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
