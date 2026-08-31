@@ -828,36 +828,46 @@ function ProjectEditor() {
     }
   }
 
-  // persist assistant messages when they complete
+  // persist assistant messages when they complete, so leaving and coming back
+  // shows the exact same conversation (each answer once, under its question).
   const lastPersistedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (isStreaming) return;
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "assistant" || lastPersistedRef.current.has(last.id)) return;
-    // Messages that came from loaded chat history are ALREADY in the database —
-    // re-inserting them duplicates every reply on each reload and jam-packs the chat.
-    if (initialMessages.some((m) => m.id === last.id)) {
-      lastPersistedRef.current.add(last.id);
-      return;
+    const pending = messages.filter(
+      (m) =>
+        m.role === "assistant" &&
+        !lastPersistedRef.current.has(m.id) &&
+        // Messages loaded from history are ALREADY stored — re-inserting them
+        // duplicates every reply on each reload and jam-packs the chat.
+        !initialMessages.some((h) => h.id === m.id),
+    );
+    if (pending.length === 0) return;
+    const rows: Array<{ id: string; text: string }> = [];
+    for (const m of pending) {
+      const text = m.parts
+        .map((p) => (p.type === "text" ? p.text : ""))
+        .filter((t) => t.trim())
+        .join("\n\n")
+        .trim();
+      if (!text) continue;
+      lastPersistedRef.current.add(m.id);
+      rows.push({ id: m.id, text });
     }
-    const text = last.parts
-      .map((p) => (p.type === "text" ? p.text : ""))
-      .filter((t) => t.trim())
-      .join("\n\n")
-      .trim();
-    if (!text) return;
-    lastPersistedRef.current.add(last.id);
+    if (rows.length === 0) return;
     (async () => {
       const { data: userRes } = await supabase.auth.getUser();
       if (!userRes.user) return;
-      await supabase.from("chat_messages").insert({
-        project_id: projectId,
-        user_id: userRes.user.id,
-        role: "assistant",
-        content: text,
-      });
+      await supabase.from("chat_messages").insert(
+        rows.map((r) => ({
+          project_id: projectId,
+          user_id: userRes.user!.id,
+          role: "assistant",
+          content: r.text,
+        })),
+      );
     })();
   }, [messages, isStreaming, projectId, initialMessages]);
+
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
