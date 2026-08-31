@@ -497,23 +497,27 @@ function ProjectEditor() {
 
   const isStreaming = status === "submitted" || status === "streaming";
 
-  // Once a real file edit completes, offer one contextual next step based on
-  // that exact request and the files just changed. It is never a static prompt.
+  // After EVERY completed assistant turn, offer one contextual next step based
+  // on that exact request and any files that changed. Never a static prompt.
   useEffect(() => {
     if (isStreaming) return;
     const assistant = [...messages].reverse().find((message) => message.role === "assistant");
     if (!assistant || suggestedMessagesRef.current.has(assistant.id)) return;
+    if (initialMessages.some((m) => m.id === assistant.id)) {
+      suggestedMessagesRef.current.add(assistant.id);
+      return;
+    }
     const changedPaths = assistant.parts.flatMap((part: any) => {
       if (part?.type !== "tool-write_file" || part?.state !== "output-available" || part?.output?.ok !== true) return [];
       return [String(part.output.path ?? part.input?.path ?? "")].filter(Boolean);
     });
-    if (changedPaths.length === 0) return;
     const assistantIndex = messages.findIndex((message) => message.id === assistant.id);
     const user = messages.slice(0, assistantIndex).reverse().find((message) => message.role === "user");
     const prompt = user?.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ") ?? "";
     suggestedMessagesRef.current.add(assistant.id);
     setNextBuildPrompt(buildFollowUpSuggestion(prompt, changedPaths));
-  }, [messages, isStreaming]);
+  }, [messages, isStreaming, initialMessages]);
+
 
   // Track how long the AI spent "thinking" per assistant message, so we can
   // show "Thought for Xs" once it finishes.
