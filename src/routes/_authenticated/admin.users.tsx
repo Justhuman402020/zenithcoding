@@ -26,6 +26,9 @@ type Row = {
   email: string | null;
   created_at: string;
   last_sign_in_at: string | null;
+  email_confirmed_at: string | null;
+  display_name: string | null;
+  phone: string | null;
   project_count: number;
   is_admin: boolean;
 };
@@ -133,9 +136,10 @@ function AdminUsersPage() {
     );
   }
 
-  const filtered = rows.filter((r) =>
-    !query.trim() ? true : (r.email ?? "").toLowerCase().includes(query.toLowerCase()),
-  );
+  const filtered = rows.filter((r) => {
+    const term = query.trim().toLowerCase();
+    return !term || [r.email, r.display_name, r.phone].some((value) => value?.toLowerCase().includes(term));
+  });
 
   return (
     <div className="min-h-[100dvh] bg-background">
@@ -186,15 +190,22 @@ function AdminUsersPage() {
                 <li key={u.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium truncate">{u.email ?? "(no email)"}</span>
+                      <span className="font-medium truncate">{u.display_name || "Unnamed user"}</span>
                       {u.is_admin && (
                         <span className="inline-flex items-center gap-1 text-[10px] rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5">
                           <ShieldCheck className="h-3 w-3" /> admin
                         </span>
                       )}
                     </div>
+                    <div className="text-sm text-muted-foreground truncate">
+                      {u.email ?? "(no email)"}{u.phone ? ` · ${u.phone}` : ""}
+                    </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                      <span>{u.project_count} project{u.project_count === 1 ? "" : "s"}</span>
+                      <span className={u.email_confirmed_at ? "text-emerald-500" : "text-amber-500"}>
+                        {u.email_confirmed_at ? "email verified" : "email unverified"}
+                      </span>
+                      <span>·</span>
+                      <span>joined {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}</span>
                       <span>·</span>
                       <span>joined {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}</span>
                       {u.last_sign_in_at && (
