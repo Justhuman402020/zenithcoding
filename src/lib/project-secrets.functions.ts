@@ -78,6 +78,48 @@ export const upsertProjectSecret = createServerFn({ method: "POST" })
     return { ok: true, key: data.key };
   });
 
+/**
+ * Verifies a SAVED key by decrypting it and asking the provider for its model
+ * list. Proves the key survived encryption + storage and works right now.
+ */
+export const testProjectSecret = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { projectId: string; key: string }) =>
+    z.object({ projectId: z.string().uuid(), key: z.string().min(2) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertOwnsProject(context.supabase, context.userId, data.projectId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { providerBaseUrlForKey } = await import("./chat-followups");
+    const { data: row, error } = await supabaseAdmin
+      .from("project_secrets")
+      .select("value_encrypted")
+      .eq("project_id", data.projectId)
+      .eq("key", data.key)
+      .maybeSingle();
+    if (error || !row) return { ok: false, stored: false, error: "The key is not in storage yet" };
+    let value = "";
+    try {
+      value = await decryptSecret(row.value_encrypted);
+    } catch {
+      return { ok: false, stored: true, error: "The key is stored but could not be decrypted" };
+    }
+    const baseUrl = providerBaseUrlForKey(data.key);
+    if (!baseUrl) {
+      return { ok: true, stored: true, tested: false, message: "Saved securely — ready to use." };
+    }
+    const { testProviderKey } = await import("./custom-providers.server");
+    const result = await testProviderKey(baseUrl, value);
+    return {
+      ok: result.ok,
+      stored: true,
+      tested: true,
+      modelCount: result.models?.length ?? 0,
+      error: result.ok ? undefined : result.error,
+    };
+  });
+
 export const deleteProjectSecret = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { projectId: string; id: string }) =>
