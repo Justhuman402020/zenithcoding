@@ -4,7 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
-import { buildFollowUpSuggestion, detectSecretIntent, type SecretIntent } from "@/lib/chat-followups";
+import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -497,23 +497,27 @@ function ProjectEditor() {
 
   const isStreaming = status === "submitted" || status === "streaming";
 
-  // Once a real file edit completes, offer one contextual next step based on
-  // that exact request and the files just changed. It is never a static prompt.
+  // After EVERY completed assistant turn, offer one contextual next step based
+  // on that exact request and any files that changed. Never a static prompt.
   useEffect(() => {
     if (isStreaming) return;
     const assistant = [...messages].reverse().find((message) => message.role === "assistant");
     if (!assistant || suggestedMessagesRef.current.has(assistant.id)) return;
+    if (initialMessages.some((m) => m.id === assistant.id)) {
+      suggestedMessagesRef.current.add(assistant.id);
+      return;
+    }
     const changedPaths = assistant.parts.flatMap((part: any) => {
       if (part?.type !== "tool-write_file" || part?.state !== "output-available" || part?.output?.ok !== true) return [];
       return [String(part.output.path ?? part.input?.path ?? "")].filter(Boolean);
     });
-    if (changedPaths.length === 0) return;
     const assistantIndex = messages.findIndex((message) => message.id === assistant.id);
     const user = messages.slice(0, assistantIndex).reverse().find((message) => message.role === "user");
     const prompt = user?.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ") ?? "";
     suggestedMessagesRef.current.add(assistant.id);
     setNextBuildPrompt(buildFollowUpSuggestion(prompt, changedPaths));
-  }, [messages, isStreaming]);
+  }, [messages, isStreaming, initialMessages]);
+
 
   // Track how long the AI spent "thinking" per assistant message, so we can
   // show "Thought for Xs" once it finishes.
@@ -606,20 +610,24 @@ function ProjectEditor() {
     if ((!text && attachments.length === 0) || isStreaming || !token) return;
     setInput("");
     setNextBuildPrompt(null);
-    const secretIntent = detectSecretIntent(text);
+    const pasted = detectPastedApiKey(text);
+    const secretIntent = pasted ?? detectSecretIntent(text);
     if (secretIntent && attachments.length === 0) {
       setPendingSecret(secretIntent);
       const { data: userRes } = await supabase.auth.getUser();
+      // Never store or send the raw key itself.
+      const safeText = pasted ? stripApiKey(text, pasted.value!) || `Save my ${pasted.key}` : text;
       if (userRes.user) {
         await supabase.from("chat_messages").insert({
           project_id: projectId,
           user_id: userRes.user.id,
           role: "user",
-          content: text,
+          content: safeText,
         });
       }
       return;
     }
+
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
     const filesAtSend = files.map((f) => ({ path: f.path, content: f.content }));
@@ -824,36 +832,46 @@ function ProjectEditor() {
     }
   }
 
-  // persist assistant messages when they complete
+  // persist assistant messages when they complete, so leaving and coming back
+  // shows the exact same conversation (each answer once, under its question).
   const lastPersistedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (isStreaming) return;
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "assistant" || lastPersistedRef.current.has(last.id)) return;
-    // Messages that came from loaded chat history are ALREADY in the database —
-    // re-inserting them duplicates every reply on each reload and jam-packs the chat.
-    if (initialMessages.some((m) => m.id === last.id)) {
-      lastPersistedRef.current.add(last.id);
-      return;
+    const pending = messages.filter(
+      (m) =>
+        m.role === "assistant" &&
+        !lastPersistedRef.current.has(m.id) &&
+        // Messages loaded from history are ALREADY stored — re-inserting them
+        // duplicates every reply on each reload and jam-packs the chat.
+        !initialMessages.some((h) => h.id === m.id),
+    );
+    if (pending.length === 0) return;
+    const rows: Array<{ id: string; text: string }> = [];
+    for (const m of pending) {
+      const text = m.parts
+        .map((p) => (p.type === "text" ? p.text : ""))
+        .filter((t) => t.trim())
+        .join("\n\n")
+        .trim();
+      if (!text) continue;
+      lastPersistedRef.current.add(m.id);
+      rows.push({ id: m.id, text });
     }
-    const text = last.parts
-      .map((p) => (p.type === "text" ? p.text : ""))
-      .filter((t) => t.trim())
-      .join("\n\n")
-      .trim();
-    if (!text) return;
-    lastPersistedRef.current.add(last.id);
+    if (rows.length === 0) return;
     (async () => {
       const { data: userRes } = await supabase.auth.getUser();
       if (!userRes.user) return;
-      await supabase.from("chat_messages").insert({
-        project_id: projectId,
-        user_id: userRes.user.id,
-        role: "assistant",
-        content: text,
-      });
+      await supabase.from("chat_messages").insert(
+        rows.map((r) => ({
+          project_id: projectId,
+          user_id: userRes.user!.id,
+          role: "assistant",
+          content: r.text,
+        })),
+      );
     })();
   }, [messages, isStreaming, projectId, initialMessages]);
+
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
@@ -1341,12 +1359,13 @@ function ProjectEditor() {
                   projectId={projectId}
                   secretKey={pendingSecret.key}
                   reason={pendingSecret.reason}
+                  initialValue={pendingSecret.value}
                   onSaved={(key) => {
-                    setPendingSecret(null);
                     setInput(`Use my saved ${key} to finish the integration and test one real request`);
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
                 />
+
               ) : null}
               {nextBuildPrompt && !isStreaming ? (
                 <button
@@ -1430,13 +1449,28 @@ function ProjectEditor() {
                 <Textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  // Opening the secure box the moment a key appears means zero
+                  // extra clicks — and the key never reaches the model.
+                  const pasted = detectPastedApiKey(next);
+                  if (pasted) {
+                    setPendingSecret(pasted);
+                    setInput(stripApiKey(next, pasted.value!));
+                    setTab("chat");
+                    return;
+                  }
+                  setInput(next);
+                  const intent = detectSecretIntent(next);
+                  if (intent && !pendingSecret) setPendingSecret(intent);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSend(e as any);
                   }
                 }}
+
                 placeholder="Ask Forge to build…"
                 disabled={!token}
                 rows={1}
