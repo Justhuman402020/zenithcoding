@@ -1359,12 +1359,13 @@ function ProjectEditor() {
                   projectId={projectId}
                   secretKey={pendingSecret.key}
                   reason={pendingSecret.reason}
+                  initialValue={pendingSecret.value}
                   onSaved={(key) => {
-                    setPendingSecret(null);
                     setInput(`Use my saved ${key} to finish the integration and test one real request`);
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
                 />
+
               ) : null}
               {nextBuildPrompt && !isStreaming ? (
                 <button
