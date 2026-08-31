@@ -1448,13 +1448,28 @@ function ProjectEditor() {
                 <Textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  // Opening the secure box the moment a key appears means zero
+                  // extra clicks — and the key never reaches the model.
+                  const pasted = detectPastedApiKey(next);
+                  if (pasted) {
+                    setPendingSecret(pasted);
+                    setInput(stripApiKey(next, pasted.value!));
+                    setTab("chat");
+                    return;
+                  }
+                  setInput(next);
+                  const intent = detectSecretIntent(next);
+                  if (intent && !pendingSecret) setPendingSecret(intent);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSend(e as any);
                   }
                 }}
+
                 placeholder="Ask Forge to build…"
                 disabled={!token}
                 rows={1}
