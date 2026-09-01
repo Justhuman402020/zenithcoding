@@ -73,6 +73,7 @@ function AdminModelsPage() {
     { label: "TokenLLM7.io", baseUrl: "https://api.tokenllm7.io/v1" },
   ];
   const [form, setForm] = useState({ label: PROVIDER_PRESETS[0].label, baseUrl: PROVIDER_PRESETS[0].baseUrl, apiKey: "" });
+  const selectedProvider = PROVIDER_PRESETS.find((provider) => provider.label === form.label) ?? PROVIDER_PRESETS[0];
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
@@ -106,7 +107,7 @@ function AdminModelsPage() {
     try {
       const res = await addKey({ data: form });
       toast.success(`Saved — ${res.modelCount} models added`);
-      setForm({ label: "", baseUrl: "", apiKey: "" });
+      setForm({ label: selectedProvider.label, baseUrl: selectedProvider.baseUrl, apiKey: "" });
       setTestResult(null);
       refetch();
     } catch (e) {
@@ -195,9 +196,12 @@ function AdminModelsPage() {
       </div>
 
       <div className="rounded-xl border p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <PlusCircle className="h-4 w-4 text-primary" />
-          <div className="font-medium text-sm">Add a new key</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <PlusCircle className="h-4 w-4 text-primary" />
+            <div className="font-medium text-sm">Connect a provider</div>
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-primary">Admin only</span>
         </div>
         <p className="text-xs text-muted-foreground">
           Choose a provider, paste your key, and we&apos;ll securely test it and load every model it makes available.
@@ -219,10 +223,10 @@ function AdminModelsPage() {
           <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null}>
+          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || form.apiKey.trim().length < 8}>
             {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={busy !== null}>
+          <Button size="sm" onClick={onSave} disabled={busy !== null || form.apiKey.trim().length < 8}>
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
           </Button>
           {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
