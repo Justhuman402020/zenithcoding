@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, MessageSquare, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -68,6 +68,22 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
       )}
     </div>
   );
+}
+
+function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
+  const fetchRole = useServerFn(getMyRole);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    fetchRole({})
+      .then((s) => setIsAdmin(!!s.isAdmin))
+      .catch(() => setIsAdmin(false))
+      .finally(() => setReady(true));
+  }, []);
+
+  if (!ready || !isAdmin) return null;
+  return <SidebarItem icon={ShieldCheck} label="Admin" onClick={onNavigate} />;
 }
 
 function AdminBadge() {
@@ -628,7 +644,7 @@ function Dashboard() {
             <nav className="px-2 py-2 space-y-0.5">
               <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
               <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
-              <SidebarItem icon={MessageSquare} label="Chats" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
+              <AdminNavItem onNavigate={() => { setSidebarOpen(false); void navigate({ to: "/admin/users" }); }} />
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
               </Link>

@@ -64,7 +64,16 @@ function AdminModelsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [form, setForm] = useState({ label: "", baseUrl: "", apiKey: "" });
+  const PROVIDER_PRESETS = [
+    { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
+    { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+    { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
+    { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+    { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
+    { label: "TokenLLM7.io", baseUrl: "https://api.tokenllm7.io/v1" },
+  ];
+  const [form, setForm] = useState({ label: PROVIDER_PRESETS[0].label, baseUrl: PROVIDER_PRESETS[0].baseUrl, apiKey: "" });
+  const selectedProvider = PROVIDER_PRESETS.find((provider) => provider.label === form.label) ?? PROVIDER_PRESETS[0];
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
@@ -98,7 +107,7 @@ function AdminModelsPage() {
     try {
       const res = await addKey({ data: form });
       toast.success(`Saved — ${res.modelCount} models added`);
-      setForm({ label: "", baseUrl: "", apiKey: "" });
+      setForm({ label: selectedProvider.label, baseUrl: selectedProvider.baseUrl, apiKey: "" });
       setTestResult(null);
       refetch();
     } catch (e) {
@@ -187,24 +196,37 @@ function AdminModelsPage() {
       </div>
 
       <div className="rounded-xl border p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <PlusCircle className="h-4 w-4 text-primary" />
-          <div className="font-medium text-sm">Add a new key</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <PlusCircle className="h-4 w-4 text-primary" />
+            <div className="font-medium text-sm">Connect a provider</div>
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-primary">Admin only</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Type the website name, paste its address and your API key, then press Test. If it works, save it and its
-          models join the list below and the automatic switching straight away.
+          Choose a provider, paste your key, and we&apos;ll securely test it and load every model it makes available.
+          Raw keys are never shown back in the browser.
         </p>
         <div className="grid gap-2 sm:grid-cols-3">
-          <Input placeholder="Name (e.g. Together)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
-          <Input placeholder="https://api.together.xyz/v1" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
+          <select
+            aria-label="AI provider"
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={form.label}
+            onChange={(e) => {
+              const preset = PROVIDER_PRESETS.find((item) => item.label === e.target.value);
+              setForm(preset ? { ...form, ...preset } : { ...form, label: e.target.value });
+            }}
+          >
+            {PROVIDER_PRESETS.map((preset) => <option key={preset.label}>{preset.label}</option>)}
+          </select>
+          <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
           <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null}>
+          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || form.apiKey.trim().length < 8}>
             {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={busy !== null}>
+          <Button size="sm" onClick={onSave} disabled={busy !== null || form.apiKey.trim().length < 8}>
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
           </Button>
           {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
@@ -277,6 +299,9 @@ function AdminModelsPage() {
                         <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
                           {row.role === "coding+images" ? "coding + understands images" : "coding only"}
                         </span>
+                        {/(mini|small|lite|flash|7b|8b|14b|20b|27b|free)/i.test(row.model) ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary">lightweight</span>
+                        ) : null}
                         {row.codingRank ? (
                           <span className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary">
                             coding #{row.codingRank}
