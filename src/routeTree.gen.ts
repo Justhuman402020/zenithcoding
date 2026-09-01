@@ -19,6 +19,7 @@ import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
+import { Route as ApiPublicHftestRouteImport } from './routes/api/public/hftest'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
@@ -80,6 +81,11 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
 const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
   id: '/api/public/push-stream',
   path: '/api/public/push-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicHftestRoute = ApiPublicHftestRouteImport.update({
+  id: '/api/public/hftest',
+  path: '/api/public/hftest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/hftest': typeof ApiPublicHftestRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/hftest': typeof ApiPublicHftestRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/hftest': typeof ApiPublicHftestRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/hftest'
     | '/api/public/push-stream'
     | '/admin/'
     | '/p/$projectId/settings'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/hftest'
     | '/api/public/push-stream'
     | '/admin'
     | '/p/$projectId/settings'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/users'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
+    | '/api/public/hftest'
     | '/api/public/push-stream'
     | '/_authenticated/admin/'
     | '/_authenticated/p/$projectId/settings'
@@ -312,6 +324,7 @@ export interface RootRouteChildren {
   ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
+  ApiPublicHftestRoute: typeof ApiPublicHftestRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
@@ -392,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/push-stream'
       fullPath: '/api/public/push-stream'
       preLoaderRoute: typeof ApiPublicPushStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hftest': {
+      id: '/api/public/hftest'
+      path: '/api/public/hftest'
+      fullPath: '/api/public/hftest'
+      preLoaderRoute: typeof ApiPublicHftestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/chat': {
@@ -532,6 +552,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
+  ApiPublicHftestRoute: ApiPublicHftestRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
