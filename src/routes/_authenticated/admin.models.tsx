@@ -193,13 +193,32 @@ function AdminModelsPage() {
         </div>
         <p className="text-xs text-muted-foreground">
           Type the website name, paste its address and your API key, then press Test. If it works, save it and its
-          models join the list below and the automatic switching straight away.
+          models join the list below and the automatic switching straight away. Using Hugging Face? Tap the button
+          below — it fills the address for you, then paste your access token (starts with <code>hf_</code>).
         </p>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Input placeholder="Name (e.g. Together)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
-          <Input placeholder="https://api.together.xyz/v1" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
-          <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
+            { label: "Together", baseUrl: "https://api.together.xyz/v1" },
+            { label: "Fireworks", baseUrl: "https://api.fireworks.ai/inference/v1" },
+          ].map((preset) => (
+            <Button
+              key={preset.label}
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setForm((f) => ({ ...f, label: preset.label, baseUrl: preset.baseUrl }))}
+            >
+              {preset.label}
+            </Button>
+          ))}
         </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Input placeholder="Name (e.g. Hugging Face)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+          <Input placeholder="https://router.huggingface.co/v1" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
+          <Input placeholder="Paste API key or hf_ access token" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+        </div>
+
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null}>
             {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
