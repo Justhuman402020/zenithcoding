@@ -19,13 +19,32 @@ export function slugifyProviderId(label: string) {
   return slug ? `custom-${slug}` : `custom-${Date.now()}`;
 }
 
+/** Well-known services the admin can name instead of typing a full address. */
+const PROVIDER_ALIASES: Record<string, string> = {
+  huggingface: "https://router.huggingface.co/v1",
+  "hugging-face": "https://router.huggingface.co/v1",
+  hf: "https://router.huggingface.co/v1",
+  "huggingface.co": "https://router.huggingface.co/v1",
+  "www.huggingface.co": "https://router.huggingface.co/v1",
+  together: "https://api.together.xyz/v1",
+  fireworks: "https://api.fireworks.ai/inference/v1",
+};
+
 /** Normalises whatever the admin pastes into an OpenAI-compatible base URL. */
 export function normalizeBaseUrl(input: string) {
   let url = input.trim().replace(/\/+$/, "");
+  const alias = PROVIDER_ALIASES[url.toLowerCase().replace(/^https?:\/\//, "")];
+  if (alias) return alias;
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
   url = url.replace(/\/(chat\/completions|models)$/i, "");
+  // Hugging Face's site/inference hosts are not OpenAI-compatible; the router is.
+  if (/^https?:\/\/(www\.)?(huggingface\.co|api-inference\.huggingface\.co)/i.test(url)) {
+    return "https://router.huggingface.co/v1";
+  }
+  if (/^https?:\/\/router\.huggingface\.co$/i.test(url)) return "https://router.huggingface.co/v1";
   return url;
 }
+
 
 export async function loadCustomProviders(): Promise<Array<ProviderOption & { apiKey: string }>> {
   try {
