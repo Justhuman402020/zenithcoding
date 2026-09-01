@@ -81,7 +81,24 @@ export async function loadCustomProviders(): Promise<Array<ProviderOption & { ap
 /** Verifies a pasted key by listing the models it can reach. */
 export async function testProviderKey(baseURL: string, apiKey: string) {
   try {
+    // Hugging Face's model list is public, so check the access token itself first.
+    if (/huggingface\.co/i.test(baseURL)) {
+      const who = await fetch("https://huggingface.co/api/whoami-v2", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!who.ok) {
+        return {
+          ok: false as const,
+          error:
+            who.status === 401
+              ? "Hugging Face did not accept that access token. Create one at huggingface.co/settings/tokens with 'Make calls to Inference Providers' turned on."
+              : `Hugging Face replied ${who.status}`,
+          models: [],
+        };
+      }
+    }
     const res = await fetch(`${baseURL}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
+
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       return { ok: false as const, error: `${res.status}: ${text.slice(0, 200) || "request rejected"}`, models: [] };
