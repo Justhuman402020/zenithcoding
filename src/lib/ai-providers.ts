@@ -30,6 +30,7 @@ export type ProviderOption = {
 export const PROVIDERS: ProviderOption[] = [
   {
     id: "groq",
+    freeTier: true,
     label: "Groq",
     envKey: "GROQ_API_KEY",
     baseURL: "https://api.groq.com/openai/v1",
@@ -43,6 +44,7 @@ export const PROVIDERS: ProviderOption[] = [
   },
   {
     id: "cerebras",
+    freeTier: true,
     label: "Cerebras",
     envKey: "CEREBRAS_API_KEY",
     baseURL: "https://api.cerebras.ai/v1",
@@ -68,6 +70,7 @@ export const PROVIDERS: ProviderOption[] = [
   },
   {
     id: "google",
+    freeTier: true,
     label: "Google AI Studio",
     envKey: "GOOGLE_AI_STUDIO_API_KEY",
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -92,6 +95,7 @@ export const PROVIDERS: ProviderOption[] = [
   },
   {
     id: "mistral",
+    freeTier: true,
     label: "Mistral",
     envKey: "MISTRAL_API_KEY",
     baseURL: "https://api.mistral.ai/v1",
