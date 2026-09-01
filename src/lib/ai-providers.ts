@@ -141,16 +141,46 @@ const VISION_HINT = /(?:^|[-_/.])(vl|vision|gemini|pixtral|llava|maverick|scout|
 const NON_CHAT_HINT =
   /(whisper|tts|embed|embedding|rerank|guard|moderation|safety|bge|clip|stable-diffusion|flux|sdxl|image-gen|transcribe|speech|audio|prompt-guard)/i;
 
+/** Model families that are always free to call (open weights on free tiers). */
+const FREE_ID_HINT =
+  /(:free$|free-?tier|gpt-oss|gemma|phi-|smol|tinyllama|qwen[23]|llama-?3|llama-?4|mistral-7b|ministral|granite|deepseek|glm-|apertus|nemotron)/i;
+
+/** Small, cheap-to-run models — 32B parameters or less, or explicitly "mini/lite/flash". */
+const LIGHTWEIGHT_HINT =
+  /(?:^|[^0-9])([0-4]?[0-9])\s?b(?:$|[^a-z0-9])|(mini|lite|small|tiny|flash|nano|instant|8b|7b|4b|3b|2b|1\.5b)/i;
+
+/** True when a model can be used at no cost, either by provider free tier or open weights. */
+export function isFreeModel(provider: string, id: string): boolean {
+  const option = findProvider(provider);
+  if (option?.freeTier) return true;
+  return FREE_ID_HINT.test(id);
+}
+
+/** True when a model is small/fast (good when big models are rate limited). */
+export function isLightweightModel(id: string): boolean {
+  const size = /(\d{2,4})\s?b(?:$|[^a-z0-9])/i.exec(id);
+  if (size) return Number(size[1]) <= 32;
+  return LIGHTWEIGHT_HINT.test(id);
+}
+
 /** Best-effort capabilities for a model we discovered from a provider's API. */
 export function guessModelMeta(provider: string, id: string): ModelOption {
   const known = findModel(provider, id);
-  if (known) return known;
+  if (known) {
+    return {
+      ...known,
+      free: known.free ?? isFreeModel(provider, id),
+      lightweight: known.lightweight ?? isLightweightModel(id),
+    };
+  }
   return {
     id,
     label: id,
     hint: "Discovered from your API key.",
     vision: VISION_HINT.test(id),
     tools: !NON_CHAT_HINT.test(id),
+    free: isFreeModel(provider, id),
+    lightweight: isLightweightModel(id),
   };
 }
 
