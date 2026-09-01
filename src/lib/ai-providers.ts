@@ -10,6 +10,10 @@ export type ModelOption = {
   tools: boolean;
   /** Rough free-tier request budget per day, used when the API sends no headers. */
   freeDaily?: number;
+  /** True when this model can be used at no cost on the provider's free tier. */
+  free?: boolean;
+  /** Small/fast model (roughly 32B parameters or less). */
+  lightweight?: boolean;
 };
 
 export type ProviderOption = {
@@ -19,6 +23,8 @@ export type ProviderOption = {
   baseURL: string;
   docs: string;
   models: ModelOption[];
+  /** Provider gives every model away on a free tier (no card needed). */
+  freeTier?: boolean;
 };
 
 export const PROVIDERS: ProviderOption[] = [
