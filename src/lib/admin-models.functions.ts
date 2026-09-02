@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
-import { PROVIDERS } from "./ai-providers";
+import { PROVIDERS, isFreeModel, isLightweightModel } from "./ai-providers";
 
 export type ModelBoardRow = {
   provider: string;
