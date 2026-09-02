@@ -12,6 +12,8 @@ export type ModelBoardRow = {
   hint: string;
   vision: boolean;
   curated: boolean;
+  free: boolean;
+  lightweight: boolean;
   keyConfigured: boolean;
   active: boolean;
   /** "coding" = text edits, "coding+images" = also understands screenshots. */
