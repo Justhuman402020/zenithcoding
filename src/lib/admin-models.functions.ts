@@ -95,6 +95,8 @@ export const getModelBoard = createServerFn({ method: "GET" })
           hint: model.hint,
           vision: model.vision,
           curated: model.curated,
+          free: model.free ?? isFreeModel(provider.id, model.id),
+          lightweight: model.lightweight ?? isLightweightModel(model.id),
           keyConfigured,
           active: !!active && active.provider === provider.id && active.model === model.id,
           role: model.vision ? "coding+images" : "coding",
