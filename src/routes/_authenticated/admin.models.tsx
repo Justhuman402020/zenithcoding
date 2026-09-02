@@ -277,10 +277,11 @@ function AdminModelsPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <span
                     className={`inline-flex items-center gap-1 text-xs ${
-                      rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
+                      (summary?.keyConfigured ?? rows[0]?.keyConfigured) ? "text-emerald-500" : "text-destructive"
                     }`}
                   >
-                    <KeyRound className="h-3 w-3" /> {rows[0]?.keyConfigured ? "API key saved" : "No API key"}
+                    <KeyRound className="h-3 w-3" />{" "}
+                    {(summary?.keyConfigured ?? rows[0]?.keyConfigured) ? "API key saved" : "No API key"}
                   </span>
                   {summary?.custom ? (
                     <Button
