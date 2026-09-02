@@ -254,7 +254,8 @@ function AdminModelsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {[...groups.entries()].map(([providerId, rows]) => {
+          {[...new Set([...summaries.keys(), ...groups.keys()])].map((providerId) => {
+            const rows = groups.get(providerId) ?? [];
             const summary = summaries.get(providerId);
             const expanded = open[providerId] ?? false;
             const visible = expanded || query ? rows : rows.slice(0, 6);
