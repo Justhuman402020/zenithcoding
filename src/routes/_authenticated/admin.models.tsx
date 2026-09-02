@@ -198,6 +198,14 @@ function AdminModelsPage() {
         </p>
         <div className="flex flex-wrap gap-2">
           {[
+            { label: "LLM7", baseUrl: "https://api.llm7.io/v1" },
+            { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+            { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
+            { label: "DeepInfra", baseUrl: "https://api.deepinfra.com/v1/openai" },
+            { label: "Google AI Studio", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai" },
+            { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+            { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
+            { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
             { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
             { label: "Together", baseUrl: "https://api.together.xyz/v1" },
             { label: "Fireworks", baseUrl: "https://api.fireworks.ai/inference/v1" },
