@@ -198,6 +198,14 @@ function AdminModelsPage() {
         </p>
         <div className="flex flex-wrap gap-2">
           {[
+            { label: "LLM7", baseUrl: "https://api.llm7.io/v1" },
+            { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+            { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
+            { label: "DeepInfra", baseUrl: "https://api.deepinfra.com/v1/openai" },
+            { label: "Google AI Studio", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai" },
+            { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
+            { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
+            { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
             { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
             { label: "Together", baseUrl: "https://api.together.xyz/v1" },
             { label: "Fireworks", baseUrl: "https://api.fireworks.ai/inference/v1" },
@@ -246,7 +254,8 @@ function AdminModelsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {[...groups.entries()].map(([providerId, rows]) => {
+          {[...new Set([...summaries.keys(), ...groups.keys()])].map((providerId) => {
+            const rows = groups.get(providerId) ?? [];
             const summary = summaries.get(providerId);
             const expanded = open[providerId] ?? false;
             const visible = expanded || query ? rows : rows.slice(0, 6);
@@ -268,10 +277,11 @@ function AdminModelsPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <span
                     className={`inline-flex items-center gap-1 text-xs ${
-                      rows[0]?.keyConfigured ? "text-emerald-500" : "text-destructive"
+                      (summary?.keyConfigured ?? rows[0]?.keyConfigured) ? "text-emerald-500" : "text-destructive"
                     }`}
                   >
-                    <KeyRound className="h-3 w-3" /> {rows[0]?.keyConfigured ? "API key saved" : "No API key"}
+                    <KeyRound className="h-3 w-3" />{" "}
+                    {(summary?.keyConfigured ?? rows[0]?.keyConfigured) ? "API key saved" : "No API key"}
                   </span>
                   {summary?.custom ? (
                     <Button
@@ -296,6 +306,16 @@ function AdminModelsPage() {
                         <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
                           {row.role === "coding+images" ? "coding + understands images" : "coding only"}
                         </span>
+                        {row.free ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border border-emerald-500/40 text-emerald-500">
+                            free
+                          </span>
+                        ) : null}
+                        {row.lightweight ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
+                            lightweight
+                          </span>
+                        ) : null}
                         {row.codingRank ? (
                           <span className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary">
                             coding #{row.codingRank}

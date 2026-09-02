@@ -94,6 +94,29 @@ export const PROVIDERS: ProviderOption[] = [
     ],
   },
   {
+    id: "llm7",
+    freeTier: true,
+    label: "LLM7",
+    envKey: "LLM7_API_KEY",
+    baseURL: "https://api.llm7.io/v1",
+    docs: "https://token.llm7.io",
+    models: [
+      { id: "gpt-5-mini", label: "GPT-5 Mini (free)", hint: "Free relay model.", vision: true, tools: true, freeDaily: 100 },
+      { id: "deepseek-r1", label: "DeepSeek R1 (free)", hint: "Free reasoning model.", vision: false, tools: true, freeDaily: 100 },
+    ],
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    envKey: "OPENAI_API_KEY",
+    baseURL: "https://api.openai.com/v1",
+    docs: "https://platform.openai.com/api-keys",
+    models: [
+      { id: "gpt-4o-mini", label: "GPT-4o mini", hint: "Cheap and reads images.", vision: true, tools: true },
+      { id: "gpt-4o", label: "GPT-4o", hint: "Strong general model.", vision: true, tools: true },
+    ],
+  },
+  {
     id: "mistral",
     freeTier: true,
     label: "Mistral",

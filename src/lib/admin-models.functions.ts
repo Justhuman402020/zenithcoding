@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
-import { PROVIDERS } from "./ai-providers";
+import { PROVIDERS, isFreeModel, isLightweightModel } from "./ai-providers";
 
 export type ModelBoardRow = {
   provider: string;
@@ -12,6 +12,8 @@ export type ModelBoardRow = {
   hint: string;
   vision: boolean;
   curated: boolean;
+  free: boolean;
+  lightweight: boolean;
   keyConfigured: boolean;
   active: boolean;
   /** "coding" = text edits, "coding+images" = also understands screenshots. */
@@ -93,6 +95,8 @@ export const getModelBoard = createServerFn({ method: "GET" })
           hint: model.hint,
           vision: model.vision,
           curated: model.curated,
+          free: model.free ?? isFreeModel(provider.id, model.id),
+          lightweight: model.lightweight ?? isLightweightModel(model.id),
           keyConfigured,
           active: !!active && active.provider === provider.id && active.model === model.id,
           role: model.vision ? "coding+images" : "coding",
