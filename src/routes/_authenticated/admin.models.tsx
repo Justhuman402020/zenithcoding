@@ -306,6 +306,16 @@ function AdminModelsPage() {
                         <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
                           {row.role === "coding+images" ? "coding + understands images" : "coding only"}
                         </span>
+                        {row.free ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border border-emerald-500/40 text-emerald-500">
+                            free
+                          </span>
+                        ) : null}
+                        {row.lightweight ? (
+                          <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
+                            lightweight
+                          </span>
+                        ) : null}
                         {row.codingRank ? (
                           <span className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary">
                             coding #{row.codingRank}
