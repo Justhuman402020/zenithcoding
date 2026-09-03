@@ -417,7 +417,12 @@ function Dashboard() {
     if (!userRes.user) return;
     const { data, error } = await supabase
       .from("projects")
-      .insert({ name: newName.trim(), description: newDesc.trim() || null, user_id: userRes.user.id })
+      .insert({
+        name: newName.trim(),
+        description: newDesc.trim() || null,
+        user_id: userRes.user.id,
+        slug: makeProjectSlug(newName.trim()),
+      })
       .select()
       .single();
     if (error) return toast.error(error.message);
