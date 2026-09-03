@@ -140,7 +140,7 @@ export function PreviewFrame({
           <iframe
             key={previewKey}
             title="preview"
-            sandbox="allow-scripts allow-forms allow-modals"
+            sandbox="allow-scripts allow-forms allow-modals allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             className="w-full h-full bg-white block"
             srcDoc={srcDoc}
           />
