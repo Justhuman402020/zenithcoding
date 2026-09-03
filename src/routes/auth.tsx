@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
+  // Keep the auth shell identical during SSR and hydration. Browser-only auth
+  // checks run after mount, while submit handlers access window only on events.
   head: () => ({ meta: [{ title: "Sign in — Forge" }] }),
   component: AuthPage,
 });
