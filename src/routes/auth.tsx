@@ -8,8 +8,6 @@ import { toast } from "sonner";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/auth")({
-  // This route uses browser-only Supabase auth state. Keep it client-rendered
-  // so TanStack Start never hydrates a lazy Suspense placeholder as the page.
   ssr: false,
   head: () => ({ meta: [{ title: "Sign in — Forge" }] }),
   component: AuthPage,
