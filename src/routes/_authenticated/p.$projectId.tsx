@@ -1580,9 +1580,11 @@ function ProjectEditor() {
               </p>
             </div>
 
-            {published && publicUrl && (
+            {publicUrl && (
               <div className="space-y-1.5">
-                <Label>Public link</Label>
+                <Label>
+                  {published ? "Public link" : "Your live link (after you publish)"}
+                </Label>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 truncate rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
                     {publicUrl}
