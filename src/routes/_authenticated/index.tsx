@@ -467,7 +467,7 @@ function Dashboard() {
     const name = text.split(/\s+/).slice(0, 4).join(" ").slice(0, 60) || "Untitled";
     const { data, error } = await supabase
       .from("projects")
-      .insert({ name, description: text.slice(0, 200), user_id: userRes.user.id })
+      .insert({ name, description: text.slice(0, 200), user_id: userRes.user.id, slug: makeProjectSlug(name) })
       .select()
       .single();
     if (error) { setCreating(false); return toast.error(error.message); }
