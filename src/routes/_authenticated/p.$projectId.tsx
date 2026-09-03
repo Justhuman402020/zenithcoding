@@ -1025,10 +1025,10 @@ function ProjectEditor() {
               ? "h-9 gap-1.5 hairline-gold text-primary hover:bg-primary/10"
               : "h-9 gap-1.5 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow"
           }
-          title={published ? "Manage published site" : "Publish this site"}
+          title={published ? "Manage published site" : "Publish and get your live link"}
         >
           <Globe className="h-4 w-4" />
-          <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
+          <span className="hidden xs:inline">{published ? "Published" : "Get live link"}</span>
         </Button>
         <Link
           to="/p/$projectId/settings"
