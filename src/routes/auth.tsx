@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
+  // Render the same route tree on the server and client. Auth checks remain in
+  // effects and submit handlers, so the page is safe to prerender.
   head: () => ({ meta: [{ title: "Sign in — Forge" }] }),
   component: AuthPage,
 });
