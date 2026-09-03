@@ -97,7 +97,7 @@ function AdminModelsPage() {
     setBusy("save");
     try {
       const res = await addKey({ data: form });
-      toast.success(`Saved — ${res.modelCount} models added`);
+      toast.success(`${res.label} saved — ${res.modelCount} models added`);
       setForm({ label: "", baseUrl: "", apiKey: "" });
       setTestResult(null);
       refetch();
@@ -193,8 +193,10 @@ function AdminModelsPage() {
         </div>
         <p className="text-xs text-muted-foreground">
           Type the website name, paste its address and your API key, then press Test. If it works, save it and its
-          models join the list below and the automatic switching straight away. Using Hugging Face? Tap the button
-          below — it fills the address for you, then paste your access token (starts with <code>hf_</code>).
+          models join the list below and the automatic switching straight away. You can add as many keys as you like —
+          even two or more from the same service (e.g. two Groq keys or several Hugging Face tokens). Each key gets
+          its own row with its own models and limits. Using Hugging Face? Tap the button below — it fills the address
+          for you, then paste your access token (starts with <code>hf_</code>).
         </p>
         <div className="flex flex-wrap gap-2">
           {[

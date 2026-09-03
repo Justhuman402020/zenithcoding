@@ -36,7 +36,8 @@ export async function listProviderModels(
   const provider = option ?? findProvider(providerId);
   if (!provider) return [];
 
-  const cached = cache.get(providerId);
+  const cacheId = `${providerId}:${apiKey.slice(-8)}`;
+  const cached = cache.get(cacheId);
   if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
 
 
@@ -66,13 +67,23 @@ export async function listProviderModels(
     if (curated.has(a.id) !== curated.has(b.id)) return curated.has(a.id) ? -1 : 1;
     return a.id.localeCompare(b.id);
   });
-  cache.set(providerId, { at: Date.now(), models });
+  cache.set(cacheId, { at: Date.now(), models });
   return models;
 }
 
 /** OpenRouter exposes real credit usage for a key; others do not. */
-export async function readProviderQuota(providerId: string, apiKey: string): Promise<ProviderQuota | null> {
-  if (providerId !== "openrouter") return null;
+export function clearModelCache(providerId?: string) {
+  if (!providerId) return cache.clear();
+  for (const key of [...cache.keys()]) if (key.startsWith(`${providerId}:`)) cache.delete(key);
+}
+
+export async function readProviderQuota(
+  providerId: string,
+  apiKey: string,
+  baseURL?: string,
+): Promise<ProviderQuota | null> {
+  const isOpenRouter = providerId === "openrouter" || /openrouter\.ai/i.test(baseURL ?? "");
+  if (!isOpenRouter) return null;
   try {
     const res = await fetch("https://openrouter.ai/api/v1/key", {
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -113,7 +124,7 @@ export async function discoverAll(keys: ProviderKeys, providerList?: ProviderOpt
       }
       const [models, quota] = await Promise.all([
         listProviderModels(provider.id, key, provider),
-        readProviderQuota(provider.id, key),
+        readProviderQuota(provider.id, key, provider.baseURL),
       ]);
       return { provider: provider.id, option: provider, models, quota };
     }),

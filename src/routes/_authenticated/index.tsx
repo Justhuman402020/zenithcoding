@@ -27,6 +27,7 @@ import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Ho
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
+import { makeProjectSlug } from "@/lib/project-url";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -416,7 +417,12 @@ function Dashboard() {
     if (!userRes.user) return;
     const { data, error } = await supabase
       .from("projects")
-      .insert({ name: newName.trim(), description: newDesc.trim() || null, user_id: userRes.user.id })
+      .insert({
+        name: newName.trim(),
+        description: newDesc.trim() || null,
+        user_id: userRes.user.id,
+        slug: makeProjectSlug(newName.trim()),
+      })
       .select()
       .single();
     if (error) return toast.error(error.message);
@@ -461,7 +467,7 @@ function Dashboard() {
     const name = text.split(/\s+/).slice(0, 4).join(" ").slice(0, 60) || "Untitled";
     const { data, error } = await supabase
       .from("projects")
-      .insert({ name, description: text.slice(0, 200), user_id: userRes.user.id })
+      .insert({ name, description: text.slice(0, 200), user_id: userRes.user.id, slug: makeProjectSlug(name) })
       .select()
       .single();
     if (error) { setCreating(false); return toast.error(error.message); }

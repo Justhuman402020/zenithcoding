@@ -322,7 +322,16 @@ function ProjectEditor() {
       }
       setProjectName(proj.name);
       setPublished(!!(proj as any).published);
-      const existingSlug = (proj as any).slug ?? "";
+      let existingSlug = (proj as any).slug ?? "";
+      if (!existingSlug) {
+        // Backfill: every project gets its own public URL, even older ones.
+        const generated = suggestSlug(proj.name, projectId);
+        const { error: slugErr } = await supabase
+          .from("projects")
+          .update({ slug: generated })
+          .eq("id", projectId);
+        if (!slugErr) existingSlug = generated;
+      }
       setSlug(existingSlug);
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
       const { data: ghLink } = await supabase
@@ -1016,10 +1025,10 @@ function ProjectEditor() {
               ? "h-9 gap-1.5 hairline-gold text-primary hover:bg-primary/10"
               : "h-9 gap-1.5 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow"
           }
-          title={published ? "Manage published site" : "Publish this site"}
+          title={published ? "Manage published site" : "Publish and get your live link"}
         >
           <Globe className="h-4 w-4" />
-          <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
+          <span className="hidden xs:inline">{published ? "Published" : "Get live link"}</span>
         </Button>
         <Link
           to="/p/$projectId/settings"
@@ -1571,9 +1580,11 @@ function ProjectEditor() {
               </p>
             </div>
 
-            {published && publicUrl && (
+            {publicUrl && (
               <div className="space-y-1.5">
-                <Label>Public link</Label>
+                <Label>
+                  {published ? "Public link" : "Your live link (after you publish)"}
+                </Label>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 truncate rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
                     {publicUrl}

@@ -189,7 +189,9 @@ export const testProviderConnection = createServerFn({ method: "POST" })
     return { ...result, baseUrl, models: result.models.slice(0, 50), modelCount: result.models.length };
   });
 
-/** Saves a new provider (encrypted key) so it joins the automatic switching chain. */
+/** Saves a new provider (encrypted key) so it joins the automatic switching chain.
+ *  Any number of keys can be saved for the same service (e.g. two Groq keys) —
+ *  each one gets its own slot and its own models on the board. */
 export const addProviderKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { label: string; baseUrl: string; apiKey: string }) =>
@@ -199,23 +201,33 @@ export const addProviderKey = createServerFn({ method: "POST" })
     await assertAdminRole(context);
     const { normalizeBaseUrl, slugifyProviderId, testProviderKey } = await import("./custom-providers.server");
     const { encryptSecret } = await import("./secrets-crypto.server");
+    const { clearModelCache } = await import("./model-discovery.server");
     const baseUrl = normalizeBaseUrl(data.baseUrl);
     const apiKey = data.apiKey.trim();
     const test = await testProviderKey(baseUrl, apiKey);
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const id = slugifyProviderId(data.label);
-    const { error } = await supabaseAdmin.from("custom_ai_providers").upsert({
+    const { data: existing } = await supabaseAdmin.from("custom_ai_providers").select("id, label");
+    const taken = new Set((existing ?? []).map((r) => r.id as string));
+    const base = slugifyProviderId(data.label);
+    let id = base;
+    let n = 2;
+    while (taken.has(id)) id = `${base}-${n++}`;
+    const sameName = (existing ?? []).filter((r) => (r.label as string).startsWith(data.label.trim())).length;
+    const label = sameName ? `${data.label.trim()} (key ${sameName + 1})` : data.label.trim();
+
+    const { error } = await supabaseAdmin.from("custom_ai_providers").insert({
       id,
-      label: data.label.trim(),
+      label,
       base_url: baseUrl,
       key_encrypted: await encryptSecret(apiKey),
       created_by: context.userId,
       updated_at: new Date().toISOString(),
     });
     if (error) throw new Error(error.message);
-    return { ok: true, id, modelCount: test.models.length };
+    clearModelCache(id);
+    return { ok: true, id, label, modelCount: test.models.length };
   });
 
 export const removeProviderKey = createServerFn({ method: "POST" })

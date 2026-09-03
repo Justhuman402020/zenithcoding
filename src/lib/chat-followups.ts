@@ -1,5 +1,5 @@
 const API_KEY_INTENT =
-  /\b(?:paste|add|save|store|enter|connect|use|update|replace)\b[\s\S]{0,50}\b(?:api[\s_-]*key|secret|token)\b|\b(?:api[\s_-]*key|secret|token)\b[\s\S]{0,50}\b(?:paste|add|save|store|enter|connect|use|update|replace)\b/i;
+  /\b(?:paste|add|save|store|enter|connect|use|update|replace)\b[\s\S]{0,50}\b(?:api[\s_-]*key|access[\s_-]*key|secret|token|key)\b|\b(?:api[\s_-]*key|secret|token)\b[\s\S]{0,50}\b(?:paste|add|save|store|enter|connect|use|update|replace)\b/i;
 
 const PROVIDER_KEYS: Array<[RegExp, string]> = [
   [/\bgroq\b/i, "GROQ_API_KEY"],
