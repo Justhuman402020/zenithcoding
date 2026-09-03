@@ -322,7 +322,16 @@ function ProjectEditor() {
       }
       setProjectName(proj.name);
       setPublished(!!(proj as any).published);
-      const existingSlug = (proj as any).slug ?? "";
+      let existingSlug = (proj as any).slug ?? "";
+      if (!existingSlug) {
+        // Backfill: every project gets its own public URL, even older ones.
+        const generated = suggestSlug(proj.name, projectId);
+        const { error: slugErr } = await supabase
+          .from("projects")
+          .update({ slug: generated })
+          .eq("id", projectId);
+        if (!slugErr) existingSlug = generated;
+      }
       setSlug(existingSlug);
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
       const { data: ghLink } = await supabase
