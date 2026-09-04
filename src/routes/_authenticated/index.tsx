@@ -28,6 +28,7 @@ import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { makeProjectSlug } from "@/lib/project-url";
+import { StatusBadge } from "@/components/StatusBadge";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -1113,11 +1114,7 @@ function Dashboard() {
                 <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
                   <div className="flex items-center gap-2">
                     <h3 className="font-display text-xl truncate group-hover:text-gold transition-colors">{p.name}</h3>
-                    {p.published && p.slug && (
-                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium border border-primary/30">
-                        <Globe className="h-2.5 w-2.5" /> Live
-                      </span>
-                    )}
+                    <StatusBadge status={p.published && p.slug ? "published" : p.slug ? "pending" : "not_live"} />
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1.5 min-h-[2.5rem]">{p.description || "No description"}</p>
                   <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 mt-3">
