@@ -1,0 +1,52 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "description": "Supabase service role key for the project at ylqwyhifwhksntnmodzc.supabase.co — needed for all server-side DB operations (credits, billing, admin, projects). Find it in Supabase Dashboard → Settings → API → service_role key.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_SECRET_KEY",
+      "description": "Stripe secret API key (sk_live_... or sk_test_...) for billing/checkout. Find it in Stripe Dashboard → Developers → API keys.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_WEBHOOK_SECRET",
+      "description": "Stripe webhook signing secret (whsec_...) for verifying webhook payloads. Find it in Stripe Dashboard → Developers → Webhooks → your endpoint.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_ADMIN_KEY",
+      "description": "Shared secret key that admin clients must present to access the admin API. Generate a random string.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_ADMIN_SESSION_SECRET",
+      "description": "Password/secret used to sign admin session tokens. Generate a random string.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_SECRETS_ENCRYPTION_KEY",
+      "description": "AES-GCM key (32-byte hex or base64 string) used to encrypt per-project secrets at rest. Generate with: openssl rand -hex 32",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CLIENT_ID",
+      "description": "GitHub OAuth App client ID for repo import/push features. Find it in GitHub → Settings → Developer settings → OAuth Apps.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CLIENT_SECRET",
+      "description": "GitHub OAuth App client secret. Find it in GitHub → Settings → Developer settings → OAuth Apps.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CALLBACK_URL",
+      "description": "The callback URL registered in your GitHub OAuth App (e.g. https://your-domain/api/public/github/callback).",
+      "requiredAtBoot": false
+    }
+  ]
+}
