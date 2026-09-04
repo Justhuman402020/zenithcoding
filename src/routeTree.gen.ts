@@ -17,6 +17,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
+import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
@@ -70,6 +71,11 @@ const ShareTokenRoute = ShareTokenRouteImport.update({
 const SSlugRoute = SSlugRouteImport.update({
   id: '/s/$slug',
   path: '/s/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveProjectIdRoute = LiveProjectIdRouteImport.update({
+  id: '/live/$projectId',
+  path: '/live/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
@@ -257,6 +267,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
@@ -308,6 +320,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
   TemplatesRoute: typeof TemplatesRoute
+  LiveProjectIdRoute: typeof LiveProjectIdRoute
   SSlugRoute: typeof SSlugRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
@@ -378,6 +391,13 @@ declare module '@tanstack/react-router' {
       path: '/s/$slug'
       fullPath: '/s/$slug'
       preLoaderRoute: typeof SSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live/$projectId': {
+      id: '/live/$projectId'
+      path: '/live/$projectId'
+      fullPath: '/live/$projectId'
+      preLoaderRoute: typeof LiveProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin/': {
@@ -528,6 +548,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
   TemplatesRoute: TemplatesRoute,
+  LiveProjectIdRoute: LiveProjectIdRoute,
   SSlugRoute: SSlugRoute,
   ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
