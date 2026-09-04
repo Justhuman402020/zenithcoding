@@ -142,11 +142,11 @@ export const checkDomainDns = createServerFn({ method: "POST" })
 
     const appHost = process.env.FORGE_APP_HOST || "zenithcoding.lovable.app";
     const [aRoot, aWww, cnameRoot, cnameWww, txt] = await Promise.all([
-      doh(host, "A").catch(() => []),
-      doh(`www.${host}`, "A").catch(() => []),
-      doh(host, "CNAME").catch(() => []),
-      doh(`www.${host}`, "CNAME").catch(() => []),
-      doh(`_forge-verify.${host}`, "TXT").catch(() => []),
+      doh(host, "A").catch((): string[] => []),
+      doh(`www.${host}`, "A").catch((): string[] => []),
+      doh(host, "CNAME").catch((): string[] => []),
+      doh(`www.${host}`, "CNAME").catch((): string[] => []),
+      doh(`_forge-verify.${host}`, "TXT").catch((): string[] => []),
     ]);
 
     const rootOk = aRoot.includes(FORGE_IP) || cnameRoot.some((c) => c.endsWith(appHost));
