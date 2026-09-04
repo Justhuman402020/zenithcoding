@@ -49,7 +49,6 @@ export function BuildDialog({ open, onOpenChange, files, onDone, title = "Build 
         },
       ]);
       setState("done");
-      setResult({ ok: true, files, logs: [], warnings: [] });
       return;
     }
 
@@ -135,7 +134,7 @@ export function BuildDialog({ open, onOpenChange, files, onDone, title = "Build 
               {actionLabel} source anyway
             </Button>
           )}
-          {state === "done" && built && (
+          {state === "done" && (
             <Button
               type="button"
               onClick={() => onDone(built)}

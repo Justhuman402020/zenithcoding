@@ -1,0 +1,47 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "description": "Supabase service role key (bypasses RLS) from Supabase Dashboard → Settings → API. Needed for template remix and admin server functions; app boots and publishes sites without it.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_SECRET_KEY",
+      "description": "Stripe secret key from dashboard.stripe.com → Developers → API keys. Needed for billing only.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_WEBHOOK_SECRET",
+      "description": "Stripe webhook signing secret (whsec_…) from the webhook endpoint settings. Needed for billing only.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CLIENT_ID",
+      "description": "GitHub OAuth app client ID from github.com → Settings → Developer settings → OAuth Apps. Needed for GitHub import/push only.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CLIENT_SECRET",
+      "description": "GitHub OAuth app client secret. Needed for GitHub import/push only.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_SECRETS_ENCRYPTION_KEY",
+      "description": "64-char hex AES key used to encrypt per-project secrets. Generate with `openssl rand -hex 32`. Needed for the project secrets panel only.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_ADMIN_KEY",
+      "description": "Admin API key for the Forge admin panel. Any strong random string. Needed for admin routes only.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_ADMIN_SESSION_SECRET",
+      "description": "Session signing secret for admin auth. Any strong random string. Needed for admin routes only.",
+      "requiredAtBoot": false
+    }
+  ]
+}
