@@ -743,7 +743,7 @@ function ProjectEditor() {
         // Insert in chunks to stay under payload limits.
         for (let i = 0; i < rows.length; i += 50) {
           const chunk = rows.slice(i, i + 50);
-          const { error } = await supabase.from("files").insert(chunk as any);
+          const { error } = await supabase.from("files").upsert(chunk as any, { onConflict: "project_id,path" });
           if (error) throw error;
         }
       }
