@@ -28,6 +28,7 @@ import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { makeProjectSlug } from "@/lib/project-url";
+import { StatusBadge } from "@/components/StatusBadge";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
