@@ -1,0 +1,17 @@
+services:
+  web:
+    image: oven/bun:1.2
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env
+      - /run/base44/app.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+    command: sh -c "bun install && bun run dev --host 0.0.0.0 --port 3000"
+    restart: unless-stopped
