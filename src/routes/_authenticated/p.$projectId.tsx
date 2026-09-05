@@ -66,7 +66,7 @@ import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { BuildDialog } from "@/components/BuildDialog";
-import type { BuildFile } from "@/lib/browser-build";
+import { isBuildable, type BuildFile } from "@/lib/browser-build";
 import { Github } from "lucide-react";
 import {
   Sheet,
@@ -713,14 +713,23 @@ function ProjectEditor() {
         return;
       }
     }
-    // Open build dialog; it runs the build (or skips if not buildable) and calls back.
+    // Static sites need no build step — publish straight away.
+    const buildCheck = isBuildable(files.map((f) => ({ path: f.path, content: f.content })));
+    if (!buildCheck.buildable) {
+      setPendingPublishSlug(cleanSlug);
+      setPublishing(false);
+      await finalizePublish(null, cleanSlug);
+      return;
+    }
+    // Otherwise open the build dialog; it builds then calls back.
     setPendingPublishSlug(cleanSlug);
     setBuildDialogOpen(true);
     setPublishing(false);
+
   }
 
-  async function finalizePublish(builtFiles: BuildFile[] | null) {
-    const cleanSlug = pendingPublishSlug;
+  async function finalizePublish(builtFiles: BuildFile[] | null, slugOverride?: string) {
+    const cleanSlug = slugOverride ?? pendingPublishSlug;
     setBuildDialogOpen(false);
     setPendingPublishSlug(null);
     if (!cleanSlug) return;
