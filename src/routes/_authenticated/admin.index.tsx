@@ -75,6 +75,9 @@ function AdminPage() {
                 <Cpu className="h-4 w-4" /> AI model board
               </Button>
             ) : null}
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/domains" })} className="w-full gap-1.5">
+              <Globe className="h-4 w-4" /> Domains &amp; live links
+            </Button>
           </div>
         ) : (
           <div className="space-y-3 text-center">
