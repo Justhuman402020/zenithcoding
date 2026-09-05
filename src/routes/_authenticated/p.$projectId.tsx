@@ -66,7 +66,7 @@ import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { BuildDialog } from "@/components/BuildDialog";
-import type { BuildFile } from "@/lib/browser-build";
+import { isBuildable, type BuildFile } from "@/lib/browser-build";
 import { Github } from "lucide-react";
 import {
   Sheet,
