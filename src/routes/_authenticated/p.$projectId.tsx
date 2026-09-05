@@ -713,10 +713,19 @@ function ProjectEditor() {
         return;
       }
     }
-    // Open build dialog; it runs the build (or skips if not buildable) and calls back.
+    // Static sites need no build step — publish straight away.
+    const buildCheck = isBuildable(files.map((f) => ({ path: f.path, content: f.content })));
+    if (!buildCheck.buildable) {
+      setPendingPublishSlug(cleanSlug);
+      setPublishing(false);
+      await finalizePublish(null, cleanSlug);
+      return;
+    }
+    // Otherwise open the build dialog; it builds then calls back.
     setPendingPublishSlug(cleanSlug);
     setBuildDialogOpen(true);
     setPublishing(false);
+
   }
 
   async function finalizePublish(builtFiles: BuildFile[] | null) {
