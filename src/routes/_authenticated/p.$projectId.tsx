@@ -728,8 +728,8 @@ function ProjectEditor() {
 
   }
 
-  async function finalizePublish(builtFiles: BuildFile[] | null) {
-    const cleanSlug = pendingPublishSlug;
+  async function finalizePublish(builtFiles: BuildFile[] | null, slugOverride?: string) {
+    const cleanSlug = slugOverride ?? pendingPublishSlug;
     setBuildDialogOpen(false);
     setPendingPublishSlug(null);
     if (!cleanSlug) return;
