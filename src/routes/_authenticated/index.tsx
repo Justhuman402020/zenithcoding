@@ -71,7 +71,7 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
   );
 }
 
-function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
+function AdminNavItem({ onNavigate }: { onNavigate: (to?: string) => void }) {
   const fetchRole = useServerFn(getMyRole);
   const [isAdmin, setIsAdmin] = useState(false);
   const [ready, setReady] = useState(false);
@@ -86,7 +86,7 @@ function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
   if (!ready || !isAdmin) return null;
   return (
     <>
-      <SidebarItem icon={ShieldCheck} label="Admin" onClick={onNavigate} />
+      <SidebarItem icon={ShieldCheck} label="Admin" onClick={() => onNavigate()} />
       <SidebarItem icon={Cpu} label="AI models" onClick={() => onNavigate("/admin/models")} />
     </>
   );
