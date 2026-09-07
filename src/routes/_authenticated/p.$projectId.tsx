@@ -293,6 +293,7 @@ function ProjectEditor() {
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
+  const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
