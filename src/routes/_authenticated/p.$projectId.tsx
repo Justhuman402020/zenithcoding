@@ -1303,7 +1303,12 @@ function ProjectEditor() {
                         </div>
                       )}
                       {toolParts
-                        .filter((t: any) => t.type === "tool-request_secret" && (t.output ?? t.result)?.needsInput)
+                        .filter(
+                          (t: any) =>
+                            t.type === "tool-request_secret" &&
+                            (t.output ?? t.result)?.needsInput &&
+                            !savedSecretKeys.includes(String((t.output ?? t.result)?.key ?? "").toUpperCase()),
+                        )
                         .map((t: any, i: number) => {
                           const out = (t.output ?? t.result) as any;
                           return (
