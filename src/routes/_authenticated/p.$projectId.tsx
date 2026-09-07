@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { SecretRequestCard } from "@/components/SecretRequestCard";
+import { listProjectSecrets } from "@/lib/project-secrets.functions";
 import {
   ArrowLeft,
   File as FileIcon,
