@@ -1496,7 +1496,9 @@ function ProjectEditor() {
                   }
                   setInput(next);
                   const intent = detectSecretIntent(next);
-                  if (intent && !pendingSecret) setPendingSecret(intent);
+                  if (intent && !pendingSecret && !savedSecretKeys.includes(intent.key.toUpperCase())) {
+                    setPendingSecret(intent);
+                  }
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
