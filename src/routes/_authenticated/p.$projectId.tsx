@@ -307,6 +307,20 @@ function ProjectEditor() {
     tokenRef.current = token;
   }, [token]);
 
+  // Which API keys are already saved for this project. Used so the secure paste
+  // box never reappears for a key the user has already given us.
+  const refreshSavedSecrets = async () => {
+    try {
+      const res: any = await listProjectSecrets({ data: { projectId } });
+      setSavedSecretKeys((res?.secrets ?? []).map((s: any) => String(s.key).toUpperCase()));
+    } catch {
+      // a failed read must never block chatting
+    }
+  };
+  useEffect(() => {
+    void refreshSavedSecrets();
+  }, [projectId]);
+
   // load project + files + history + token
   useEffect(() => {
     (async () => {
