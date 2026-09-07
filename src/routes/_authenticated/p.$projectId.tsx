@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { SecretRequestCard } from "@/components/SecretRequestCard";
+import { listProjectSecrets } from "@/lib/project-secrets.functions";
 import {
   ArrowLeft,
   File as FileIcon,
@@ -293,6 +294,7 @@ function ProjectEditor() {
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
+  const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
@@ -305,6 +307,20 @@ function ProjectEditor() {
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+
+  // Which API keys are already saved for this project. Used so the secure paste
+  // box never reappears for a key the user has already given us.
+  const refreshSavedSecrets = async () => {
+    try {
+      const res: any = await listProjectSecrets({ data: { projectId } });
+      setSavedSecretKeys((res?.secrets ?? []).map((s: any) => String(s.key).toUpperCase()));
+    } catch {
+      // a failed read must never block chatting
+    }
+  };
+  useEffect(() => {
+    void refreshSavedSecrets();
+  }, [projectId]);
 
   // load project + files + history + token
   useEffect(() => {
@@ -611,7 +627,11 @@ function ProjectEditor() {
     setInput("");
     setNextBuildPrompt(null);
     const pasted = detectPastedApiKey(text);
-    const secretIntent = pasted ?? detectSecretIntent(text);
+    // Only intercept when a raw key was pasted, or the key they mention is not
+    // saved yet. Otherwise "build with my saved key" must reach the agent.
+    const mentioned = detectSecretIntent(text);
+    const secretIntent =
+      pasted ?? (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase()) ? mentioned : null);
     if (secretIntent && attachments.length === 0) {
       setPendingSecret(secretIntent);
       const { data: userRes } = await supabase.auth.getUser();
@@ -1283,7 +1303,12 @@ function ProjectEditor() {
                         </div>
                       )}
                       {toolParts
-                        .filter((t: any) => t.type === "tool-request_secret" && (t.output ?? t.result)?.needsInput)
+                        .filter(
+                          (t: any) =>
+                            t.type === "tool-request_secret" &&
+                            (t.output ?? t.result)?.needsInput &&
+                            !savedSecretKeys.includes(String((t.output ?? t.result)?.key ?? "").toUpperCase()),
+                        )
                         .map((t: any, i: number) => {
                           const out = (t.output ?? t.result) as any;
                           return (
@@ -1363,13 +1388,18 @@ function ProjectEditor() {
                   </div>
                 );
               })()}
-              {pendingSecret && !isStreaming ? (
+              {pendingSecret && !savedSecretKeys.includes(pendingSecret.key.toUpperCase()) && !isStreaming ? (
                 <SecretRequestCard
                   projectId={projectId}
                   secretKey={pendingSecret.key}
                   reason={pendingSecret.reason}
                   initialValue={pendingSecret.value}
                   onSaved={(key) => {
+                    setSavedSecretKeys((prev) =>
+                      prev.includes(key.toUpperCase()) ? prev : [...prev, key.toUpperCase()],
+                    );
+                    setPendingSecret(null);
+                    void refreshSavedSecrets();
                     setInput(`Use my saved ${key} to finish the integration and test one real request`);
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
@@ -1471,7 +1501,9 @@ function ProjectEditor() {
                   }
                   setInput(next);
                   const intent = detectSecretIntent(next);
-                  if (intent && !pendingSecret) setPendingSecret(intent);
+                  if (intent && !pendingSecret && !savedSecretKeys.includes(intent.key.toUpperCase())) {
+                    setPendingSecret(intent);
+                  }
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
