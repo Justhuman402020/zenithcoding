@@ -1388,7 +1388,7 @@ function ProjectEditor() {
                   </div>
                 );
               })()}
-              {pendingSecret && !isStreaming ? (
+              {pendingSecret && !savedSecretKeys.includes(pendingSecret.key.toUpperCase()) && !isStreaming ? (
                 <SecretRequestCard
                   projectId={projectId}
                   secretKey={pendingSecret.key}
