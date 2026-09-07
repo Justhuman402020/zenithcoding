@@ -627,7 +627,11 @@ function ProjectEditor() {
     setInput("");
     setNextBuildPrompt(null);
     const pasted = detectPastedApiKey(text);
-    const secretIntent = pasted ?? detectSecretIntent(text);
+    // Only intercept when a raw key was pasted, or the key they mention is not
+    // saved yet. Otherwise "build with my saved key" must reach the agent.
+    const mentioned = detectSecretIntent(text);
+    const secretIntent =
+      pasted ?? (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase()) ? mentioned : null);
     if (secretIntent && attachments.length === 0) {
       setPendingSecret(secretIntent);
       const { data: userRes } = await supabase.auth.getUser();
