@@ -1395,6 +1395,11 @@ function ProjectEditor() {
                   reason={pendingSecret.reason}
                   initialValue={pendingSecret.value}
                   onSaved={(key) => {
+                    setSavedSecretKeys((prev) =>
+                      prev.includes(key.toUpperCase()) ? prev : [...prev, key.toUpperCase()],
+                    );
+                    setPendingSecret(null);
+                    void refreshSavedSecrets();
                     setInput(`Use my saved ${key} to finish the integration and test one real request`);
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
