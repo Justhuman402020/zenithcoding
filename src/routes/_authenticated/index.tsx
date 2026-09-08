@@ -22,7 +22,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu } from "lucide-react";
+import { OpenRouterModelPicker } from "@/components/OpenRouterModelPicker";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -162,6 +163,7 @@ function Dashboard() {
   const [prompt, setPrompt] = useState("");
   const [creating, setCreating] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [ghOpen, setGhOpen] = useState(false);
   const [ghUrl, setGhUrl] = useState("");
   const [ghImporting, setGhImporting] = useState(false);
@@ -648,6 +650,7 @@ function Dashboard() {
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
               </Link>
+              <SidebarItem icon={Cpu} label="Build AI model" onClick={() => { setSidebarOpen(false); setModelPickerOpen(true); }} />
               <SidebarItem icon={Globe} label="Domains & publish" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
             </nav>
             <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
@@ -669,6 +672,20 @@ function Dashboard() {
             </div>
           </SheetContent>
         </Sheet>
+        <Dialog open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 font-display text-2xl">
+                <Cpu className="h-5 w-5 text-primary" />
+                Build AI model
+              </DialogTitle>
+              <DialogDescription>
+                Browse every OpenRouter model, check your credits, and pick the one that codes your projects.
+              </DialogDescription>
+            </DialogHeader>
+            <OpenRouterModelPicker />
+          </DialogContent>
+        </Dialog>
         <div className="flex items-center gap-2 md:hidden">
           <ForgeMark className="h-6 w-6" />
           <span className="font-display text-lg text-gold">Forge</span>

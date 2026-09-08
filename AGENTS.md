@@ -28,6 +28,12 @@
   `project_domains` (verified) and serves the project from `/` — DNS must point
   at whatever machine runs this app (the IP shown in the domains panel is
   `185.158.133.1`).
+- Provider API keys resolve in `loadProviderKeys` (src/lib/model-router.server.ts):
+  it checks `process.env[provider.envKey]` (e.g. `OPENROUTER_API_KEY`) and falls
+  back to a secret named after the provider (e.g. `Openrouter`), case-insensitive.
+  The OpenRouter models browser for users is `src/components/OpenRouterModelPicker.tsx`
+  (sidebar → "Build AI model"), backed by `src/lib/models-panel.functions.ts`; quota
+  comes from OpenRouter's `/api/v1/credits` (prepaid totals) with `/api/v1/key` fallback.
 - Publishing a non-buildable project (plain HTML, no package.json) must pass
   `null` artifacts to `finalizePublish` — the `files` table has
   `UNIQUE (project_id, path)`, so re-inserting source paths as `kind='build'`

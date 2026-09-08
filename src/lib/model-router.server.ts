@@ -9,9 +9,22 @@ export type ProviderKeys = Record<string, string>;
 /** Provider ids that have an API key configured on the server. */
 export function loadProviderKeys(): ProviderKeys {
   const keys: ProviderKeys = {};
+  // Secrets can arrive named after the provider (e.g. "Openrouter") instead of
+  // the conventional env var ("OPENROUTER_API_KEY"), so fall back to a
+  // case-insensitive, underscore-insensitive match on the provider id.
+  const normalizedEnv = new Map<string, string>();
+  for (const name of Object.keys(process.env)) {
+    normalizedEnv.set(name.toLowerCase().replace(/_/g, ""), name);
+  }
   for (const provider of PROVIDERS) {
-    const value = process.env[provider.envKey];
-    if (value && value.trim()) keys[provider.id] = value.trim();
+    const direct = process.env[provider.envKey];
+    if (direct && direct.trim()) {
+      keys[provider.id] = direct.trim();
+      continue;
+    }
+    const altName = normalizedEnv.get(provider.id.toLowerCase().replace(/_/g, ""));
+    const alt = altName ? process.env[altName] : undefined;
+    if (alt && alt.trim()) keys[provider.id] = alt.trim();
   }
   return keys;
 }

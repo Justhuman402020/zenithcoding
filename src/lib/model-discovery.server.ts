@@ -73,6 +73,27 @@ export async function listProviderModels(
 /** OpenRouter exposes real credit usage for a key; others do not. */
 export async function readProviderQuota(providerId: string, apiKey: string): Promise<ProviderQuota | null> {
   if (providerId !== "openrouter") return null;
+  // The credits endpoint reports prepaid credit totals (pay-as-you-go included).
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/credits", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) {
+      const json = (await res.json()) as { data?: { total_credits?: number; total_usage?: number } };
+      const d = json.data ?? {};
+      if (typeof d.total_credits === "number" && typeof d.total_usage === "number") {
+        return {
+          label: "Credits",
+          usage: d.total_usage,
+          limit: d.total_credits,
+          remaining: Math.max(d.total_credits - d.total_usage, 0),
+          note: null,
+        };
+      }
+    }
+  } catch {
+    // fall back to the key endpoint below
+  }
   try {
     const res = await fetch("https://openrouter.ai/api/v1/key", {
       headers: { Authorization: `Bearer ${apiKey}` },
