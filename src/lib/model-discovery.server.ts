@@ -58,6 +58,9 @@ export async function listProviderModels(
   for (const model of provider.models) merged.set(model.id, { ...model, curated: true });
   for (const id of ids) {
     if (!isChatModelId(id)) continue;
+    // "~" ids are hidden/deprecated OpenRouter aliases — listed in the catalog
+    // but rejected by chat completions, so never offer them.
+    if (id.startsWith("~")) continue;
     if (merged.has(id)) continue;
     merged.set(id, { ...guessModelMeta(providerId, id), curated: false });
   }

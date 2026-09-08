@@ -54,10 +54,9 @@ export const PROVIDERS: ProviderOption[] = [
     baseURL: "https://openrouter.ai/api/v1",
     docs: "https://openrouter.ai/keys",
     models: [
-      { id: "qwen/qwen3-coder:free", label: "Qwen3 Coder (free)", hint: "Free coding model.", vision: false, tools: true, freeDaily: 50 },
-      { id: "deepseek/deepseek-chat-v3.1:free", label: "DeepSeek V3.1 (free)", hint: "Free, good reasoning.", vision: false, tools: true, freeDaily: 50 },
-      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)", hint: "Free general model.", vision: false, tools: true, freeDaily: 50 },
-      { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (free)", hint: "Free and reads images.", vision: true, tools: true, freeDaily: 50 },
+      { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", hint: "Fast reasoning coder.", vision: false, tools: true },
+      { id: "deepseek/deepseek-chat-v3.1", label: "DeepSeek V3.1 Chat", hint: "Strong, reliable coder.", vision: false, tools: true },
+      { id: "cohere/north-mini-code:free", label: "North Mini Code (free)", hint: "Free code model.", vision: false, tools: true, freeDaily: 50 },
     ],
   },
   {
