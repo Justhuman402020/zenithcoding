@@ -555,7 +555,7 @@ function ProjectEditor() {
           .eq("project_id", projectId)
           .order("created_at");
         if (disposed) return;
-        const restored = (saved ?? []).map((message) => ({
+        const restored = cleanChatRows((saved ?? []) as any[]).map((message) => ({
           id: message.id,
           role: message.role as "user" | "assistant",
           parts: [{ type: "text" as const, text: message.content }],
