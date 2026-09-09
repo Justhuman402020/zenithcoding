@@ -88,7 +88,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // confirm project belongs to user
         const { data: proj } = await supabase
           .from("projects")
-          .select("id,name")
+          .select("id,name,description")
           .eq("id", projectId)
           .maybeSingle();
         if (!proj) {
