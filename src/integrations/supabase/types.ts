@@ -86,6 +86,62 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_jobs: {
+        Row: {
+          assistant_reply: string | null
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          progress: string | null
+          project_id: string
+          prompt: string
+          request_key: string
+          status: string
+          trace_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assistant_reply?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          progress?: string | null
+          project_id: string
+          prompt?: string
+          request_key: string
+          status?: string
+          trace_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assistant_reply?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          progress?: string | null
+          project_id?: string
+          prompt?: string
+          request_key?: string
+          status?: string
+          trace_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           content: string
