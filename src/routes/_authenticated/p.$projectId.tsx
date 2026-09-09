@@ -650,12 +650,17 @@ function ProjectEditor() {
       // (sendMessage only resolves once the assistant stream finishes).
       const { data: userRes } = await supabase.auth.getUser();
       if (userRes.user) {
-        await supabase.from("chat_messages").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          role: "user",
-          content: initialPrompt,
-        });
+        const { data: row } = await supabase
+          .from("chat_messages")
+          .insert({
+            project_id: projectId,
+            user_id: userRes.user.id,
+            role: "user",
+            content: initialPrompt,
+          })
+          .select("id")
+          .single();
+        pendingUserRowRef.current = row?.id ?? null;
       }
       await sendMessage({ text: initialPrompt });
       navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
