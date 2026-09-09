@@ -760,14 +760,24 @@ function ProjectEditor() {
     // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
-      await supabase.from("chat_messages").insert({
-        project_id: projectId,
-        user_id: userRes.user.id,
-        role: "user",
-        content: messageText,
-      });
+      const { data: row } = await supabase
+        .from("chat_messages")
+        .insert({
+          project_id: projectId,
+          user_id: userRes.user.id,
+          role: "user",
+          content: messageText,
+        })
+        .select("id")
+        .single();
+      pendingUserRowRef.current = row?.id ?? null;
     }
-    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+    try {
+      await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+    } catch (error) {
+      await discardUnansweredMessage();
+      throw error;
+    }
 
   }
 
