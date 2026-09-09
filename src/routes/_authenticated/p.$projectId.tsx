@@ -491,6 +491,22 @@ function ProjectEditor() {
     return () => window.removeEventListener("message", onPreviewMessage);
   }, [files, previewPath]);
 
+  // Row id of the question currently waiting for an answer. If the turn dies,
+  // the row is removed so the chat never fills up with unanswered messages.
+  const pendingUserRowRef = useRef<string | null>(null);
+  async function discardUnansweredMessage() {
+    const rowId = pendingUserRowRef.current;
+    pendingUserRowRef.current = null;
+    if (!rowId) return;
+    try {
+      await supabase.from("chat_messages").delete().eq("id", rowId);
+    } catch {
+      // removing history noise must never break the editor
+    }
+    setMessagesRef.current?.((current) => current.filter((message) => message.id !== rowId));
+  }
+  const setMessagesRef = useRef<((updater: (messages: UIMessage[]) => UIMessage[]) => void) | null>(null);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
