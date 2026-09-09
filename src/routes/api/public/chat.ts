@@ -229,7 +229,7 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const result = streamText({
           model,
-          system: buildSystemPrompt(proj.name),
+          system: buildSystemPrompt(proj.name, projectBrief),
           messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
 
           tools,
