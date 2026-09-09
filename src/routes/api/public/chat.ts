@@ -216,6 +216,29 @@ export const Route = createFileRoute("/api/public/chat")({
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
         };
 
+        // Brief the model on what this project IS. Chat history gets compacted
+        // away over time and the fallback chain can hand the turn to a model
+        // that has never seen this project, so the purpose is restated every turn.
+        const [{ data: briefFiles }, { data: firstUserMessage }] = await Promise.all([
+          supabase.from("files").select("path").eq("project_id", projectId).limit(200),
+          supabase
+            .from("chat_messages")
+            .select("content")
+            .eq("project_id", projectId)
+            .eq("role", "user")
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        const projectBrief = {
+          description: proj.description,
+          originalGoal: firstUserMessage?.content ?? null,
+          filePaths: (briefFiles ?? []).map((file) => file.path),
+        };
+        trace.log("project.brief", {
+          detail: { files: projectBrief.filePaths.length, hasGoal: Boolean(projectBrief.originalGoal) },
+        });
+
         // A text-only model would 400 on image parts — drop them rather than fail.
         const visionOk = modelSupportsVision(pick.ref);
         const outgoingMessages = visionOk
