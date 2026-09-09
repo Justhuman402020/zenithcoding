@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
+import { consumeStream, convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
 import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
@@ -294,7 +294,10 @@ export const Route = createFileRoute("/api/public/chat")({
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          headers: traceHeaders,
+          headers: { ...traceHeaders, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
+          // Keep consuming the model/tool stream after the browser connection
+          // disappears so accepted file writes and the final reply still land.
+          consumeSseStream: ({ stream }) => consumeStream({ stream }),
           onError: (error) => {
             const message = error instanceof Error ? error.message : String(error ?? "");
             if (/request too large|tokens per minute|TPM/i.test(message)) {
