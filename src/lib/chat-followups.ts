@@ -5,7 +5,7 @@ const PROVIDER_KEYS: Array<[RegExp, string]> = [
   [/\bgroq\b/i, "GROQ_API_KEY"],
   [/\bopen\s*router\b/i, "OPENROUTER_API_KEY"],
   [/\bdeep\s*infra\b/i, "DEEPINFRA_API_KEY"],
-  [/\bgoogle(?:\s+ai(?:\s+studio)?)?|\bgemini\b/i, "GOOGLE_AI_STUDIO_API_KEY"],
+  [/\b(?:google(?:\s+ai(?:\s+studio)?)?|gemini)\b/i, "GOOGLE_AI_STUDIO_API_KEY"],
   [/\bmistral\b/i, "MISTRAL_API_KEY"],
   [/\bcerebras\b/i, "CEREBRAS_API_KEY"],
   [/\bopen\s*ai\b/i, "OPENAI_API_KEY"],
