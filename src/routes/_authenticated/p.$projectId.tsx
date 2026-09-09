@@ -723,18 +723,9 @@ function ProjectEditor() {
     const secretIntent =
       pasted ?? (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase()) ? mentioned : null);
     if (secretIntent && attachments.length === 0) {
+      // Show the secure paste box only. Nothing is written to the chat history,
+      // because this step never gets an AI answer and would pile up.
       setPendingSecret(secretIntent);
-      const { data: userRes } = await supabase.auth.getUser();
-      // Never store or send the raw key itself.
-      const safeText = pasted ? stripApiKey(text, pasted.value!) || `Save my ${pasted.key}` : text;
-      if (userRes.user) {
-        await supabase.from("chat_messages").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          role: "user",
-          content: safeText,
-        });
-      }
       return;
     }
 
