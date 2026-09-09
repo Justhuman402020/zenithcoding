@@ -544,6 +544,10 @@ function ProjectEditor() {
     },
   });
 
+  setMessagesRef.current = setMessages as unknown as (
+    updater: (messages: UIMessage[]) => UIMessage[],
+  ) => void;
+
   const isStreaming = status === "submitted" || status === "streaming";
 
   // If a phone disconnects after submission, the server keeps working. Poll
