@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
 import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
+import { cleanChatRows } from "@/lib/chat-history";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -374,13 +375,9 @@ function ProjectEditor() {
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
       setLoadingFiles(false);
       setToken(sess.session?.access_token ?? null);
-      // Drop accidental duplicate rows saved by an earlier bug: same role +
-      // same content appearing back-to-back. Keeps one copy so each question
-      // shows with its own answer underneath.
-      const deduped = (msgs ?? []).filter(
-        (m, i, arr) =>
-          i === 0 || m.role !== arr[i - 1]!.role || m.content.trim() !== arr[i - 1]!.content.trim(),
-      );
+      // Drop duplicate rows AND questions that never received an answer, so a
+      // failed turn never lingers in the chat or in the model's context.
+      const deduped = cleanChatRows((msgs ?? []) as any[]);
       setInitialMessages(
         deduped.map((m) => ({
           id: m.id,
@@ -494,6 +491,22 @@ function ProjectEditor() {
     return () => window.removeEventListener("message", onPreviewMessage);
   }, [files, previewPath]);
 
+  // Row id of the question currently waiting for an answer. If the turn dies,
+  // the row is removed so the chat never fills up with unanswered messages.
+  const pendingUserRowRef = useRef<string | null>(null);
+  async function discardUnansweredMessage() {
+    const rowId = pendingUserRowRef.current;
+    pendingUserRowRef.current = null;
+    if (!rowId) return;
+    try {
+      await supabase.from("chat_messages").delete().eq("id", rowId);
+    } catch {
+      // removing history noise must never break the editor
+    }
+    setMessagesRef.current?.((current) => current.filter((message) => message.id !== rowId));
+  }
+  const setMessagesRef = useRef<((updater: (messages: UIMessage[]) => UIMessage[]) => void) | null>(null);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -516,14 +529,24 @@ function ProjectEditor() {
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
-    onError: (err) => toast.error(getChatErrorMessage(err)),
+    onError: (err) => {
+      // A question that never got an answer must not stay in the chat: it would
+      // be resent forever and squeeze out the real work.
+      void discardUnansweredMessage();
+      toast.error(getChatErrorMessage(err));
+    },
     onFinish: () => {
+      pendingUserRowRef.current = null;
       // AI may have written files via tools
       refreshFiles();
       setPreviewKey((k) => k + 1);
       setTimeout(() => inputRef.current?.focus(), 50);
     },
   });
+
+  setMessagesRef.current = setMessages as unknown as (
+    updater: (messages: UIMessage[]) => UIMessage[],
+  ) => void;
 
   const isStreaming = status === "submitted" || status === "streaming";
 
@@ -552,7 +575,7 @@ function ProjectEditor() {
           .eq("project_id", projectId)
           .order("created_at");
         if (disposed) return;
-        const restored = (saved ?? []).map((message) => ({
+        const restored = cleanChatRows((saved ?? []) as any[]).map((message) => ({
           id: message.id,
           role: message.role as "user" | "assistant",
           parts: [{ type: "text" as const, text: message.content }],
@@ -631,12 +654,17 @@ function ProjectEditor() {
       // (sendMessage only resolves once the assistant stream finishes).
       const { data: userRes } = await supabase.auth.getUser();
       if (userRes.user) {
-        await supabase.from("chat_messages").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          role: "user",
-          content: initialPrompt,
-        });
+        const { data: row } = await supabase
+          .from("chat_messages")
+          .insert({
+            project_id: projectId,
+            user_id: userRes.user.id,
+            role: "user",
+            content: initialPrompt,
+          })
+          .select("id")
+          .single();
+        pendingUserRowRef.current = row?.id ?? null;
       }
       await sendMessage({ text: initialPrompt });
       navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
@@ -699,18 +727,9 @@ function ProjectEditor() {
     const secretIntent =
       pasted ?? (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase()) ? mentioned : null);
     if (secretIntent && attachments.length === 0) {
+      // Show the secure paste box only. Nothing is written to the chat history,
+      // because this step never gets an AI answer and would pile up.
       setPendingSecret(secretIntent);
-      const { data: userRes } = await supabase.auth.getUser();
-      // Never store or send the raw key itself.
-      const safeText = pasted ? stripApiKey(text, pasted.value!) || `Save my ${pasted.key}` : text;
-      if (userRes.user) {
-        await supabase.from("chat_messages").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          role: "user",
-          content: safeText,
-        });
-      }
       return;
     }
 
@@ -745,14 +764,24 @@ function ProjectEditor() {
     // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
-      await supabase.from("chat_messages").insert({
-        project_id: projectId,
-        user_id: userRes.user.id,
-        role: "user",
-        content: messageText,
-      });
+      const { data: row } = await supabase
+        .from("chat_messages")
+        .insert({
+          project_id: projectId,
+          user_id: userRes.user.id,
+          role: "user",
+          content: messageText,
+        })
+        .select("id")
+        .single();
+      pendingUserRowRef.current = row?.id ?? null;
     }
-    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+    try {
+      await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+    } catch (error) {
+      await discardUnansweredMessage();
+      throw error;
+    }
 
   }
 
