@@ -129,19 +129,38 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
       },
     }),
     read_file: tool({
-      description: "Read the contents of a file in the project.",
-      inputSchema: z.object({ path: z.string() }),
-      execute: async ({ path }) => {
+      description:
+        "Read a file. Returns an explicit character range and continuation position for large files; continue reading until hasMore is false before rewriting it.",
+      inputSchema: z.object({
+        path: z.string(),
+        offset: z.number().int().min(0).optional().describe("Character offset to start from, default 0"),
+        limit: z.number().int().min(1).max(12_000).optional().describe("Characters to return, default 12000"),
+      }),
+      execute: async ({ path, offset = 0, limit = 12_000 }) => {
         const started = Date.now();
         const cleanPath = normalizePath(path);
         const result = await store.read(cleanPath);
+        const full = result.content ?? "";
+        const content = result.error ? undefined : full.slice(offset, offset + limit);
+        const nextOffset = offset + (content?.length ?? 0);
+        const ranged = result.error
+          ? result
+          : {
+              content,
+              path: cleanPath,
+              offset,
+              end: nextOffset,
+              totalBytes: full.length,
+              hasMore: nextOffset < full.length,
+              nextOffset: nextOffset < full.length ? nextOffset : null,
+            };
         log("tool.read_file", {
           status: result.error ? "warn" : "ok",
           durationMs: Date.now() - started,
           message: result.error,
-          detail: { path: cleanPath, bytes: result.content?.length ?? 0 },
+          detail: { path: cleanPath, bytes: content?.length ?? 0, offset, totalBytes: full.length },
         });
-        return result;
+        return ranged;
       },
     }),
     write_file: tool({

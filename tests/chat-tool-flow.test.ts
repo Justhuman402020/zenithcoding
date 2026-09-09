@@ -146,6 +146,35 @@ describe("Groq chat edit flow", () => {
     expect(compacted[2]?.parts).toContainEqual(currentImage);
   });
 
+  it("marks compacted text instead of silently cutting off its beginning", () => {
+    const text = `Important opening instruction ${"middle ".repeat(900)} required ending`;
+    const compacted = compactChatMessages([
+      { id: "long", role: "user", parts: [{ type: "text", text }] },
+    ]);
+    const saved = compacted[0]?.parts[0];
+    expect(saved?.type).toBe("text");
+    if (saved?.type !== "text") throw new Error("Expected text part");
+    expect(saved.text).toContain("Important opening instruction");
+    expect(saved.text).toContain("[Older middle content omitted to fit the model context.]");
+    expect(saved.text).toContain("required ending");
+  });
+
+  it("reads large files in explicit ranges without silent truncation", async () => {
+    const source = "0123456789".repeat(2_000);
+    const tools = createProjectFileTools(createMemoryFileStore({ "large.txt": source }));
+    const first = await tools.read_file.execute!(
+      { path: "large.txt", offset: 0, limit: 12_000 },
+      { toolCallId: "read-1", messages: [] },
+    );
+    expect(first).toMatchObject({ offset: 0, end: 12_000, totalBytes: 20_000, hasMore: true, nextOffset: 12_000 });
+    const second = await tools.read_file.execute!(
+      { path: "large.txt", offset: 12_000, limit: 12_000 },
+      { toolCallId: "read-2", messages: [] },
+    );
+    expect(second).toMatchObject({ offset: 12_000, end: 20_000, totalBytes: 20_000, hasMore: false, nextOffset: null });
+    expect(`${"content" in first ? first.content : ""}${"content" in second ? second.content : ""}`).toBe(source);
+  });
+
   it("lists, reads, writes and persists the file", async () => {
     const store = createMemoryFileStore({
       "index.html": `<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><h1>zenithvideioai</h1></body></html>`,

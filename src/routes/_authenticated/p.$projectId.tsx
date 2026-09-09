@@ -296,6 +296,8 @@ function ProjectEditor() {
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const requestKeyRef = useRef<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -307,6 +309,17 @@ function ProjectEditor() {
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+
+  useEffect(() => {
+    const sync = () => setIsOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
 
   // Which API keys are already saved for this project. Used so the secure paste
   // box never reappears for a key the user has already given us.
@@ -492,13 +505,14 @@ function ProjectEditor() {
           const headers: Record<string, string> = { "x-project-id": projectId };
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
+          if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
         },
       }),
     [projectId],
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status } = useChat({
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
@@ -512,6 +526,52 @@ function ProjectEditor() {
   });
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  // If a phone disconnects after submission, the server keeps working. Poll
+  // durable jobs and saved replies so reopening/reconnecting restores the end.
+  useEffect(() => {
+    if (!token || !chatReady) return;
+    let disposed = false;
+    let sawActiveJob = false;
+    const recover = async () => {
+      if (disposed || !navigator.onLine) return;
+      const { data: jobs } = await supabase
+        .from("chat_jobs")
+        .select("id,status,error,updated_at")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (disposed) return;
+      const active = (jobs ?? []).some((job) => job.status === "queued" || job.status === "running");
+      if (active) sawActiveJob = true;
+      if (!active && sawActiveJob) {
+        sawActiveJob = false;
+        const { data: saved } = await supabase
+          .from("chat_messages")
+          .select("id,role,content,created_at")
+          .eq("project_id", projectId)
+          .order("created_at");
+        if (disposed) return;
+        const restored = (saved ?? []).map((message) => ({
+          id: message.id,
+          role: message.role as "user" | "assistant",
+          parts: [{ type: "text" as const, text: message.content }],
+        }));
+        setMessages(restored);
+        await refreshFiles();
+        setPreviewKey((key) => key + 1);
+        const failed = (jobs ?? []).find((job) => job.status === "failed");
+        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)));
+        else toast.success("Build finished and the preview is updated");
+      }
+    };
+    void recover();
+    const timer = window.setInterval(() => void recover(), 2500);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [token, chatReady, projectId, setMessages]);
 
   // After EVERY completed assistant turn, offer one contextual next step based
   // on that exact request and any files that changed. Never a static prompt.
@@ -624,6 +684,12 @@ function ProjectEditor() {
     e.preventDefault();
     const text = input.trim();
     if ((!text && attachments.length === 0) || isStreaming || !token) return;
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
+      return;
+    }
+    requestKeyRef.current = crypto.randomUUID();
     setInput("");
     setNextBuildPrompt(null);
     const pasted = detectPastedApiKey(text);
@@ -860,47 +926,6 @@ function ProjectEditor() {
       setReverting(false);
     }
   }
-
-  // persist assistant messages when they complete, so leaving and coming back
-  // shows the exact same conversation (each answer once, under its question).
-  const lastPersistedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (isStreaming) return;
-    const pending = messages.filter(
-      (m) =>
-        m.role === "assistant" &&
-        !lastPersistedRef.current.has(m.id) &&
-        // Messages loaded from history are ALREADY stored — re-inserting them
-        // duplicates every reply on each reload and jam-packs the chat.
-        !initialMessages.some((h) => h.id === m.id),
-    );
-    if (pending.length === 0) return;
-    const rows: Array<{ id: string; text: string }> = [];
-    for (const m of pending) {
-      const text = m.parts
-        .map((p) => (p.type === "text" ? p.text : ""))
-        .filter((t) => t.trim())
-        .join("\n\n")
-        .trim();
-      if (!text) continue;
-      lastPersistedRef.current.add(m.id);
-      rows.push({ id: m.id, text });
-    }
-    if (rows.length === 0) return;
-    (async () => {
-      const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) return;
-      await supabase.from("chat_messages").insert(
-        rows.map((r) => ({
-          project_id: projectId,
-          user_id: userRes.user!.id,
-          role: "assistant",
-          content: r.text,
-        })),
-      );
-    })();
-  }, [messages, isStreaming, projectId, initialMessages]);
-
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
@@ -1422,6 +1447,11 @@ function ProjectEditor() {
               ) : null}
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
+              {!isOnline && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  Offline — reconnect to send. Work already accepted by Forge will keep finishing.
+                </div>
+              )}
               {!isStreaming && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {[
@@ -1521,7 +1551,7 @@ function ProjectEditor() {
                   type="submit"
                   size="icon"
                   className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
-                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}
+                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming || !isOnline}
                 >
                   {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>

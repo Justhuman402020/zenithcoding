@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
+import { consumeStream, convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
 import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
@@ -109,9 +109,32 @@ export const Route = createFileRoute("/api/public/chat")({
           ?.map((part) => (part.type === "text" ? part.text : ""))
           .join(" ") ?? "";
         const needsFileChange = detectFileChangeIntent(lastUserText);
+        const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
         trace.log("request.parsed", {
-          detail: { messages: body.messages.length, needsFileChange, prompt: lastUserText },
+          detail: { messages: body.messages.length, needsFileChange, prompt: lastUserText, requestKey },
         });
+
+        const { data: existingJob } = await supabase
+          .from("chat_jobs")
+          .select("id,status,assistant_reply,error")
+          .eq("project_id", projectId)
+          .eq("user_id", userId)
+          .eq("request_key", requestKey)
+          .maybeSingle();
+        if (existingJob?.status === "completed" && existingJob.assistant_reply) {
+          return new Response(existingJob.assistant_reply, {
+            headers: { "content-type": "text/plain; charset=utf-8", "x-forge-job-id": existingJob.id, ...traceHeaders },
+          });
+        }
+        const { data: createdJob } = existingJob
+          ? { data: existingJob }
+          : await supabase
+              .from("chat_jobs")
+              .insert({ project_id: projectId, user_id: userId, request_key: requestKey, prompt: lastUserText, status: "running", progress: "AI is working" })
+              .select("id")
+              .single();
+        const jobId = createdJob?.id;
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         // Snapshot current files BEFORE the AI mutates anything, so the user
         // can one-click revert to this stable version if the build fails.
@@ -212,6 +235,7 @@ export const Route = createFileRoute("/api/public/chat")({
           tools,
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
+          maxOutputTokens: 16_384,
           onFinish: async ({ finishReason, usage, text }) => {
             trace.log("stream.finish", {
               status: needsFileChange ? "ok" : "ok",
@@ -221,6 +245,25 @@ export const Route = createFileRoute("/api/public/chat")({
                 outputTokens: usage?.outputTokens ?? null,
                 replyChars: text?.length ?? 0,
               },
+            });
+            const finalText = text?.trim() || (finishReason === "length"
+              ? "The model reached its response limit before it could finish. Your saved files were preserved; send Continue building to resume safely."
+              : "The build finished and all completed file changes were saved.");
+            if (jobId) {
+              await supabaseAdmin.from("chat_jobs").update({
+                status: finishReason === "length" ? "failed" : "completed",
+                progress: finishReason === "length" ? "Response limit reached" : "Finished",
+                assistant_reply: finalText,
+                error: finishReason === "length" ? "Model response limit reached" : null,
+                trace_id: trace.traceId,
+                completed_at: new Date().toISOString(),
+              }).eq("id", jobId);
+            }
+            await supabaseAdmin.from("chat_messages").insert({
+              project_id: projectId,
+              user_id: userId,
+              role: "assistant",
+              content: finalText,
             });
             await trace.flush();
           },
@@ -235,6 +278,15 @@ export const Route = createFileRoute("/api/public/chat")({
               status: "error",
               message: error instanceof Error ? error.message : String(error),
             });
+            if (jobId) {
+              await supabaseAdmin.from("chat_jobs").update({
+                status: "failed",
+                progress: "Stopped with an error",
+                error: error instanceof Error ? error.message : String(error),
+                trace_id: trace.traceId,
+                completed_at: new Date().toISOString(),
+              }).eq("id", jobId);
+            }
             await trace.flush();
           },
         });
@@ -242,7 +294,10 @@ export const Route = createFileRoute("/api/public/chat")({
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          headers: traceHeaders,
+          headers: { ...traceHeaders, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
+          // Keep consuming the model/tool stream after the browser connection
+          // disappears so accepted file writes and the final reply still land.
+          consumeSseStream: ({ stream }) => consumeStream({ stream }),
           onError: (error) => {
             const message = error instanceof Error ? error.message : String(error ?? "");
             if (/request too large|tokens per minute|TPM/i.test(message)) {
