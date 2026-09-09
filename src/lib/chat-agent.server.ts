@@ -67,7 +67,11 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIM
         const text = part.text.trim();
         if (!text) continue;
         const limit = isLatestUser ? 4_000 : 1_200;
-        parts.push({ ...part, text: text.slice(-limit) });
+        const compacted =
+          text.length <= limit
+            ? text
+            : `${text.slice(0, Math.min(800, Math.floor(limit / 4)))}\n\n[Older middle content omitted to fit the model context.]\n\n${text.slice(-(limit - Math.min(800, Math.floor(limit / 4)) - 58))}`;
+        parts.push({ ...part, text: compacted });
         continue;
       }
       if (isLatestUser && isVisualPart(part)) parts.push(part);
