@@ -513,8 +513,14 @@ function ProjectEditor() {
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
-    onError: (err) => toast.error(getChatErrorMessage(err)),
+    onError: (err) => {
+      // A question that never got an answer must not stay in the chat: it would
+      // be resent forever and squeeze out the real work.
+      void discardUnansweredMessage();
+      toast.error(getChatErrorMessage(err));
+    },
     onFinish: () => {
+      pendingUserRowRef.current = null;
       // AI may have written files via tools
       refreshFiles();
       setPreviewKey((k) => k + 1);
