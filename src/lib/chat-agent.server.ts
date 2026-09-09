@@ -126,7 +126,44 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
   };
 }
 
-export function buildSystemPrompt(projectName: string) {
+export type ProjectBrief = {
+  description?: string | null;
+  /** The very first thing the user asked for — the project's reason to exist. */
+  originalGoal?: string | null;
+  /** Every file path currently in the project. */
+  filePaths?: string[];
+};
+
+/**
+ * A short, always-present briefing so a fresh model (or a different provider
+ * picked by the fallback chain) starts the turn knowing what this project IS.
+ * Without it, a new agent reads one file and "fixes" the site into something
+ * unrelated to what the user is building.
+ */
+export function buildProjectContext(projectName: string, brief?: ProjectBrief) {
+  const lines = [`- Project name: ${projectName}`];
+  if (brief?.description?.trim()) lines.push(`- What it is: ${brief.description.trim().slice(0, 600)}`);
+  if (brief?.originalGoal?.trim())
+    lines.push(`- The user's original request that started this project: "${brief.originalGoal.trim().slice(0, 600)}"`);
+  const paths = brief?.filePaths ?? [];
+  if (paths.length) {
+    lines.push(`- Existing files (${paths.length}): ${paths.slice(0, 60).join(", ")}${paths.length > 60 ? ", …" : ""}`);
+  } else {
+    lines.push("- Existing files: none yet (this is a fresh project).");
+  }
+  return `## What this project is (read this before doing anything)
+${lines.join("\n")}
+
+This briefing is the source of truth for the project's purpose. Every change must serve it.
+- Never replace, reset, or "start over" an existing project with a generic template, demo page, or unrelated content — extend what is already there.
+- Keep the existing stack, styling, page structure, and content unless the user explicitly asks you to change them.
+- If a request seems to contradict the project's purpose, make the smallest change that satisfies it and say in one line what you kept intact.
+- If files already exist, read the relevant ones before writing and preserve everything you are not deliberately changing.`;
+}
+
+export function buildSystemPrompt(projectName: string, brief?: ProjectBrief) {
+  return `${buildProjectContext(projectName, brief)}
+
   return `You are Forge, an autonomous AI coding agent working on the user's project "${projectName}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
 
 Be calm, supportive, and direct. When the user says something failed, is broken, or is not what they asked for, acknowledge that briefly, inspect the current files, and correct it. Never argue with the user, blame them, or pretend a change worked when a tool failed.
