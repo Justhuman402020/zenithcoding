@@ -1273,7 +1273,9 @@ function ProjectEditor() {
                 const text = m.parts
                   .map((p) => (p.type === "text" ? p.text : ""))
                   .filter((t) => t.trim())
-                  .join(m.role === "assistant" ? "\n\n" : "");
+                  .join(m.role === "assistant" ? "\n\n" : "")
+                  .replace("[[FORGE_CONTINUE]]", "")
+                  .trim();
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
@@ -1545,6 +1547,41 @@ function ProjectEditor() {
                   {nextBuildPrompt}
                 </button>
               ) : null}
+              {(() => {
+                const last = [...messages].reverse().find((message) => message.role === "assistant");
+                const lastText = last?.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") ?? "";
+                if (isStreaming || !/approve this plan/i.test(lastText)) return null;
+                return (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className="flex-1 bg-gold-gradient text-primary-foreground"
+                      onClick={async () => {
+                        setMode("build");
+                        modeRef.current = "build";
+                        autoContinueRef.current = 0;
+                        requestKeyRef.current = crypto.randomUUID();
+                        await sendMessage({
+                          text: "I approve the plan above. Build it now, exactly as planned.",
+                        });
+                      }}
+                    >
+                      <HammerIcon className="h-4 w-4" /> Approve &amp; build
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setInput("Change the plan: ");
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      Change the plan
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {!isOnline && (
@@ -1552,6 +1589,37 @@ function ProjectEditor() {
                   Offline — reconnect to send. Work already accepted by Forge will keep finishing.
                 </div>
               )}
+              {remoteWorking && !isStreaming && (
+                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-primary">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Forge is still working on this project · {remoteWorking}
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
+                {([
+                  { key: "plan" as const, label: "Plan", icon: Lightbulb, hint: "Think, ask questions, propose a plan first" },
+                  { key: "build" as const, label: "Build", icon: HammerIcon, hint: "Build it straight away" },
+                ]).map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    title={option.hint}
+                    onClick={() => setMode(option.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
+                      mode === option.key
+                        ? "bg-primary/15 text-primary border border-primary/40"
+                        : "hairline-gold text-muted-foreground hover:text-primary"
+                    }`}
+                  >
+                    <option.icon className="h-3 w-3" />
+                    {option.label}
+                  </button>
+                ))}
+                <span className="text-[10px] text-muted-foreground truncate">
+                  {mode === "plan" ? "I'll plan and wait for your approval" : "I'll build it right away"}
+                </span>
+              </div>
               {!isStreaming && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {[
