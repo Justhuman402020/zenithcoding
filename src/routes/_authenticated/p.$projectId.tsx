@@ -319,6 +319,18 @@ function ProjectEditor() {
   }, [token]);
 
   useEffect(() => {
+    const saved = window.localStorage.getItem("forge:chat-mode");
+    if (saved === "plan" || saved === "build") {
+      setMode(saved);
+      modeRef.current = saved;
+    }
+  }, []);
+  useEffect(() => {
+    modeRef.current = mode;
+    window.localStorage.setItem("forge:chat-mode", mode);
+  }, [mode]);
+
+  useEffect(() => {
     const sync = () => setIsOnline(navigator.onLine);
     sync();
     window.addEventListener("online", sync);
@@ -525,6 +537,7 @@ function ProjectEditor() {
           const headers: Record<string, string> = { "x-project-id": projectId };
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
+          headers["x-forge-mode"] = modeRef.current;
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
         },
