@@ -178,8 +178,10 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const requestedRef = parseModelKey(request.headers.get("x-forge-model"));
         const { ref: adminRef, autoFallback } = await readActiveModelRef();
-        const preferred: ModelRef | null = requestedRef ?? adminRef;
         const availableProviders = Object.keys(providerKeys);
+        // In plan mode prefer a strong reasoning model so it thinks longer.
+        const planPreference = planMode ? pickPlanPreference(availableProviders, hasImages) : null;
+        const preferred: ModelRef | null = requestedRef ?? planPreference ?? adminRef;
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
         // Providers the admin added by pasting a key join the backup chain too.
         const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id]);
@@ -220,10 +222,14 @@ export const Route = createFileRoute("/api/public/chat")({
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
-        const tools = {
+        const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
         };
+        // Plan mode is read-only: it can look at the project but never change it.
+        const tools = planMode
+          ? { list_files: allTools.list_files, read_file: allTools.read_file, list_secrets: allTools.list_secrets }
+          : allTools;
 
         // Brief the model on what this project IS. Chat history gets compacted
         // away over time and the fallback chain can hand the turn to a model
