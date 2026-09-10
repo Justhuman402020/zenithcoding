@@ -1824,7 +1824,7 @@ function ProjectEditor() {
                   }
                 }}
 
-                placeholder="Ask Forge to build…"
+                placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Forge to build…"}
                 disabled={!token}
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
