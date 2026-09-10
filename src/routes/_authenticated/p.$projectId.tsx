@@ -102,6 +102,7 @@ type TabKey = "chat" | "preview" | "code" | "history";
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
+type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
