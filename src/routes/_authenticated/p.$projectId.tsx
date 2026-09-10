@@ -1783,9 +1783,10 @@ function ProjectEditor() {
                   type="submit"
                   size="icon"
                   className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
-                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming || !isOnline}
+                  disabled={(!input.trim() && attachments.length === 0) || !token || !isOnline}
+                  title={isBusy || queuePaused ? "Add to the queue" : "Send"}
                 >
-                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {isBusy || queuePaused ? <ListPlus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </form>
