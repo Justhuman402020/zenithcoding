@@ -577,6 +577,47 @@ function ProjectEditor() {
   ) => void;
 
   const isStreaming = status === "submitted" || status === "streaming";
+  // Busy = this device is streaming, or another device/earlier run is working.
+  const isBusy = isStreaming || !!remoteWorking;
+
+  // The queue survives a reload or a switch to another phone.
+  const queueStorageKey = `forge:chat-queue:${projectId}`;
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(queueStorageKey);
+      if (raw) setQueue(JSON.parse(raw) as QueuedMessage[]);
+      setQueuePaused(window.localStorage.getItem(`${queueStorageKey}:paused`) === "1");
+    } catch {}
+    queueLoadedRef.current = true;
+  }, [queueStorageKey]);
+  useEffect(() => {
+    if (!queueLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(queueStorageKey, JSON.stringify(queue));
+      window.localStorage.setItem(`${queueStorageKey}:paused`, queuePaused ? "1" : "0");
+    } catch {}
+  }, [queue, queuePaused, queueStorageKey]);
+
+  // Send the next queued message as soon as Forge is free — unless paused.
+  useEffect(() => {
+    if (!chatReady || !token || queuePaused || isBusy || queue.length === 0) return;
+    if (drainingRef.current || !isOnline) return;
+    const next = queue[0];
+    if (!next) return;
+    drainingRef.current = true;
+    setQueue((cur) => cur.filter((item) => item.id !== next.id));
+    void (async () => {
+      try {
+        await deliverMessage(next.text, next.attachments);
+      } catch {
+        // put it back so nothing typed is ever lost
+        setQueue((cur) => [next, ...cur]);
+      } finally {
+        drainingRef.current = false;
+      }
+    })();
+  }, [queue, queuePaused, isBusy, chatReady, token, isOnline]);
+
 
   // Keeps this screen truthful on every device: it watches the durable job
   // list and the saved chat, so a second phone shows "still working" and the
