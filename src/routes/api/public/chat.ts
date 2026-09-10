@@ -11,13 +11,20 @@ import {
   createSupabaseSecretStore,
 } from "@/lib/chat-tools.server";
 import {
+  buildPlanSystemPrompt,
   buildSystemPrompt,
   compactChatMessages,
   createPrepareStep,
   detectFileChangeIntent,
 } from "@/lib/chat-agent.server";
 
-import { buildModelChain, modelSupportsVision, parseModelKey, type ModelRef } from "@/lib/ai-providers";
+import {
+  buildModelChain,
+  modelSupportsVision,
+  parseModelKey,
+  pickPlanPreference,
+  type ModelRef,
+} from "@/lib/ai-providers";
 import {
   loadProviderRegistry,
   pickAvailableModel,
