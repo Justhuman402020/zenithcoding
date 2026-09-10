@@ -303,6 +303,11 @@ function ProjectEditor() {
   const modeRef = useRef<"plan" | "build">("build");
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
+  // Messages typed while Forge is working wait here instead of being lost.
+  const [queue, setQueue] = useState<QueuedMessage[]>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const queueLoadedRef = useRef(false);
+  const drainingRef = useRef(false);
   const autoContinueRef = useRef(0);
   const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
