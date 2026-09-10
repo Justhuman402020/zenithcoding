@@ -267,7 +267,9 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const result = streamText({
           model,
-          system: buildSystemPrompt(proj.name, projectBrief),
+          system: planMode
+            ? buildPlanSystemPrompt(proj.name, projectBrief)
+            : buildSystemPrompt(proj.name, projectBrief),
           messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
 
           tools,
@@ -284,15 +286,19 @@ export const Route = createFileRoute("/api/public/chat")({
                 replyChars: text?.length ?? 0,
               },
             });
-            const finalText = text?.trim() || (finishReason === "length"
-              ? "The model reached its response limit before it could finish. Your saved files were preserved; send Continue building to resume safely."
-              : "The build finished and all completed file changes were saved.");
+            // Hitting the length cap is not a failure: the editor sees this
+            // marker and asks the model to carry on automatically, so a long
+            // job never stops half way waiting to be told "continue".
+            const truncated = finishReason === "length";
+            const finalText =
+              (text?.trim() || (truncated ? "" : "The build finished and all completed file changes were saved.")) +
+              (truncated ? "\n\n[[FORGE_CONTINUE]]" : "");
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
-                status: finishReason === "length" ? "failed" : "completed",
-                progress: finishReason === "length" ? "Response limit reached" : "Finished",
+                status: "completed",
+                progress: truncated ? "Continuing…" : "Finished",
                 assistant_reply: finalText,
-                error: finishReason === "length" ? "Model response limit reached" : null,
+                error: null,
                 trace_id: trace.traceId,
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
