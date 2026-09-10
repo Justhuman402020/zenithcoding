@@ -115,10 +115,12 @@ export const Route = createFileRoute("/api/public/chat")({
           ?.parts
           ?.map((part) => (part.type === "text" ? part.text : ""))
           .join(" ") ?? "";
-        const needsFileChange = detectFileChangeIntent(lastUserText);
+        // Plan mode thinks and proposes; build mode writes files.
+        const planMode = (request.headers.get("x-forge-mode") ?? "build").toLowerCase() === "plan";
+        const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
         const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
         trace.log("request.parsed", {
-          detail: { messages: body.messages.length, needsFileChange, prompt: lastUserText, requestKey },
+          detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
 
         const { data: existingJob } = await supabase
