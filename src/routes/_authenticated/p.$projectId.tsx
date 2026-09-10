@@ -570,42 +570,72 @@ function ProjectEditor() {
 
   const isStreaming = status === "submitted" || status === "streaming";
 
-  // If a phone disconnects after submission, the server keeps working. Poll
-  // durable jobs and saved replies so reopening/reconnecting restores the end.
+  // Keeps this screen truthful on every device: it watches the durable job
+  // list and the saved chat, so a second phone shows "still working" and the
+  // finished reply/preview arrive even if this device never held the stream.
   useEffect(() => {
     if (!token || !chatReady) return;
     let disposed = false;
     let sawActiveJob = false;
+    let knownMessageCount = -1;
+    const reloadSavedChat = async () => {
+      const { data: saved } = await supabase
+        .from("chat_messages")
+        .select("id,role,content,created_at")
+        .eq("project_id", projectId)
+        .order("created_at");
+      if (disposed) return 0;
+      const rows = cleanChatRows((saved ?? []) as any[]);
+      setMessages(
+        rows.map((message) => ({
+          id: message.id,
+          role: message.role as "user" | "assistant",
+          parts: [{ type: "text" as const, text: message.content }],
+        })) as UIMessage[],
+      );
+      return (saved ?? []).length;
+    };
     const recover = async () => {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,error,updated_at")
+        .select("id,status,progress,error,updated_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
       if (disposed) return;
-      const active = (jobs ?? []).some((job) => job.status === "queued" || job.status === "running");
-      if (active) sawActiveJob = true;
-      if (!active && sawActiveJob) {
+      const activeJob = (jobs ?? []).find((job) => job.status === "queued" || job.status === "running");
+      if (activeJob) sawActiveJob = true;
+      // Only announce remote work when this device is not the one streaming.
+      setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
+
+      if (!activeJob && sawActiveJob) {
         sawActiveJob = false;
-        const { data: saved } = await supabase
-          .from("chat_messages")
-          .select("id,role,content,created_at")
-          .eq("project_id", projectId)
-          .order("created_at");
+        knownMessageCount = await reloadSavedChat();
         if (disposed) return;
-        const restored = cleanChatRows((saved ?? []) as any[]).map((message) => ({
-          id: message.id,
-          role: message.role as "user" | "assistant",
-          parts: [{ type: "text" as const, text: message.content }],
-        }));
-        setMessages(restored);
         await refreshFiles();
         setPreviewKey((key) => key + 1);
         const failed = (jobs ?? []).find((job) => job.status === "failed");
         if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)));
         else toast.success("Build finished and the preview is updated");
+        return;
+      }
+
+      // Nothing running here: if another device added messages, show them.
+      if (isStreaming || activeJob) return;
+      const { count } = await supabase
+        .from("chat_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId);
+      if (disposed || count == null) return;
+      if (knownMessageCount === -1) {
+        knownMessageCount = count;
+        return;
+      }
+      if (count !== knownMessageCount) {
+        knownMessageCount = await reloadSavedChat();
+        await refreshFiles();
+        setPreviewKey((key) => key + 1);
       }
     };
     void recover();
@@ -614,7 +644,25 @@ function ProjectEditor() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [token, chatReady, projectId, setMessages]);
+  }, [token, chatReady, projectId, setMessages, isStreaming]);
+
+  // A reply that hit the model's length cap carries a marker. Ask it to carry
+  // on by itself instead of stopping mid-conversation waiting for "continue".
+  useEffect(() => {
+    if (isStreaming || !chatReady || !token) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const text = last.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+    if (!text.includes("[[FORGE_CONTINUE]]")) return;
+    if (continuedMessagesRef.current.has(last.id)) return;
+    continuedMessagesRef.current.add(last.id);
+    if (autoContinueRef.current >= 3) return;
+    autoContinueRef.current += 1;
+    requestKeyRef.current = crypto.randomUUID();
+    void sendMessage({
+      text: "Continue exactly where you stopped. Do not repeat finished work, and finish the remaining steps.",
+    });
+  }, [messages, isStreaming, chatReady, token, sendMessage]);
 
   // After EVERY completed assistant turn, offer one contextual next step based
   // on that exact request and any files that changed. Never a static prompt.
