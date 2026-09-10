@@ -59,6 +59,8 @@ import {
   Wand2,
   Palette,
   Settings,
+  Pause,
+  ListPlus,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
