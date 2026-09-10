@@ -228,7 +228,11 @@ export const Route = createFileRoute("/api/public/chat")({
         };
         // Plan mode is read-only: it can look at the project but never change it.
         const tools = planMode
-          ? { list_files: allTools.list_files, read_file: allTools.read_file, list_secrets: allTools.list_secrets }
+          ? ({
+              list_files: allTools.list_files,
+              read_file: allTools.read_file,
+              list_secrets: allTools.list_secrets,
+            } as typeof allTools)
           : allTools;
 
         // Brief the model on what this project IS. Chat history gets compacted
