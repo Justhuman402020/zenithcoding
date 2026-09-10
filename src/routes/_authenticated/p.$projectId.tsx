@@ -298,6 +298,13 @@ function ProjectEditor() {
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  // Plan first (think + approve) or build straight away.
+  const [mode, setMode] = useState<"plan" | "build">("build");
+  const modeRef = useRef<"plan" | "build">("build");
+  // Set when a build started on another device (or before a reload) is running.
+  const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
+  const autoContinueRef = useRef(0);
+  const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
