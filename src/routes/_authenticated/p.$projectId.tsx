@@ -59,6 +59,8 @@ import {
   Wand2,
   Palette,
   Settings,
+  Pause,
+  ListPlus,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -100,6 +102,7 @@ type TabKey = "chat" | "preview" | "code" | "history";
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
+type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -303,6 +306,11 @@ function ProjectEditor() {
   const modeRef = useRef<"plan" | "build">("build");
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
+  // Messages typed while Forge is working wait here instead of being lost.
+  const [queue, setQueue] = useState<QueuedMessage[]>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const queueLoadedRef = useRef(false);
+  const drainingRef = useRef(false);
   const autoContinueRef = useRef(0);
   const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
@@ -569,6 +577,47 @@ function ProjectEditor() {
   ) => void;
 
   const isStreaming = status === "submitted" || status === "streaming";
+  // Busy = this device is streaming, or another device/earlier run is working.
+  const isBusy = isStreaming || !!remoteWorking;
+
+  // The queue survives a reload or a switch to another phone.
+  const queueStorageKey = `forge:chat-queue:${projectId}`;
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(queueStorageKey);
+      if (raw) setQueue(JSON.parse(raw) as QueuedMessage[]);
+      setQueuePaused(window.localStorage.getItem(`${queueStorageKey}:paused`) === "1");
+    } catch {}
+    queueLoadedRef.current = true;
+  }, [queueStorageKey]);
+  useEffect(() => {
+    if (!queueLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(queueStorageKey, JSON.stringify(queue));
+      window.localStorage.setItem(`${queueStorageKey}:paused`, queuePaused ? "1" : "0");
+    } catch {}
+  }, [queue, queuePaused, queueStorageKey]);
+
+  // Send the next queued message as soon as Forge is free — unless paused.
+  useEffect(() => {
+    if (!chatReady || !token || queuePaused || isBusy || queue.length === 0) return;
+    if (drainingRef.current || !isOnline) return;
+    const next = queue[0];
+    if (!next) return;
+    drainingRef.current = true;
+    setQueue((cur) => cur.filter((item) => item.id !== next.id));
+    void (async () => {
+      try {
+        await deliverMessage(next.text, next.attachments);
+      } catch {
+        // put it back so nothing typed is ever lost
+        setQueue((cur) => [next, ...cur]);
+      } finally {
+        drainingRef.current = false;
+      }
+    })();
+  }, [queue, queuePaused, isBusy, chatReady, token, isOnline]);
+
 
   // Keeps this screen truthful on every device: it watches the durable job
   // list and the saved chat, so a second phone shows "still working" and the
@@ -776,32 +825,10 @@ function ProjectEditor() {
     if (chatReady) inputRef.current?.focus();
   }, [chatReady, tab]);
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if ((!text && attachments.length === 0) || isStreaming || !token) return;
-    if (!navigator.onLine) {
-      setIsOnline(false);
-      toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
-      return;
-    }
+  // Actually hands one message to the agent. Used both for an immediate send
+  // and for a message that waited in the queue while Forge was busy.
+  async function deliverMessage(text: string, atts: Attachment[]) {
     requestKeyRef.current = crypto.randomUUID();
-    setInput("");
-    setNextBuildPrompt(null);
-    const pasted = detectPastedApiKey(text);
-    // Only intercept when a raw key was pasted, or the key they mention is not
-    // saved yet. Otherwise "build with my saved key" must reach the agent.
-    const mentioned = detectSecretIntent(text);
-    if (pasted && attachments.length === 0) {
-      // A raw key must never reach the model: show the secure box only.
-      setPendingSecret(pasted);
-      return;
-    }
-    // Mentioning a missing key opens the secure box, but the instruction still
-    // reaches the agent so no message of yours is ever left unanswered.
-    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
-      setPendingSecret(mentioned);
-    }
     autoContinueRef.current = 0;
 
     // Snapshot current files BEFORE the AI changes them, so users can roll back
@@ -822,15 +849,14 @@ function ProjectEditor() {
         } catch {}
       })();
     }
-    const videoNotes = attachments
+    const videoNotes = atts
       .filter((a) => a.mediaType.startsWith("video/"))
       .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
     const messageText = [text, ...videoNotes].filter(Boolean).join("\n\n");
-    const attachmentFiles = attachments.flatMap((a) => {
+    const attachmentFiles = atts.flatMap((a) => {
       const visualParts = a.mediaType.startsWith("video/") ? (a.frames ?? []) : [a];
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
-    setAttachments([]);
     // persist user message BEFORE streaming, otherwise the assistant reply is
     // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
@@ -853,8 +879,46 @@ function ProjectEditor() {
       await discardUnansweredMessage();
       throw error;
     }
-
   }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if ((!text && attachments.length === 0) || !token) return;
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
+      return;
+    }
+    const pasted = detectPastedApiKey(text);
+    // Only intercept when a raw key was pasted, or the key they mention is not
+    // saved yet. Otherwise "build with my saved key" must reach the agent.
+    const mentioned = detectSecretIntent(text);
+    if (pasted && attachments.length === 0) {
+      // A raw key must never reach the model: show the secure box only.
+      setPendingSecret(pasted);
+      setInput("");
+      return;
+    }
+    // Mentioning a missing key opens the secure box, but the instruction still
+    // reaches the agent so no message of yours is ever left unanswered.
+    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
+      setPendingSecret(mentioned);
+    }
+    const atts = attachments;
+    setInput("");
+    setAttachments([]);
+    setNextBuildPrompt(null);
+
+    // Busy or paused: never drop the message and never interrupt the current
+    // build — line it up and send it the moment Forge is free again.
+    if (isBusy || queuePaused) {
+      setQueue((cur) => [...cur, { id: crypto.randomUUID(), text, attachments: atts }]);
+      return;
+    }
+    await deliverMessage(text, atts);
+  }
+
 
   async function onPickFiles(list: FileList | null) {
     if (!list) return;
@@ -1595,6 +1659,56 @@ function ProjectEditor() {
                   Forge is still working on this project · {remoteWorking}
                 </div>
               )}
+              {(isBusy || queue.length > 0 || queuePaused) && (
+                <div className="rounded-md hairline-gold bg-card/60 px-3 py-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      {queuePaused
+                        ? `Paused${queue.length ? ` · ${queue.length} waiting` : ""}`
+                        : queue.length
+                          ? `${queue.length} message${queue.length > 1 ? "s" : ""} lined up — sent when Forge is free`
+                          : "Type now; anything you send lines up behind this build"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQueuePaused((p) => !p)}
+                      className="inline-flex items-center gap-1.5 rounded-full hairline-gold px-2.5 py-1 text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0"
+                    >
+                      {queuePaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+                      {queuePaused ? "Resume" : "Pause"}
+                    </button>
+                  </div>
+                  {queue.map((item, index) => (
+                    <div key={item.id} className="flex items-start gap-2 rounded-md bg-background/50 px-2 py-1.5">
+                      <span className="text-[10px] text-muted-foreground mt-0.5">{index + 1}</span>
+                      <span className="flex-1 text-xs text-foreground/90 line-clamp-2">
+                        {item.text || `${item.attachments.length} attachment(s)`}
+                      </span>
+                      <button
+                        type="button"
+                        title="Edit this message"
+                        onClick={() => {
+                          setQueue((cur) => cur.filter((q) => q.id !== item.id));
+                          setInput(item.text);
+                          setAttachments(item.attachments);
+                          inputRef.current?.focus();
+                        }}
+                        className="text-[11px] text-muted-foreground hover:text-primary"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove from the queue"
+                        onClick={() => setQueue((cur) => cur.filter((q) => q.id !== item.id))}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
                 {([
@@ -1710,7 +1824,7 @@ function ProjectEditor() {
                   }
                 }}
 
-                placeholder="Ask Forge to build…"
+                placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Forge to build…"}
                 disabled={!token}
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
@@ -1719,9 +1833,10 @@ function ProjectEditor() {
                   type="submit"
                   size="icon"
                   className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
-                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming || !isOnline}
+                  disabled={(!input.trim() && attachments.length === 0) || !token || !isOnline}
+                  title={isBusy || queuePaused ? "Add to the queue" : "Send"}
                 >
-                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {isBusy || queuePaused ? <ListPlus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </form>
