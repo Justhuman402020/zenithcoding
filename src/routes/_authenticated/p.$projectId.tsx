@@ -298,6 +298,13 @@ function ProjectEditor() {
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  // Plan first (think + approve) or build straight away.
+  const [mode, setMode] = useState<"plan" | "build">("build");
+  const modeRef = useRef<"plan" | "build">("build");
+  // Set when a build started on another device (or before a reload) is running.
+  const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
+  const autoContinueRef = useRef(0);
+  const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
@@ -310,6 +317,18 @@ function ProjectEditor() {
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("forge:chat-mode");
+    if (saved === "plan" || saved === "build") {
+      setMode(saved);
+      modeRef.current = saved;
+    }
+  }, []);
+  useEffect(() => {
+    modeRef.current = mode;
+    window.localStorage.setItem("forge:chat-mode", mode);
+  }, [mode]);
 
   useEffect(() => {
     const sync = () => setIsOnline(navigator.onLine);
@@ -518,6 +537,7 @@ function ProjectEditor() {
           const headers: Record<string, string> = { "x-project-id": projectId };
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
+          headers["x-forge-mode"] = modeRef.current;
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
         },
@@ -550,42 +570,72 @@ function ProjectEditor() {
 
   const isStreaming = status === "submitted" || status === "streaming";
 
-  // If a phone disconnects after submission, the server keeps working. Poll
-  // durable jobs and saved replies so reopening/reconnecting restores the end.
+  // Keeps this screen truthful on every device: it watches the durable job
+  // list and the saved chat, so a second phone shows "still working" and the
+  // finished reply/preview arrive even if this device never held the stream.
   useEffect(() => {
     if (!token || !chatReady) return;
     let disposed = false;
     let sawActiveJob = false;
+    let knownMessageCount = -1;
+    const reloadSavedChat = async () => {
+      const { data: saved } = await supabase
+        .from("chat_messages")
+        .select("id,role,content,created_at")
+        .eq("project_id", projectId)
+        .order("created_at");
+      if (disposed) return 0;
+      const rows = cleanChatRows((saved ?? []) as any[]);
+      setMessages(
+        rows.map((message) => ({
+          id: message.id,
+          role: message.role as "user" | "assistant",
+          parts: [{ type: "text" as const, text: message.content }],
+        })) as UIMessage[],
+      );
+      return (saved ?? []).length;
+    };
     const recover = async () => {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,error,updated_at")
+        .select("id,status,progress,error,updated_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
       if (disposed) return;
-      const active = (jobs ?? []).some((job) => job.status === "queued" || job.status === "running");
-      if (active) sawActiveJob = true;
-      if (!active && sawActiveJob) {
+      const activeJob = (jobs ?? []).find((job) => job.status === "queued" || job.status === "running");
+      if (activeJob) sawActiveJob = true;
+      // Only announce remote work when this device is not the one streaming.
+      setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
+
+      if (!activeJob && sawActiveJob) {
         sawActiveJob = false;
-        const { data: saved } = await supabase
-          .from("chat_messages")
-          .select("id,role,content,created_at")
-          .eq("project_id", projectId)
-          .order("created_at");
+        knownMessageCount = await reloadSavedChat();
         if (disposed) return;
-        const restored = cleanChatRows((saved ?? []) as any[]).map((message) => ({
-          id: message.id,
-          role: message.role as "user" | "assistant",
-          parts: [{ type: "text" as const, text: message.content }],
-        }));
-        setMessages(restored);
         await refreshFiles();
         setPreviewKey((key) => key + 1);
         const failed = (jobs ?? []).find((job) => job.status === "failed");
         if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)));
         else toast.success("Build finished and the preview is updated");
+        return;
+      }
+
+      // Nothing running here: if another device added messages, show them.
+      if (isStreaming || activeJob) return;
+      const { count } = await supabase
+        .from("chat_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId);
+      if (disposed || count == null) return;
+      if (knownMessageCount === -1) {
+        knownMessageCount = count;
+        return;
+      }
+      if (count !== knownMessageCount) {
+        knownMessageCount = await reloadSavedChat();
+        await refreshFiles();
+        setPreviewKey((key) => key + 1);
       }
     };
     void recover();
@@ -594,7 +644,25 @@ function ProjectEditor() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [token, chatReady, projectId, setMessages]);
+  }, [token, chatReady, projectId, setMessages, isStreaming]);
+
+  // A reply that hit the model's length cap carries a marker. Ask it to carry
+  // on by itself instead of stopping mid-conversation waiting for "continue".
+  useEffect(() => {
+    if (isStreaming || !chatReady || !token) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const text = last.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+    if (!text.includes("[[FORGE_CONTINUE]]")) return;
+    if (continuedMessagesRef.current.has(last.id)) return;
+    continuedMessagesRef.current.add(last.id);
+    if (autoContinueRef.current >= 3) return;
+    autoContinueRef.current += 1;
+    requestKeyRef.current = crypto.randomUUID();
+    void sendMessage({
+      text: "Continue exactly where you stopped. Do not repeat finished work, and finish the remaining steps.",
+    });
+  }, [messages, isStreaming, chatReady, token, sendMessage]);
 
   // After EVERY completed assistant turn, offer one contextual next step based
   // on that exact request and any files that changed. Never a static prompt.
@@ -724,14 +792,17 @@ function ProjectEditor() {
     // Only intercept when a raw key was pasted, or the key they mention is not
     // saved yet. Otherwise "build with my saved key" must reach the agent.
     const mentioned = detectSecretIntent(text);
-    const secretIntent =
-      pasted ?? (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase()) ? mentioned : null);
-    if (secretIntent && attachments.length === 0) {
-      // Show the secure paste box only. Nothing is written to the chat history,
-      // because this step never gets an AI answer and would pile up.
-      setPendingSecret(secretIntent);
+    if (pasted && attachments.length === 0) {
+      // A raw key must never reach the model: show the secure box only.
+      setPendingSecret(pasted);
       return;
     }
+    // Mentioning a missing key opens the secure box, but the instruction still
+    // reaches the agent so no message of yours is ever left unanswered.
+    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
+      setPendingSecret(mentioned);
+    }
+    autoContinueRef.current = 0;
 
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
@@ -1202,7 +1273,9 @@ function ProjectEditor() {
                 const text = m.parts
                   .map((p) => (p.type === "text" ? p.text : ""))
                   .filter((t) => t.trim())
-                  .join(m.role === "assistant" ? "\n\n" : "");
+                  .join(m.role === "assistant" ? "\n\n" : "")
+                  .replace("[[FORGE_CONTINUE]]", "")
+                  .trim();
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
@@ -1474,6 +1547,41 @@ function ProjectEditor() {
                   {nextBuildPrompt}
                 </button>
               ) : null}
+              {(() => {
+                const last = [...messages].reverse().find((message) => message.role === "assistant");
+                const lastText = last?.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") ?? "";
+                if (isStreaming || !/approve this plan/i.test(lastText)) return null;
+                return (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className="flex-1 bg-gold-gradient text-primary-foreground"
+                      onClick={async () => {
+                        setMode("build");
+                        modeRef.current = "build";
+                        autoContinueRef.current = 0;
+                        requestKeyRef.current = crypto.randomUUID();
+                        await sendMessage({
+                          text: "I approve the plan above. Build it now, exactly as planned.",
+                        });
+                      }}
+                    >
+                      <HammerIcon className="h-4 w-4" /> Approve &amp; build
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setInput("Change the plan: ");
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      Change the plan
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {!isOnline && (
@@ -1481,6 +1589,37 @@ function ProjectEditor() {
                   Offline — reconnect to send. Work already accepted by Forge will keep finishing.
                 </div>
               )}
+              {remoteWorking && !isStreaming && (
+                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-primary">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Forge is still working on this project · {remoteWorking}
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
+                {([
+                  { key: "plan" as const, label: "Plan", icon: Lightbulb, hint: "Think, ask questions, propose a plan first" },
+                  { key: "build" as const, label: "Build", icon: HammerIcon, hint: "Build it straight away" },
+                ]).map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    title={option.hint}
+                    onClick={() => setMode(option.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
+                      mode === option.key
+                        ? "bg-primary/15 text-primary border border-primary/40"
+                        : "hairline-gold text-muted-foreground hover:text-primary"
+                    }`}
+                  >
+                    <option.icon className="h-3 w-3" />
+                    {option.label}
+                  </button>
+                ))}
+                <span className="text-[10px] text-muted-foreground truncate">
+                  {mode === "plan" ? "I'll plan and wait for your approval" : "I'll build it right away"}
+                </span>
+              </div>
               {!isStreaming && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {[

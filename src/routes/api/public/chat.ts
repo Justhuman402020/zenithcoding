@@ -11,13 +11,20 @@ import {
   createSupabaseSecretStore,
 } from "@/lib/chat-tools.server";
 import {
+  buildPlanSystemPrompt,
   buildSystemPrompt,
   compactChatMessages,
   createPrepareStep,
   detectFileChangeIntent,
 } from "@/lib/chat-agent.server";
 
-import { buildModelChain, modelSupportsVision, parseModelKey, type ModelRef } from "@/lib/ai-providers";
+import {
+  buildModelChain,
+  modelSupportsVision,
+  parseModelKey,
+  pickPlanPreference,
+  type ModelRef,
+} from "@/lib/ai-providers";
 import {
   loadProviderRegistry,
   pickAvailableModel,
@@ -108,10 +115,12 @@ export const Route = createFileRoute("/api/public/chat")({
           ?.parts
           ?.map((part) => (part.type === "text" ? part.text : ""))
           .join(" ") ?? "";
-        const needsFileChange = detectFileChangeIntent(lastUserText);
+        // Plan mode thinks and proposes; build mode writes files.
+        const planMode = (request.headers.get("x-forge-mode") ?? "build").toLowerCase() === "plan";
+        const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
         const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
         trace.log("request.parsed", {
-          detail: { messages: body.messages.length, needsFileChange, prompt: lastUserText, requestKey },
+          detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
 
         const { data: existingJob } = await supabase
@@ -169,8 +178,10 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const requestedRef = parseModelKey(request.headers.get("x-forge-model"));
         const { ref: adminRef, autoFallback } = await readActiveModelRef();
-        const preferred: ModelRef | null = requestedRef ?? adminRef;
         const availableProviders = Object.keys(providerKeys);
+        // In plan mode prefer a strong reasoning model so it thinks longer.
+        const planPreference = planMode ? pickPlanPreference(availableProviders, hasImages) : null;
+        const preferred: ModelRef | null = requestedRef ?? planPreference ?? adminRef;
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
         // Providers the admin added by pasting a key join the backup chain too.
         const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id]);
@@ -211,10 +222,18 @@ export const Route = createFileRoute("/api/public/chat")({
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
-        const tools = {
+        const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
         };
+        // Plan mode is read-only: it can look at the project but never change it.
+        const tools = planMode
+          ? ({
+              list_files: allTools.list_files,
+              read_file: allTools.read_file,
+              list_secrets: allTools.list_secrets,
+            } as typeof allTools)
+          : allTools;
 
         // Brief the model on what this project IS. Chat history gets compacted
         // away over time and the fallback chain can hand the turn to a model
@@ -252,7 +271,9 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const result = streamText({
           model,
-          system: buildSystemPrompt(proj.name, projectBrief),
+          system: planMode
+            ? buildPlanSystemPrompt(proj.name, projectBrief)
+            : buildSystemPrompt(proj.name, projectBrief),
           messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
 
           tools,
@@ -269,15 +290,19 @@ export const Route = createFileRoute("/api/public/chat")({
                 replyChars: text?.length ?? 0,
               },
             });
-            const finalText = text?.trim() || (finishReason === "length"
-              ? "The model reached its response limit before it could finish. Your saved files were preserved; send Continue building to resume safely."
-              : "The build finished and all completed file changes were saved.");
+            // Hitting the length cap is not a failure: the editor sees this
+            // marker and asks the model to carry on automatically, so a long
+            // job never stops half way waiting to be told "continue".
+            const truncated = finishReason === "length";
+            const finalText =
+              (text?.trim() || (truncated ? "" : "The build finished and all completed file changes were saved.")) +
+              (truncated ? "\n\n[[FORGE_CONTINUE]]" : "");
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
-                status: finishReason === "length" ? "failed" : "completed",
-                progress: finishReason === "length" ? "Response limit reached" : "Finished",
+                status: "completed",
+                progress: truncated ? "Continuing…" : "Finished",
                 assistant_reply: finalText,
-                error: finishReason === "length" ? "Model response limit reached" : null,
+                error: null,
                 trace_id: trace.traceId,
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
