@@ -776,32 +776,10 @@ function ProjectEditor() {
     if (chatReady) inputRef.current?.focus();
   }, [chatReady, tab]);
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if ((!text && attachments.length === 0) || isStreaming || !token) return;
-    if (!navigator.onLine) {
-      setIsOnline(false);
-      toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
-      return;
-    }
+  // Actually hands one message to the agent. Used both for an immediate send
+  // and for a message that waited in the queue while Forge was busy.
+  async function deliverMessage(text: string, atts: Attachment[]) {
     requestKeyRef.current = crypto.randomUUID();
-    setInput("");
-    setNextBuildPrompt(null);
-    const pasted = detectPastedApiKey(text);
-    // Only intercept when a raw key was pasted, or the key they mention is not
-    // saved yet. Otherwise "build with my saved key" must reach the agent.
-    const mentioned = detectSecretIntent(text);
-    if (pasted && attachments.length === 0) {
-      // A raw key must never reach the model: show the secure box only.
-      setPendingSecret(pasted);
-      return;
-    }
-    // Mentioning a missing key opens the secure box, but the instruction still
-    // reaches the agent so no message of yours is ever left unanswered.
-    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
-      setPendingSecret(mentioned);
-    }
     autoContinueRef.current = 0;
 
     // Snapshot current files BEFORE the AI changes them, so users can roll back
@@ -822,15 +800,14 @@ function ProjectEditor() {
         } catch {}
       })();
     }
-    const videoNotes = attachments
+    const videoNotes = atts
       .filter((a) => a.mediaType.startsWith("video/"))
       .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
     const messageText = [text, ...videoNotes].filter(Boolean).join("\n\n");
-    const attachmentFiles = attachments.flatMap((a) => {
+    const attachmentFiles = atts.flatMap((a) => {
       const visualParts = a.mediaType.startsWith("video/") ? (a.frames ?? []) : [a];
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
-    setAttachments([]);
     // persist user message BEFORE streaming, otherwise the assistant reply is
     // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
@@ -853,8 +830,46 @@ function ProjectEditor() {
       await discardUnansweredMessage();
       throw error;
     }
-
   }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if ((!text && attachments.length === 0) || !token) return;
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
+      return;
+    }
+    const pasted = detectPastedApiKey(text);
+    // Only intercept when a raw key was pasted, or the key they mention is not
+    // saved yet. Otherwise "build with my saved key" must reach the agent.
+    const mentioned = detectSecretIntent(text);
+    if (pasted && attachments.length === 0) {
+      // A raw key must never reach the model: show the secure box only.
+      setPendingSecret(pasted);
+      setInput("");
+      return;
+    }
+    // Mentioning a missing key opens the secure box, but the instruction still
+    // reaches the agent so no message of yours is ever left unanswered.
+    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
+      setPendingSecret(mentioned);
+    }
+    const atts = attachments;
+    setInput("");
+    setAttachments([]);
+    setNextBuildPrompt(null);
+
+    // Busy or paused: never drop the message and never interrupt the current
+    // build — line it up and send it the moment Forge is free again.
+    if (isBusy || queuePaused) {
+      setQueue((cur) => [...cur, { id: crypto.randomUUID(), text, attachments: atts }]);
+      return;
+    }
+    await deliverMessage(text, atts);
+  }
+
 
   async function onPickFiles(list: FileList | null) {
     if (!list) return;
