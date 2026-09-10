@@ -792,14 +792,17 @@ function ProjectEditor() {
     // Only intercept when a raw key was pasted, or the key they mention is not
     // saved yet. Otherwise "build with my saved key" must reach the agent.
     const mentioned = detectSecretIntent(text);
-    const secretIntent =
-      pasted ?? (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase()) ? mentioned : null);
-    if (secretIntent && attachments.length === 0) {
-      // Show the secure paste box only. Nothing is written to the chat history,
-      // because this step never gets an AI answer and would pile up.
-      setPendingSecret(secretIntent);
+    if (pasted && attachments.length === 0) {
+      // A raw key must never reach the model: show the secure box only.
+      setPendingSecret(pasted);
       return;
     }
+    // Mentioning a missing key opens the secure box, but the instruction still
+    // reaches the agent so no message of yours is ever left unanswered.
+    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
+      setPendingSecret(mentioned);
+    }
+    autoContinueRef.current = 0;
 
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
