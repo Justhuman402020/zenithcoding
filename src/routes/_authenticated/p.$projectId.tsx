@@ -1659,6 +1659,56 @@ function ProjectEditor() {
                   Forge is still working on this project · {remoteWorking}
                 </div>
               )}
+              {(isBusy || queue.length > 0 || queuePaused) && (
+                <div className="rounded-md hairline-gold bg-card/60 px-3 py-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      {queuePaused
+                        ? `Paused${queue.length ? ` · ${queue.length} waiting` : ""}`
+                        : queue.length
+                          ? `${queue.length} message${queue.length > 1 ? "s" : ""} lined up — sent when Forge is free`
+                          : "Type now; anything you send lines up behind this build"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQueuePaused((p) => !p)}
+                      className="inline-flex items-center gap-1.5 rounded-full hairline-gold px-2.5 py-1 text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0"
+                    >
+                      {queuePaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+                      {queuePaused ? "Resume" : "Pause"}
+                    </button>
+                  </div>
+                  {queue.map((item, index) => (
+                    <div key={item.id} className="flex items-start gap-2 rounded-md bg-background/50 px-2 py-1.5">
+                      <span className="text-[10px] text-muted-foreground mt-0.5">{index + 1}</span>
+                      <span className="flex-1 text-xs text-foreground/90 line-clamp-2">
+                        {item.text || `${item.attachments.length} attachment(s)`}
+                      </span>
+                      <button
+                        type="button"
+                        title="Edit this message"
+                        onClick={() => {
+                          setQueue((cur) => cur.filter((q) => q.id !== item.id));
+                          setInput(item.text);
+                          setAttachments(item.attachments);
+                          inputRef.current?.focus();
+                        }}
+                        className="text-[11px] text-muted-foreground hover:text-primary"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove from the queue"
+                        onClick={() => setQueue((cur) => cur.filter((q) => q.id !== item.id))}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
                 {([
