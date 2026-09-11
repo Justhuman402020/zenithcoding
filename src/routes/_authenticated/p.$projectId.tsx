@@ -104,6 +104,14 @@ type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
 type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
+const CHAT_JOB_STALE_MS = 75_000;
+
+export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
+  if (job.status !== "queued" && job.status !== "running") return false;
+  const updatedAt = job.updated_at ? new Date(job.updated_at).getTime() : 0;
+  return Number.isFinite(updatedAt) && now - updatedAt < CHAT_JOB_STALE_MS;
+}
+
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -585,8 +593,12 @@ function ProjectEditor() {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(queueStorageKey);
-      if (raw) setQueue(JSON.parse(raw) as QueuedMessage[]);
-      setQueuePaused(window.localStorage.getItem(`${queueStorageKey}:paused`) === "1");
+      const savedQueue = raw ? (JSON.parse(raw) as QueuedMessage[]) : [];
+      setQueue(savedQueue);
+      // Pausing only applies to messages that are actually waiting. Persisting
+      // an empty paused queue made every future message appear to send while it
+      // was silently held forever.
+      setQueuePaused(savedQueue.length > 0 && window.localStorage.getItem(`${queueStorageKey}:paused`) === "1");
     } catch {}
     queueLoadedRef.current = true;
   }, [queueStorageKey]);
@@ -653,7 +665,9 @@ function ProjectEditor() {
         .order("created_at", { ascending: false })
         .limit(5);
       if (disposed) return;
-      const activeJob = (jobs ?? []).find((job) => job.status === "queued" || job.status === "running");
+      // A crashed request cannot update its final state. The server heartbeats
+      // healthy work, so an old timestamp is safe evidence that this job died.
+      const activeJob = (jobs ?? []).find((job) => isActiveChatJob(job));
       if (activeJob) sawActiveJob = true;
       // Only announce remote work when this device is not the one streaming.
       setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
@@ -912,10 +926,13 @@ function ProjectEditor() {
 
     // Busy or paused: never drop the message and never interrupt the current
     // build — line it up and send it the moment Forge is free again.
-    if (isBusy || queuePaused) {
+    // A pause can only hold an existing queue. An empty, stale pause flag must
+    // never swallow the next instruction.
+    if (isBusy || (queuePaused && queue.length > 0)) {
       setQueue((cur) => [...cur, { id: crypto.randomUUID(), text, attachments: atts }]);
       return;
     }
+    if (queuePaused) setQueuePaused(false);
     await deliverMessage(text, atts);
   }
 

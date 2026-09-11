@@ -15,6 +15,7 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 import { createGroqProvider, createMemoryFileStore, createProjectFileTools } from "@/lib/chat-tools.server";
 import { compactChatMessages, createPrepareStep, detectFileChangeIntent } from "@/lib/chat-agent.server";
 import { buildFollowUpSuggestion, detectSecretIntent } from "@/lib/chat-followups";
+import { isActiveChatJob } from "@/routes/_authenticated/p.$projectId";
 
 type ChatMessage = { role: string; content?: unknown; name?: string; tool_call_id?: string };
 
@@ -85,6 +86,13 @@ afterAll(async () => {
 });
 
 describe("Groq chat edit flow", () => {
+  it("releases messages when a running job stops heartbeating", () => {
+    const now = new Date("2026-09-11T00:00:00Z").getTime();
+    expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:59:30Z" }, now)).toBe(true);
+    expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:58:00Z" }, now)).toBe(false);
+    expect(isActiveChatJob({ status: "completed", updated_at: "2026-09-10T23:59:59Z" }, now)).toBe(false);
+  });
+
   it("treats failure reports as build requests", () => {
     expect(detectFileChangeIntent("Nothing is working, fix that")).toBe(true);
     expect(detectFileChangeIntent("The build keeps failing")).toBe(true);
