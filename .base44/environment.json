@@ -1,0 +1,72 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "description": "Supabase service role key (server-side admin operations, bypasses RLS). Find it in your Supabase project dashboard → Settings → API → service_role key.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_SECRET_KEY",
+      "description": "Stripe secret API key for billing. Find it in the Stripe Dashboard → Developers → API keys.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_WEBHOOK_SECRET",
+      "description": "Stripe webhook signing secret for verifying webhook events. Find it in the Stripe Dashboard → Developers → Webhooks.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CLIENT_ID",
+      "description": "GitHub OAuth app client ID for repo push integration. Find it in GitHub → Settings → Developer settings → OAuth Apps.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GITHUB_OAUTH_CLIENT_SECRET",
+      "description": "GitHub OAuth app client secret. Find it in GitHub → Settings → Developer settings → OAuth Apps.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_ADMIN_SESSION_SECRET",
+      "description": "Secret key for Forge admin session authentication. Generate a random 32+ char string.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_ADMIN_KEY",
+      "description": "Admin access key for the Forge admin panel. Set your own value.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "FORGE_SECRETS_ENCRYPTION_KEY",
+      "description": "64-char hex string used for AES-GCM encryption of per-project secrets. Generate with: openssl rand -hex 32",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GROQ_API_KEY",
+      "description": "Groq API key for AI coding models. Get it at https://console.groq.com/keys",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "OPENROUTER_API_KEY",
+      "description": "OpenRouter API key for AI models. Get it at https://openrouter.ai/keys",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GOOGLE_AI_STUDIO_API_KEY",
+      "description": "Google AI Studio API key for Gemini models. Get it at https://aistudio.google.com/apikey",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "CEREBRAS_API_KEY",
+      "description": "Cerebras API key for AI models. Get it at https://cloud.cerebras.ai",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "DEEPINFRA_API_KEY",
+      "description": "DeepInfra API key for AI models. Get it at https://deepinfra.com/dash",
+      "requiredAtBoot": false
+    }
+  ]
+}

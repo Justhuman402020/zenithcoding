@@ -192,6 +192,28 @@ export function modelSupportsVision(ref: ModelRef) {
   return guessModelMeta(ref.provider, ref.model).vision;
 }
 
+/**
+ * Models used for "Plan" mode: they think longer and write a real plan instead
+ * of rushing into edits. OpenRouter's strong reasoning models come first.
+ */
+export const PLAN_MODEL_PREFERENCES: ModelRef[] = [
+  { provider: "openrouter", model: "deepseek/deepseek-chat-v3.1:free" },
+  { provider: "openrouter", model: "qwen/qwen3-coder:free" },
+  { provider: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" },
+  { provider: "groq", model: "openai/gpt-oss-120b" },
+  { provider: "google", model: "gemini-2.5-flash" },
+  { provider: "cerebras", model: "gpt-oss-120b" },
+];
+
+/** First planning model whose provider has a working API key. */
+export function pickPlanPreference(availableProviders: string[], vision = false): ModelRef | null {
+  return (
+    PLAN_MODEL_PREFERENCES.find(
+      (ref) => availableProviders.includes(ref.provider) && (!vision || modelSupportsVision(ref)),
+    ) ?? null
+  );
+}
+
 export function readStoredModelRef(): ModelRef | null {
   if (typeof window === "undefined") return null;
   return parseModelKey(window.localStorage.getItem(MODEL_STORAGE_KEY));

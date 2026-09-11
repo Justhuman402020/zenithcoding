@@ -67,7 +67,11 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIM
         const text = part.text.trim();
         if (!text) continue;
         const limit = isLatestUser ? 4_000 : 1_200;
-        parts.push({ ...part, text: text.slice(-limit) });
+        const compacted =
+          text.length <= limit
+            ? text
+            : `${text.slice(0, Math.min(800, Math.floor(limit / 4)))}\n\n[Older middle content omitted to fit the model context.]\n\n${text.slice(-(limit - Math.min(800, Math.floor(limit / 4)) - 58))}`;
+        parts.push({ ...part, text: compacted });
         continue;
       }
       if (isLatestUser && isVisualPart(part)) parts.push(part);
@@ -122,8 +126,69 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
   };
 }
 
-export function buildSystemPrompt(projectName: string) {
-  return `You are Forge, an autonomous AI coding agent working on the user's project "${projectName}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
+export type ProjectBrief = {
+  description?: string | null;
+  /** The very first thing the user asked for — the project's reason to exist. */
+  originalGoal?: string | null;
+  /** Every file path currently in the project. */
+  filePaths?: string[];
+};
+
+/**
+ * A short, always-present briefing so a fresh model (or a different provider
+ * picked by the fallback chain) starts the turn knowing what this project IS.
+ * Without it, a new agent reads one file and "fixes" the site into something
+ * unrelated to what the user is building.
+ */
+export function buildProjectContext(projectName: string, brief?: ProjectBrief) {
+  const lines = [`- Project name: ${projectName}`];
+  if (brief?.description?.trim()) lines.push(`- What it is: ${brief.description.trim().slice(0, 600)}`);
+  if (brief?.originalGoal?.trim())
+    lines.push(`- The user's original request that started this project: "${brief.originalGoal.trim().slice(0, 600)}"`);
+  const paths = brief?.filePaths ?? [];
+  if (paths.length) {
+    lines.push(`- Existing files (${paths.length}): ${paths.slice(0, 60).join(", ")}${paths.length > 60 ? ", …" : ""}`);
+  } else {
+    lines.push("- Existing files: none yet (this is a fresh project).");
+  }
+  return `## What this project is (read this before doing anything)
+${lines.join("\n")}
+
+This briefing is the source of truth for the project's purpose. Every change must serve it.
+- Never replace, reset, or "start over" an existing project with a generic template, demo page, or unrelated content — extend what is already there.
+- Keep the existing stack, styling, page structure, and content unless the user explicitly asks you to change them.
+- If a request seems to contradict the project's purpose, make the smallest change that satisfies it and say in one line what you kept intact.
+- If files already exist, read the relevant ones before writing and preserve everything you are not deliberately changing.`;
+}
+
+/**
+ * "Plan" mode: think first, ask the user what is unclear, and propose a plan.
+ * No files are written in this mode — the user approves, then Build mode runs.
+ */
+export function buildPlanSystemPrompt(projectName: string, brief?: ProjectBrief) {
+  return `${buildProjectContext(projectName, brief)}
+
+You are Forge in PLAN MODE for the project "${projectName}". In this mode you THINK and PLAN — you never change files.
+
+Take your time and be thorough. Read whatever you need with list_files and read_file first (list_secrets tells you which API keys already exist). Then write the complete plan in ONE reply. Never stop half way and never end with "let me continue" — finish the whole plan in this message.
+
+Your reply must be short, plain, and non-technical (the user is not a programmer), using this shape:
+1. **What I understood** — one or two sentences restating the goal in their words.
+2. **Questions** — only genuine blockers, at most three, each answerable in one line. If nothing is unclear, write "No questions — I have what I need."
+3. **The plan** — numbered steps of what you will build, naming the pages/sections the user will see, and which files each step touches.
+4. **What stays the same** — one line confirming what you will not break.
+5. End with exactly this line: "Approve this plan and I'll build it."
+
+Rules:
+- Never call write_file or delete_file in plan mode; those tools are not available to you.
+- Never output the finished code — describe the work, not the source.
+- If the user is only asking a question, answer it plainly instead of forcing a plan.`;
+}
+
+export function buildSystemPrompt(projectName: string, brief?: ProjectBrief) {
+  return `${buildProjectContext(projectName, brief)}
+
+You are Forge, an autonomous AI coding agent working on the user's project "${projectName}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
 
 Be calm, supportive, and direct. When the user says something failed, is broken, or is not what they asked for, acknowledge that briefly, inspect the current files, and correct it. Never argue with the user, blame them, or pretend a change worked when a tool failed.
 

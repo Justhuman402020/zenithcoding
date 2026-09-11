@@ -17,12 +17,14 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
+import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
+import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
@@ -72,6 +74,11 @@ const SSlugRoute = SSlugRouteImport.update({
   path: '/s/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LiveProjectIdRoute = LiveProjectIdRouteImport.update({
+  id: '/live/$projectId',
+  path: '/live/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
@@ -101,6 +108,12 @@ const AuthenticatedAdminModelsRoute =
   AuthenticatedAdminModelsRouteImport.update({
     id: '/admin/models',
     path: '/admin/models',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminDomainsRoute =
+  AuthenticatedAdminDomainsRouteImport.update({
+    id: '/admin/domains',
+    path: '/admin/domains',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAccountBillingRoute =
@@ -158,10 +171,12 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
@@ -181,11 +196,13 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
@@ -207,11 +224,13 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/templates': typeof TemplatesRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
@@ -234,10 +253,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/account/billing'
+    | '/admin/domains'
     | '/admin/models'
     | '/admin/users'
     | '/p/$projectId'
@@ -257,11 +278,13 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/'
     | '/account/billing'
+    | '/admin/domains'
     | '/admin/models'
     | '/admin/users'
     | '/p/$projectId'
@@ -282,11 +305,13 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/templates'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/_authenticated/'
     | '/_authenticated/account/billing'
+    | '/_authenticated/admin/domains'
     | '/_authenticated/admin/models'
     | '/_authenticated/admin/users'
     | '/_authenticated/p/$projectId'
@@ -308,6 +333,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
   TemplatesRoute: typeof TemplatesRoute
+  LiveProjectIdRoute: typeof LiveProjectIdRoute
   SSlugRoute: typeof SSlugRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
@@ -380,6 +406,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/live/$projectId': {
+      id: '/live/$projectId'
+      path: '/live/$projectId'
+      fullPath: '/live/$projectId'
+      preLoaderRoute: typeof LiveProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/admin/': {
       id: '/_authenticated/admin/'
       path: '/admin'
@@ -420,6 +453,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/models'
       fullPath: '/admin/models'
       preLoaderRoute: typeof AuthenticatedAdminModelsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/domains': {
+      id: '/_authenticated/admin/domains'
+      path: '/admin/domains'
+      fullPath: '/admin/domains'
+      preLoaderRoute: typeof AuthenticatedAdminDomainsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/account/billing': {
@@ -505,6 +545,7 @@ const AuthenticatedPProjectIdRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
+  AuthenticatedAdminDomainsRoute: typeof AuthenticatedAdminDomainsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
@@ -514,6 +555,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
+  AuthenticatedAdminDomainsRoute: AuthenticatedAdminDomainsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
@@ -528,6 +570,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
   TemplatesRoute: TemplatesRoute,
+  LiveProjectIdRoute: LiveProjectIdRoute,
   SSlugRoute: SSlugRoute,
   ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
