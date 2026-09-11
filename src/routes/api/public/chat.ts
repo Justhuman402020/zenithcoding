@@ -123,6 +123,22 @@ export const Route = createFileRoute("/api/public/chat")({
           detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
 
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        // Recover jobs whose request died before its completion handler ran.
+        // Healthy jobs refresh updated_at every 15 seconds below.
+        await supabaseAdmin
+          .from("chat_jobs")
+          .update({
+            status: "failed",
+            progress: "Stopped before completion",
+            error: "The previous AI request stopped unexpectedly. Your next message can run normally.",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("project_id", projectId)
+          .eq("user_id", userId)
+          .in("status", ["queued", "running"])
+          .lt("updated_at", new Date(Date.now() - 75_000).toISOString());
+
         const { data: existingJob } = await supabase
           .from("chat_jobs")
           .select("id,status,assistant_reply,error")
@@ -143,7 +159,6 @@ export const Route = createFileRoute("/api/public/chat")({
               .select("id")
               .single();
         const jobId = createdJob?.id;
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         // Snapshot current files BEFORE the AI mutates anything, so the user
         // can one-click revert to this stable version if the build fails.
@@ -269,6 +284,21 @@ export const Route = createFileRoute("/api/public/chat")({
               ),
             }));
 
+        // Keep long builds visibly alive. If the worker crashes, this stops and
+        // the stale-job recovery above/client polling releases the next message.
+        const heartbeat = jobId
+          ? setInterval(() => {
+              void supabaseAdmin
+                .from("chat_jobs")
+                .update({ progress: "AI is working" })
+                .eq("id", jobId)
+                .in("status", ["queued", "running"]);
+            }, 15_000)
+          : undefined;
+        const stopHeartbeat = () => {
+          if (heartbeat) clearInterval(heartbeat);
+        };
+
         const result = streamText({
           model,
           system: planMode
@@ -281,6 +311,7 @@ export const Route = createFileRoute("/api/public/chat")({
           stopWhen: stepCountIs(50),
           maxOutputTokens: 16_384,
           onFinish: async ({ finishReason, usage, text }) => {
+            stopHeartbeat();
             trace.log("stream.finish", {
               status: needsFileChange ? "ok" : "ok",
               detail: {
@@ -316,6 +347,7 @@ export const Route = createFileRoute("/api/public/chat")({
             await trace.flush();
           },
           onError: async ({ error }) => {
+            stopHeartbeat();
             await recordModelStatus(
               pick.ref,
               "unavailable",
