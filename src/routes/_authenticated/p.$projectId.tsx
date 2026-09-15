@@ -1359,7 +1359,6 @@ function ProjectEditor() {
                   .trim();
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
-                const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
                 const reasoningParts = m.parts.filter(
                   (p): p is Extract<typeof p, { type: "reasoning" }> => p.type === "reasoning",
                 );
@@ -1368,12 +1367,6 @@ function ProjectEditor() {
                   .join("\n")
                   .trim();
                 const isLastStreaming = isStreaming && m.id === messages[messages.length - 1]?.id;
-                const thinkingActive =
-                  isLastStreaming &&
-                  reasoningParts.length > 0 &&
-                  !text &&
-                  !toolParts.some((t) => t.state === "output-available");
-                const thinkOpen = openThinking[m.id] ?? thinkingActive;
                 const workingActive =
                   isLastStreaming &&
                   (toolParts.some((t) => t.state !== "output-available") || text.length > 0);
