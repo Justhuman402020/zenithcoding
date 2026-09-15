@@ -134,9 +134,9 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
       inputSchema: z.object({
         path: z.string(),
         offset: z.number().int().min(0).optional().describe("Character offset to start from, default 0"),
-        limit: z.number().int().min(1).max(12_000).optional().describe("Characters to return, default 12000"),
+        limit: z.number().int().min(1).max(200_000).optional().describe("Characters to return, default 60000"),
       }),
-      execute: async ({ path, offset = 0, limit = 12_000 }) => {
+      execute: async ({ path, offset = 0, limit = 60_000 }) => {
         const started = Date.now();
         const cleanPath = normalizePath(path);
         const result = await store.read(cleanPath);
