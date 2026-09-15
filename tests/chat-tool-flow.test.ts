@@ -154,8 +154,14 @@ describe("Groq chat edit flow", () => {
     expect(compacted[2]?.parts).toContainEqual(currentImage);
   });
 
-  it("marks compacted text instead of silently cutting off its beginning", () => {
-    const text = `Important opening instruction ${"middle ".repeat(900)} required ending`;
+  it("keeps long instructions intact and only marks genuinely oversized ones", () => {
+    const stillFull = `Important opening instruction ${"middle ".repeat(900)} required ending`;
+    const kept = compactChatMessages([{ id: "long", role: "user", parts: [{ type: "text", text: stillFull }] }]);
+    const keptPart = kept[0]?.parts[0];
+    if (keptPart?.type !== "text") throw new Error("Expected text part");
+    expect(keptPart.text).toBe(stillFull);
+
+    const text = `Important opening instruction ${"middle ".repeat(8000)} required ending`;
     const compacted = compactChatMessages([
       { id: "long", role: "user", parts: [{ type: "text", text }] },
     ]);
