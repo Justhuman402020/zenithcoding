@@ -20,6 +20,7 @@ import {
 
 import {
   buildModelChain,
+  maxOutputTokensFor,
   modelSupportsVision,
   parseModelKey,
   pickPlanPreference,
@@ -309,7 +310,7 @@ export const Route = createFileRoute("/api/public/chat")({
           tools,
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
-          maxOutputTokens: 16_384,
+          maxOutputTokens: maxOutputTokensFor(pick.ref),
           onFinish: async ({ finishReason, usage, text }) => {
             stopHeartbeat();
             trace.log("stream.finish", {
