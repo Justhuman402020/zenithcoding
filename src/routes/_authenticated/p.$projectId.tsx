@@ -301,7 +301,6 @@ function ProjectEditor() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
-  const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
   const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({});
   const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
@@ -1359,7 +1358,6 @@ function ProjectEditor() {
                   .trim();
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
-                const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
                 const reasoningParts = m.parts.filter(
                   (p): p is Extract<typeof p, { type: "reasoning" }> => p.type === "reasoning",
                 );
@@ -1368,12 +1366,6 @@ function ProjectEditor() {
                   .join("\n")
                   .trim();
                 const isLastStreaming = isStreaming && m.id === messages[messages.length - 1]?.id;
-                const thinkingActive =
-                  isLastStreaming &&
-                  reasoningParts.length > 0 &&
-                  !text &&
-                  !toolParts.some((t) => t.state === "output-available");
-                const thinkOpen = openThinking[m.id] ?? thinkingActive;
                 const workingActive =
                   isLastStreaming &&
                   (toolParts.some((t) => t.state !== "output-available") || text.length > 0);
@@ -1404,112 +1396,129 @@ function ProjectEditor() {
                           )}
                         </div>
                       )}
-                      {m.role === "assistant" && reasoningText && (
-                        <div className="space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenThinking((cur) => ({ ...cur, [m.id]: !thinkOpen }))
-                            }
-                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                          >
-                            {thinkingActive ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            ) : (
-                              <Lightbulb className="h-3.5 w-3.5 text-primary" />
-                            )}
-                            <span>
-                              {thinkingActive
-                                ? "Thinking…"
-                                : `Thought${
-                                    thinkingDurations[m.id]
-                                      ? ` for ${thinkingDurations[m.id]}s`
-                                      : ""
-                                  }`}
-                            </span>
-                            {thinkOpen ? (
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          {thinkOpen && (
-                            <div className="rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground/90 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
-                              {reasoningText}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {showTools && (
-                        <div className="space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setOpenWorkLogs((current) => ({ ...current, [m.id]: !workOpen }))}
-                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                          >
-                            {toolParts.some((t) => t.state !== "output-available") ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            ) : (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                            )}
-                            View work log
-                          </button>
-                          {workOpen && (
-                            <div className="space-y-1.5">
-                              {toolParts.map((t, i) => {
-                                const name = t.type.replace("tool-", "");
-                                const { icon: Icon, label } = toolLabel(name, t.input, t.state);
-                                const active = t.state !== "output-available";
-                                const detailKey = `${m.id}:${i}`;
-                                const detailOpen = !!openToolDetails[detailKey];
-                                const inputPreview = t.input ? JSON.stringify(t.input, null, 2) : "";
-                                const outputRaw = (t.output ?? (t as any).result) as any;
-                                const outputPreview = outputRaw !== undefined ? (typeof outputRaw === "string" ? outputRaw : JSON.stringify(outputRaw, null, 2)) : "";
+                      {m.role === "assistant" && (reasoningText || showTools) && (() => {
+                        // Lovable-style timeline: every thought and every file
+                        // action in the order they happened, always visible.
+                        type Entry =
+                          | { kind: "thought"; key: string; text: string; active: boolean }
+                          | { kind: "tool"; key: string; part: any; index: number };
+                        const entries: Entry[] = [];
+                        let toolIndex = 0;
+                        m.parts.forEach((p: any, i: number) => {
+                          if (p.type === "reasoning") {
+                            const t = String(p.text ?? "").trim();
+                            if (!t) return;
+                            entries.push({
+                              kind: "thought",
+                              key: `${m.id}:think:${i}`,
+                              text: t,
+                              active: isLastStreaming && i === m.parts.length - 1,
+                            });
+                            return;
+                          }
+                          if (typeof p.type === "string" && p.type.startsWith("tool-")) {
+                            entries.push({ kind: "tool", key: `${m.id}:tool:${i}`, part: p, index: toolIndex++ });
+                          }
+                        });
+                        if (entries.length === 0) return null;
+                        return (
+                          <div className="relative pl-5 space-y-2 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-border/70">
+                            {entries.map((entry) => {
+                              if (entry.kind === "thought") {
+                                const open = !!openThinking[entry.key];
                                 return (
-                                  <div key={i} className="rounded-lg border border-border bg-card/60 overflow-hidden">
+                                  <div key={entry.key} className="relative">
+                                    <span className="absolute -left-5 top-2 h-2 w-2 rounded-full bg-muted-foreground/50" />
                                     <button
                                       type="button"
-                                      onClick={() => setOpenToolDetails((cur) => ({ ...cur, [detailKey]: !detailOpen }))}
-                                      className="w-full flex items-center gap-2 text-xs px-3 py-2 hover:bg-accent/30 transition-colors text-left"
+                                      onClick={() => setOpenThinking((cur) => ({ ...cur, [entry.key]: !open }))}
+                                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                                     >
-                                      {active ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                                      {entry.active ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                                       ) : (
-                                        <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+                                        <Lightbulb className="h-3.5 w-3.5 text-primary/70" />
                                       )}
-                                      <span className="truncate flex-1">{label}</span>
-                                      {detailOpen ? (
-                                        <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                      ) : (
-                                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                      )}
+                                      <span>
+                                        {entry.active
+                                          ? "Thinking…"
+                                          : `Thought${thinkingDurations[m.id] ? ` for ${thinkingDurations[m.id]}s` : ""}`}
+                                      </span>
+                                      {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                                     </button>
-                                    {detailOpen && (
-                                      <div className="px-3 py-2 border-t border-border/60 space-y-2 bg-background/40">
-                                        {inputPreview && (
-                                          <div className="space-y-1">
-                                            <div className="text-[10px] uppercase tracking-wider text-primary/70 font-mono">Input</div>
-                                            <pre className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{inputPreview}</pre>
-                                          </div>
-                                        )}
-                                        {outputPreview && (
-                                          <div className="space-y-1">
-                                            <div className="text-[10px] uppercase tracking-wider text-primary/70 font-mono">Result</div>
-                                            <pre className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed">{outputPreview}</pre>
-                                          </div>
-                                        )}
-                                        {!inputPreview && !outputPreview && (
-                                          <div className="text-[11px] text-muted-foreground/70">No details yet.</div>
-                                        )}
+                                    {open && (
+                                      <div className="mt-1.5 rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                        {entry.text}
                                       </div>
                                     )}
                                   </div>
                                 );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                              }
+                              const t = entry.part;
+                              const name = String(t.type).replace("tool-", "");
+                              const { icon: Icon, label } = toolLabel(name, t.input, t.state);
+                              const active = t.state !== "output-available";
+                              const detailOpen = !!openToolDetails[entry.key];
+                              const path = t.input?.path as string | undefined;
+                              const verb = label.split(" ")[0];
+                              const inputPreview = t.input ? JSON.stringify(t.input, null, 2) : "";
+                              const outputRaw = (t.output ?? t.result) as any;
+                              const outputPreview =
+                                outputRaw !== undefined
+                                  ? typeof outputRaw === "string"
+                                    ? outputRaw
+                                    : JSON.stringify(outputRaw, null, 2)
+                                  : "";
+                              return (
+                                <div key={entry.key} className="relative">
+                                  <span className="absolute -left-[22px] top-1.5 text-primary">
+                                    {active ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Icon className="h-3.5 w-3.5" />
+                                    )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenToolDetails((cur) => ({ ...cur, [entry.key]: !detailOpen }))}
+                                    className="flex w-full items-center gap-2 text-left text-sm hover:opacity-80 transition-opacity"
+                                  >
+                                    <span className="font-medium text-foreground">{verb}</span>
+                                    {path && (
+                                      <span className="truncate rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                                        {path.split("/").pop()}
+                                      </span>
+                                    )}
+                                    {!path && <span className="text-muted-foreground text-xs">{label}</span>}
+                                    <span className="ml-auto shrink-0 text-muted-foreground">
+                                      {detailOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                    </span>
+                                  </button>
+                                  {detailOpen && (
+                                    <div className="mt-1.5 space-y-2 rounded-lg border border-border bg-background/40 px-3 py-2">
+                                      {inputPreview && (
+                                        <div className="space-y-1">
+                                          <div className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Input</div>
+                                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-muted-foreground/90">{inputPreview}</pre>
+                                        </div>
+                                      )}
+                                      {outputPreview && (
+                                        <div className="space-y-1">
+                                          <div className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Result</div>
+                                          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-muted-foreground/90">{outputPreview}</pre>
+                                        </div>
+                                      )}
+                                      {!inputPreview && !outputPreview && (
+                                        <div className="text-[11px] text-muted-foreground/70">No details yet.</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                       {toolParts
                         .filter(
                           (t: any) =>

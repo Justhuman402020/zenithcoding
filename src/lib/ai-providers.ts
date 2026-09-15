@@ -193,6 +193,18 @@ export function modelSupportsVision(ref: ModelRef) {
 }
 
 /**
+ * How many output tokens to ask for. 8k was cutting long replies in half; give
+ * every model the biggest safe window it advertises, and keep small/lite models
+ * at a value they won't reject (the agent auto-continues if it still runs out).
+ */
+export function maxOutputTokensFor(ref: ModelRef) {
+  const id = `${ref.model}`.toLowerCase();
+  if (/(8b|lite|nano|mini|small|tiny|1b|3b|7b)/.test(id)) return 16_384;
+  if (/(gemini|qwen|coder|480b|120b|deepseek|llama-3\.3|mistral|codestral|gpt-oss)/.test(id)) return 32_768;
+  return 24_576;
+}
+
+/**
  * Models used for "Plan" mode: they think longer and write a real plan instead
  * of rushing into edits. OpenRouter's strong reasoning models come first.
  */

@@ -44,7 +44,7 @@ function isVisualPart(part: UIMessage["parts"][number]) {
  * replaying one old screenshot through a long conversation eventually makes
  * every later request fail even when the new turn is text-only.
  */
-export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIMessage[] {
+export function compactChatMessages(messages: UIMessage[], maxMessages = 10): UIMessage[] {
   let latestUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === "user") {
@@ -66,11 +66,14 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIM
       if (part.type === "text") {
         const text = part.text.trim();
         if (!text) continue;
-        const limit = isLatestUser ? 4_000 : 1_200;
+        // Generous windows: 8k was small enough that real instructions and
+        // earlier answers lost their middle and the agent "forgot" the task.
+        const limit = isLatestUser ? 32_000 : 12_000;
+        const head = Math.floor(limit / 2);
         const compacted =
           text.length <= limit
             ? text
-            : `${text.slice(0, Math.min(800, Math.floor(limit / 4)))}\n\n[Older middle content omitted to fit the model context.]\n\n${text.slice(-(limit - Math.min(800, Math.floor(limit / 4)) - 58))}`;
+            : `${text.slice(0, head)}\n\n[Older middle content omitted to fit the model context.]\n\n${text.slice(-(limit - head - 58))}`;
         parts.push({ ...part, text: compacted });
         continue;
       }
