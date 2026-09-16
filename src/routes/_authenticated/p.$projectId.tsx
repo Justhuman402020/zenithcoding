@@ -230,8 +230,8 @@ function suggestSlug(name: string, projectId: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 32);
-  if (base.length >= 3) return base;
+    .slice(0, 32) || "site";
+  if (base.length >= 3) return `${base}-${projectId.slice(0, 5)}`.slice(0, 40);
   return `site-${projectId.slice(0, 6)}`;
 }
 
@@ -989,6 +989,7 @@ function ProjectEditor() {
     }
     // Otherwise open the build dialog; it builds then calls back.
     setPendingPublishSlug(cleanSlug);
+    setPublishOpen(false);
     setBuildDialogOpen(true);
     setPublishing(false);
 
@@ -1029,6 +1030,7 @@ function ProjectEditor() {
       if (error) throw error;
       setSlug(cleanSlug);
       setPublished(true);
+      setPublishOpen(false);
       toast.success(builtFiles && builtFiles.length ? "Built & published" : "Site published");
     } catch (e: any) {
       toast.error(e?.message || "Publish failed");

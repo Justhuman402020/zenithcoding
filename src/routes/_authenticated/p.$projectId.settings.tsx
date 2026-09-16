@@ -251,6 +251,6 @@ function normalizeSlug(s: string): string {
 }
 
 function suggestSlug(name: string, projectId: string): string {
-  const base = normalizeSlug(name).slice(0, 32);
-  return base.length >= 3 ? base : `site-${projectId.slice(0, 6)}`;
+  const base = normalizeSlug(name).slice(0, 32) || "site";
+  return base.length >= 3 ? `${base}-${projectId.slice(0, 5)}`.slice(0, 40) : `site-${projectId.slice(0, 6)}`;
 }
