@@ -22,11 +22,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
+import { StatusBadge } from "@/components/StatusBadge";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -70,7 +71,7 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
   );
 }
 
-function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
+function AdminNavItem({ onNavigate }: { onNavigate: (to?: string) => void }) {
   const fetchRole = useServerFn(getMyRole);
   const [isAdmin, setIsAdmin] = useState(false);
   const [ready, setReady] = useState(false);
@@ -83,7 +84,12 @@ function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
   }, []);
 
   if (!ready || !isAdmin) return null;
-  return <SidebarItem icon={ShieldCheck} label="Admin" onClick={onNavigate} />;
+  return (
+    <>
+      <SidebarItem icon={ShieldCheck} label="Admin" onClick={() => onNavigate()} />
+      <SidebarItem icon={Cpu} label="AI models" onClick={() => onNavigate("/admin/models")} />
+    </>
+  );
 }
 
 function AdminBadge() {
@@ -644,7 +650,7 @@ function Dashboard() {
             <nav className="px-2 py-2 space-y-0.5">
               <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
               <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
-              <AdminNavItem onNavigate={() => { setSidebarOpen(false); void navigate({ to: "/admin/users" }); }} />
+              <AdminNavItem onNavigate={(to = "/admin/users") => { setSidebarOpen(false); void navigate({ to }); }} />
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
               </Link>
@@ -1123,11 +1129,8 @@ function Dashboard() {
                 <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
                   <div className="flex items-center gap-2">
                     <h3 className="font-display text-xl truncate group-hover:text-gold transition-colors">{p.name}</h3>
-                    {p.published && p.slug && (
-                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium border border-primary/30">
-                        <Globe className="h-2.5 w-2.5" /> Live
-                      </span>
-                    )}
+                    <StatusBadge status={p.published && p.slug ? "published" : p.slug ? "pending" : "not_live"} />
+
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1.5 min-h-[2.5rem]">{p.description || "No description"}</p>
                   <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 mt-3">

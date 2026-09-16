@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getMyRole } from "@/lib/admin-users.functions";
 import { getModelAccess } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu } from "lucide-react";
+import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu, Globe } from "lucide-react";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -75,6 +75,9 @@ function AdminPage() {
                 <Cpu className="h-4 w-4" /> AI model board
               </Button>
             ) : null}
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/domains" })} className="w-full gap-1.5">
+              <Globe className="h-4 w-4" /> Domains &amp; live links
+            </Button>
           </div>
         ) : (
           <div className="space-y-3 text-center">
