@@ -25,6 +25,7 @@ import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
 import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
+import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
@@ -116,6 +117,12 @@ const AuthenticatedAdminDomainsRoute =
     path: '/admin/domains',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminBackendRoute =
+  AuthenticatedAdminBackendRouteImport.update({
+    id: '/admin/backend',
+    path: '/admin/backend',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAccountBillingRoute =
   AuthenticatedAccountBillingRouteImport.update({
     id: '/account/billing',
@@ -176,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
@@ -202,6 +210,7 @@ export interface FileRoutesByTo {
   '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
@@ -230,6 +239,7 @@ export interface FileRoutesById {
   '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/_authenticated/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/share/$token'
     | '/transfers/$token'
     | '/account/billing'
+    | '/admin/backend'
     | '/admin/domains'
     | '/admin/models'
     | '/admin/users'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/transfers/$token'
     | '/'
     | '/account/billing'
+    | '/admin/backend'
     | '/admin/domains'
     | '/admin/models'
     | '/admin/users'
@@ -311,6 +323,7 @@ export interface FileRouteTypes {
     | '/transfers/$token'
     | '/_authenticated/'
     | '/_authenticated/account/billing'
+    | '/_authenticated/admin/backend'
     | '/_authenticated/admin/domains'
     | '/_authenticated/admin/models'
     | '/_authenticated/admin/users'
@@ -462,6 +475,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminDomainsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/backend': {
+      id: '/_authenticated/admin/backend'
+      path: '/admin/backend'
+      fullPath: '/admin/backend'
+      preLoaderRoute: typeof AuthenticatedAdminBackendRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/account/billing': {
       id: '/_authenticated/account/billing'
       path: '/account/billing'
@@ -545,6 +565,7 @@ const AuthenticatedPProjectIdRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
+  AuthenticatedAdminBackendRoute: typeof AuthenticatedAdminBackendRoute
   AuthenticatedAdminDomainsRoute: typeof AuthenticatedAdminDomainsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
@@ -555,6 +576,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
+  AuthenticatedAdminBackendRoute: AuthenticatedAdminBackendRoute,
   AuthenticatedAdminDomainsRoute: AuthenticatedAdminDomainsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
