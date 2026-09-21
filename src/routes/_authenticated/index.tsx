@@ -467,10 +467,13 @@ function Dashboard() {
 </html>`,
     });
 
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
+
     setOpen(false);
     setNewName("");
     setNewDesc("");
     navigate({ to: "/p/$projectId", params: { projectId: data.id } });
+
   }
 
   async function createFromPrompt(e: React.FormEvent) {
