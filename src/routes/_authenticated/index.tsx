@@ -14,6 +14,8 @@ import {
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
 import { getMyRole } from "@/lib/admin-users.functions";
+import { applyPlatformBackend } from "@/lib/admin-supabase.functions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
