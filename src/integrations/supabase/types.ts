@@ -398,6 +398,36 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_supabase_connection: {
+        Row: {
+          anon_key_encrypted: string
+          created_at: string
+          id: string
+          label: string | null
+          project_url: string
+          service_key_encrypted: string | null
+          updated_at: string
+        }
+        Insert: {
+          anon_key_encrypted: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          project_url: string
+          service_key_encrypted?: string | null
+          updated_at?: string
+        }
+        Update: {
+          anon_key_encrypted?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          project_url?: string
+          service_key_encrypted?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       project_domains: {
         Row: {
           created_at: string
