@@ -467,7 +467,7 @@ function Dashboard() {
 </html>`,
     });
 
-    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
+    await applyBackend({ projectId: data.id }).catch(() => {});
 
     setOpen(false);
     setNewName("");
