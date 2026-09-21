@@ -14,6 +14,8 @@ import {
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
 import { getMyRole } from "@/lib/admin-users.functions";
+import { applyPlatformBackend } from "@/lib/admin-supabase.functions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -194,6 +196,8 @@ function Dashboard() {
   const fetchLovableImports = useServerFn(getLovableImportedProjects);
   const doImportLovable = useServerFn(importLovableProject);
   const doDeleteLovableImport = useServerFn(deleteLovableImport);
+  const applyBackend = useServerFn(applyPlatformBackend);
+
 
   const [lovableImports, setLovableImports] = useState<Project[]>([]);
   const [lovableImportOpen, setLovableImportOpen] = useState(false);
@@ -467,10 +471,13 @@ function Dashboard() {
 </html>`,
     });
 
+    await applyBackend({ projectId: data.id }).catch(() => {});
+
     setOpen(false);
     setNewName("");
     setNewDesc("");
     navigate({ to: "/p/$projectId", params: { projectId: data.id } });
+
   }
 
   async function createFromPrompt(e: React.FormEvent) {
@@ -493,7 +500,9 @@ function Dashboard() {
       path: "index.html",
       content: `<!doctype html><html><head><meta charset="utf-8"/><title>${name}</title></head><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0f0c1a;color:#e8e3f5"><p>Building…</p></body></html>`,
     });
+    await applyBackend({ projectId: data.id }).catch(() => {});
     setPrompt("");
+
     navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: text } as any });
   }
 
