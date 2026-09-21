@@ -196,6 +196,8 @@ function Dashboard() {
   const fetchLovableImports = useServerFn(getLovableImportedProjects);
   const doImportLovable = useServerFn(importLovableProject);
   const doDeleteLovableImport = useServerFn(deleteLovableImport);
+  const applyBackend = useServerFn(applyPlatformBackend);
+
 
   const [lovableImports, setLovableImports] = useState<Project[]>([]);
   const [lovableImportOpen, setLovableImportOpen] = useState(false);
