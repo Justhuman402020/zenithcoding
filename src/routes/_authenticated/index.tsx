@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -90,6 +90,7 @@ function AdminNavItem({ onNavigate }: { onNavigate: (to?: string) => void }) {
     <>
       <SidebarItem icon={ShieldCheck} label="Admin" onClick={() => onNavigate()} />
       <SidebarItem icon={Cpu} label="AI models" onClick={() => onNavigate("/admin/models")} />
+      <SidebarItem icon={Database} label="Backend" onClick={() => onNavigate("/admin/backend")} />
     </>
   );
 }
@@ -471,7 +472,7 @@ function Dashboard() {
 </html>`,
     });
 
-    await applyBackend({ projectId: data.id }).catch(() => {});
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
 
     setOpen(false);
     setNewName("");
@@ -500,7 +501,7 @@ function Dashboard() {
       path: "index.html",
       content: `<!doctype html><html><head><meta charset="utf-8"/><title>${name}</title></head><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0f0c1a;color:#e8e3f5"><p>Building…</p></body></html>`,
     });
-    await applyBackend({ projectId: data.id }).catch(() => {});
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
     setPrompt("");
 
     navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: text } as any });
