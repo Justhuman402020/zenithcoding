@@ -16,11 +16,16 @@ function normalizeUrl(input: string) {
   return url;
 }
 
-/** Calls the REST root with the key — a valid project URL + key answers 200. */
-async function probe(url: string, key: string) {
+/**
+ * Checks a project address + key.
+ * Public keys are checked against the auth settings endpoint (the REST root now
+ * only answers to private keys). Private keys are checked against the REST root.
+ */
+async function probe(url: string, key: string, kind: "public" | "private" = "public") {
+  const endpoint = kind === "private" ? `${url}/rest/v1/` : `${url}/auth/v1/settings`;
   try {
-    const res = await fetch(`${url}/rest/v1/`, {
-      headers: { apikey: key, accept: "application/json" },
+    const res = await fetch(endpoint, {
+      headers: { apikey: key, Authorization: `Bearer ${key}`, accept: "application/json" },
     });
     if (res.ok) return { ok: true as const, error: null };
     const text = await res.text().catch(() => "");
@@ -29,6 +34,7 @@ async function probe(url: string, key: string) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Could not reach that address" };
   }
 }
+
 
 export const getSupabaseConnection = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
