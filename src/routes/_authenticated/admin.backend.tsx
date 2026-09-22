@@ -65,7 +65,7 @@ function AdminBackendPage() {
     setBusy("test");
     setResult(null);
     try {
-      const res = await test(payload);
+      const res = await test({ data: payload });
       if (res.ok) {
         setResult(res.serviceOk ? "Connected. Public and private keys both work." : "Connected. Public key works.");
         toast.success("Connection works");
@@ -85,7 +85,7 @@ function AdminBackendPage() {
   async function handleSave() {
     setBusy("save");
     try {
-      await save(payload);
+      await save({ data: payload });
       toast.success("Saved. New projects will use this backend.");
       setForm((f) => ({ ...f, anonKey: "", serviceKey: "" }));
       setResult(null);
