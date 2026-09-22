@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -90,6 +90,7 @@ function AdminNavItem({ onNavigate }: { onNavigate: (to?: string) => void }) {
     <>
       <SidebarItem icon={ShieldCheck} label="Admin" onClick={() => onNavigate()} />
       <SidebarItem icon={Cpu} label="AI models" onClick={() => onNavigate("/admin/models")} />
+      <SidebarItem icon={Database} label="Backend" onClick={() => onNavigate("/admin/backend")} />
     </>
   );
 }
