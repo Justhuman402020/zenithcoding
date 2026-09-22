@@ -16,12 +16,19 @@ function normalizeUrl(input: string) {
   return url;
 }
 
-/** Calls the REST root with the key — a valid project URL + key answers 200. */
-async function probe(url: string, key: string) {
+/**
+ * Checks a project address + key.
+ * Public keys are checked against the auth settings endpoint (the REST root now
+ * only answers to private keys). Private keys are checked against the REST root.
+ */
+async function probe(url: string, key: string, kind: "public" | "private" = "public") {
+  const endpoint = kind === "private" ? `${url}/rest/v1/` : `${url}/auth/v1/settings`;
   try {
-    const res = await fetch(`${url}/rest/v1/`, {
-      headers: { apikey: key, accept: "application/json" },
-    });
+    const headers: Record<string, string> = { apikey: key, accept: "application/json" };
+    // New-style opaque keys (sb_...) are not JWTs — sending them as a bearer token is rejected.
+    if (!key.startsWith("sb_")) headers["Authorization"] = `Bearer ${key}`;
+    const res = await fetch(endpoint, { headers });
+
     if (res.ok) return { ok: true as const, error: null };
     const text = await res.text().catch(() => "");
     return { ok: false as const, error: `${res.status}: ${text.slice(0, 160) || "rejected"}` };
@@ -29,6 +36,7 @@ async function probe(url: string, key: string) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Could not reach that address" };
   }
 }
+
 
 export const getSupabaseConnection = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -78,7 +86,7 @@ export const testSupabaseConnection = createServerFn({ method: "POST" })
     if (!anon.ok) return { ok: false, error: `Public key failed — ${anon.error}`, serviceOk: false };
     let serviceOk = false;
     if (data.serviceKey?.trim()) {
-      const svc = await probe(url, data.serviceKey.trim());
+      const svc = await probe(url, data.serviceKey.trim(), "private");
       if (!svc.ok) return { ok: false, error: `Private key failed — ${svc.error}`, serviceOk: false };
       serviceOk = true;
     }
