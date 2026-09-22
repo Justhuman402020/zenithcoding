@@ -24,9 +24,11 @@ function normalizeUrl(input: string) {
 async function probe(url: string, key: string, kind: "public" | "private" = "public") {
   const endpoint = kind === "private" ? `${url}/rest/v1/` : `${url}/auth/v1/settings`;
   try {
-    const res = await fetch(endpoint, {
-      headers: { apikey: key, Authorization: `Bearer ${key}`, accept: "application/json" },
-    });
+    const headers: Record<string, string> = { apikey: key, accept: "application/json" };
+    // New-style opaque keys (sb_...) are not JWTs — sending them as a bearer token is rejected.
+    if (!key.startsWith("sb_")) headers["Authorization"] = `Bearer ${key}`;
+    const res = await fetch(endpoint, { headers });
+
     if (res.ok) return { ok: true as const, error: null };
     const text = await res.text().catch(() => "");
     return { ok: false as const, error: `${res.status}: ${text.slice(0, 160) || "rejected"}` };
