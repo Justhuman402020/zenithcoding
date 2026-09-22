@@ -86,7 +86,7 @@ export const testSupabaseConnection = createServerFn({ method: "POST" })
     if (!anon.ok) return { ok: false, error: `Public key failed — ${anon.error}`, serviceOk: false };
     let serviceOk = false;
     if (data.serviceKey?.trim()) {
-      const svc = await probe(url, data.serviceKey.trim());
+      const svc = await probe(url, data.serviceKey.trim(), "private");
       if (!svc.ok) return { ok: false, error: `Private key failed — ${svc.error}`, serviceOk: false };
       serviceOk = true;
     }
