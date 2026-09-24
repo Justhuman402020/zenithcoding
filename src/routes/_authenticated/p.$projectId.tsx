@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
 import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
@@ -609,7 +609,6 @@ function ProjectEditor() {
       /* already stopped */
     }
     setRemoteWorking(null);
-    setQueuePaused(true);
     toast.success("Stopped");
     // Then tell the server so the agent stops writing files too.
     void stopJobs({ data: { projectId } }).catch(() => {});
