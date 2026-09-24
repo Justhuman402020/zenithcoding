@@ -299,14 +299,29 @@ export const Route = createFileRoute("/api/public/chat")({
 
         // Keep long builds visibly alive. If the worker crashes, this stops and
         // the stale-job recovery above/client polling releases the next message.
+        // Stop button: the editor marks the job stopped; we notice within ~2s and abort.
+        const abortController = new AbortController();
+        let beats = 0;
         const heartbeat = jobId
-          ? setInterval(() => {
-              void supabaseAdmin
+          ? setInterval(async () => {
+              beats += 1;
+              const { data: jobRow } = await supabaseAdmin
                 .from("chat_jobs")
-                .update({ progress: "AI is working" })
+                .select("status")
                 .eq("id", jobId)
-                .in("status", ["queued", "running"]);
-            }, 15_000)
+                .maybeSingle();
+              if (jobRow && jobRow.status !== "queued" && jobRow.status !== "running") {
+                abortController.abort();
+                return;
+              }
+              if (beats % 7 === 0) {
+                void supabaseAdmin
+                  .from("chat_jobs")
+                  .update({ progress: "AI is working" })
+                  .eq("id", jobId)
+                  .in("status", ["queued", "running"]);
+              }
+            }, 2_000)
           : undefined;
         const stopHeartbeat = () => {
           if (heartbeat) clearInterval(heartbeat);
@@ -320,6 +335,17 @@ export const Route = createFileRoute("/api/public/chat")({
           messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
 
           tools,
+          abortSignal: abortController.signal,
+          onAbort: async () => {
+            stopHeartbeat();
+            await saveProgress({
+              status: "unfinished",
+              lastRequest: lastUserText.slice(0, 600),
+              error: "Stopped by the user",
+              at: new Date().toISOString(),
+            });
+            await trace.flush();
+          },
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
           maxOutputTokens: maxOutputTokensFor(pick.ref),

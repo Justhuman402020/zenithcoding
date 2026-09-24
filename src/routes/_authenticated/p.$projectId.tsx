@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
 import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
@@ -61,6 +61,7 @@ import {
   Settings,
   Pause,
   ListPlus,
+  Square,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -73,6 +74,8 @@ import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, type BuildFile } from "@/lib/browser-build";
 import { Github } from "lucide-react";
 import { BackendBadge } from "@/components/BackendBadge";
+import { stopChatJobs } from "@/lib/chat-stop.functions";
+import { useServerFn as useStopServerFn } from "@tanstack/react-start";
 import {
   Sheet,
   SheetContent,
@@ -571,7 +574,7 @@ function ProjectEditor() {
     [projectId],
   );
 
-  const { messages, setMessages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status, stop } = useChat({
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
@@ -597,6 +600,19 @@ function ProjectEditor() {
   const isStreaming = status === "submitted" || status === "streaming";
   // Busy = this device is streaming, or another device/earlier run is working.
   const isBusy = isStreaming || !!remoteWorking;
+  const stopJobs = useStopServerFn(stopChatJobs);
+  const handleStop = useCallback(() => {
+    // Instant on screen: cut the stream and clear the spinner right away.
+    try {
+      void stop();
+    } catch {
+      /* already stopped */
+    }
+    setRemoteWorking(null);
+    toast.success("Stopped");
+    // Then tell the server so the agent stops writing files too.
+    void stopJobs({ data: { projectId } }).catch(() => {});
+  }, [stop, stopJobs, projectId]);
 
   // The queue survives a reload or a switch to another phone.
   const queueStorageKey = `forge:chat-queue:${projectId}`;
@@ -1934,6 +1950,19 @@ function ProjectEditor() {
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
                 />
+                {isBusy ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-11 w-11 shrink-0 rounded-xl border-destructive/50 text-destructive"
+                    title="Stop"
+                    aria-label="Stop"
+                    onClick={handleStop}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                  </Button>
+                ) : null}
                 <Button
                   type="submit"
                   size="icon"
