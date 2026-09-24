@@ -88,7 +88,12 @@ export const Route = createFileRoute("/s/$slug")({
           },
         );
         const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    window.location.href = '/s/${escapeJs(params.slug)}?page=' + encodeURIComponent(href);\n  });\n})();\n<\/script>`;
-        const forgeSdk = `<script src="/forge-sdk.js" defer></script>`;
+        const { loadProjectBackend } = await import("@/lib/project-backend.server");
+        const backend = await loadProjectBackend(project.id);
+        const backendCfg = backend
+          ? `<script>window.FORGE_SUPABASE=${JSON.stringify({ url: backend.url, anonKey: backend.anonKey }).replace(/</g, "\\u003c")};<\/script>`
+          : "";
+        const forgeSdk = `${backendCfg}<script src="/forge-sdk.js" defer></script>`;
         const injection = `${forgeSdk}${navigationBridge}`;
         html = html.includes("</body>") ? html.replace(/<\/body>/i, `${injection}</body>`) : `${html}${injection}`;
 
