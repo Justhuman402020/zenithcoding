@@ -47,8 +47,9 @@ export async function listProviderModels(
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (res.ok) {
-      const json = (await res.json()) as { data?: Array<{ id?: string }> };
-      ids = (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
+      const json = (await res.json()) as { data?: Array<{ id?: string }> } | Array<{ id?: string }>;
+      const raw = Array.isArray(json) ? json : (json.data ?? []);
+      ids = raw.map((m) => m.id).filter((id): id is string => !!id);
     }
   } catch {
     // fall back to the curated list below

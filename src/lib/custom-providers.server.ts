@@ -67,8 +67,9 @@ export async function testProviderKey(baseURL: string, apiKey: string) {
       const text = await res.text().catch(() => "");
       return { ok: false as const, error: `${res.status}: ${text.slice(0, 200) || "request rejected"}`, models: [] };
     }
-    const json = (await res.json()) as { data?: Array<{ id?: string }> };
-    const models = (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
+    const json = (await res.json()) as { data?: Array<{ id?: string }> } | Array<{ id?: string }>;
+    const raw = Array.isArray(json) ? json : (json.data ?? []);
+    const models = raw.map((m) => m.id).filter((id): id is string => !!id);
     if (!models.length) return { ok: false as const, error: "The key worked but no models were returned.", models };
     return { ok: true as const, error: null, models };
   } catch (e) {
