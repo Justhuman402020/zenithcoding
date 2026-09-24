@@ -50,13 +50,34 @@ export async function loadCustomProviders(): Promise<Array<ProviderOption & { ap
         baseURL: row.base_url as string,
         docs: row.base_url as string,
         models: [],
-        apiKey,
+        apiKey: apiKey.trim(),
       });
     }
-    return out;
+    return withGitHubToken(out);
   } catch {
-    return [];
+    return withGitHubToken([]);
   }
+}
+
+/** Uses the securely saved GitHub access token when no GitHub entry exists (or its token is empty). */
+function withGitHubToken(list: Array<ProviderOption & { apiKey: string }>) {
+  const token = (process.env["GITHUB_MODELS_TOKEN"] ?? "").trim();
+  if (!token) return list;
+  const existing = list.find((p) => /models\.github\.ai/i.test(p.baseURL));
+  if (existing) {
+    if (!existing.apiKey) existing.apiKey = token;
+    return list;
+  }
+  list.push({
+    id: "custom-github-models",
+    label: "GitHub Models",
+    envKey: "GITHUB_MODELS_TOKEN",
+    baseURL: "https://models.github.ai/inference",
+    docs: "https://github.com/marketplace/models",
+    models: [],
+    apiKey: token,
+  });
+  return list;
 }
 
 /**
@@ -70,8 +91,11 @@ export async function listModelIds(
 ): Promise<{ ok: boolean; error: string | null; models: string[] }> {
   try {
     const isGitHub = /models\.github\.ai/i.test(baseURL);
+    apiKey = apiKey.trim().replace(/^Bearer\s+/i, "");
+    if (isGitHub && !apiKey) apiKey = (process.env["GITHUB_MODELS_TOKEN"] ?? "").trim();
     const url = isGitHub ? "https://models.github.ai/catalog/models" : `${baseURL}/models`;
     const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
+    if (isGitHub) headers["X-GitHub-Api-Version"] = "2022-11-28";
     if (isGitHub) headers.Accept = "application/vnd.github+json";
     const res = await fetch(url, { headers });
     if (!res.ok) {
