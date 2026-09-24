@@ -11,6 +11,7 @@ import {
   type ProviderOption,
 } from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
+import { listModelIds } from "./custom-providers.server";
 
 
 export type DiscoveredModel = ModelOption & { curated: boolean };
@@ -40,6 +41,7 @@ export async function listProviderModels(
   if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
 
 
+  const curated = new Map(provider.models.map((m) => [m.id, m]));
   let ids: string[] = [];
   try {
     const listed = await listModelIds(provider.baseURL, apiKey);

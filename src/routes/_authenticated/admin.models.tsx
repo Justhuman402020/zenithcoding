@@ -64,9 +64,9 @@ function AdminModelsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const PROVIDER_PRESETS = [
+  const PROVIDER_PRESETS: Array<{ label: string; baseUrl: string; tokenLabel?: string }> = [
     { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
-    { label: "GitHub Models", baseUrl: "https://models.github.ai/inference" },
+    { label: "GitHub Models", baseUrl: "https://models.github.ai/inference", tokenLabel: "GitHub access token" },
     { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
     { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
     { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
@@ -224,7 +224,13 @@ function AdminModelsPage() {
             {PROVIDER_PRESETS.map((preset) => <option key={preset.label}>{preset.label}</option>)}
           </select>
           <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
-          <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+          <Input
+            placeholder={selectedProvider.tokenLabel ?? "Paste API key"}
+            type="password"
+            value={form.apiKey}
+            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            aria-label={selectedProvider.tokenLabel ?? "API key"}
+          />
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || form.apiKey.trim().length < 8}>
