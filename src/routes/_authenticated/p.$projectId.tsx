@@ -72,6 +72,7 @@ import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, type BuildFile } from "@/lib/browser-build";
 import { Github } from "lucide-react";
+import { BackendBadge } from "@/components/BackendBadge";
 import {
   Sheet,
   SheetContent,
@@ -507,9 +508,19 @@ function ProjectEditor() {
     }
   }, [files, previewPath]);
 
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
+  useEffect(() => {
+    setPreviewError(null);
+  }, [files]);
+
   useEffect(() => {
     function onPreviewMessage(event: MessageEvent) {
-      const data = event.data as { type?: string; path?: string } | undefined;
+      const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
+      if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
+        setPreviewError(String(data.text).slice(0, 800));
+        return;
+      }
       if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
       const targetPath = resolveProjectPath(data.path, previewPath);
       const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
@@ -707,6 +718,22 @@ function ProjectEditor() {
       window.clearInterval(timer);
     };
   }, [token, chatReady, projectId, setMessages, isStreaming]);
+
+  useEffect(() => {
+    if (isStreaming) return;
+    let cancelled = false;
+    void supabase
+      .from("projects")
+      .select("agent_progress")
+      .eq("id", projectId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setLastProgress(((data as any)?.agent_progress as any) ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, isStreaming]);
 
   // A reply that hit the model's length cap carries a marker. Ask it to carry
   // on by itself instead of stopping mid-conversation waiting for "continue".
@@ -1261,6 +1288,7 @@ function ProjectEditor() {
             )}
           </div>
         )}
+        <BackendBadge projectId={projectId} compact />
         <Button
           size="sm"
           variant={published ? "outline" : "default"}
@@ -1624,6 +1652,55 @@ function ProjectEditor() {
                   }}
                 />
 
+              ) : null}
+              {previewError && !isBusy ? (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2">
+                  <p className="text-xs font-medium text-destructive">Something is broken in the preview</p>
+                  <p className="text-[11px] text-muted-foreground font-mono line-clamp-3 break-all">{previewError}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1 bg-gold-gradient text-primary-foreground"
+                      onClick={async () => {
+                        const err = previewError;
+                        setPreviewError(null);
+                        setMode("build");
+                        modeRef.current = "build";
+                        requestKeyRef.current = crypto.randomUUID();
+                        await sendMessage({ text: `Fix this error in the preview. Read the relevant files, find the cause and fix it:\n\n${err}` });
+                      }}
+                    >
+                      Fix it
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setPreviewError(null)}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              {lastProgress && lastProgress.status !== "finished" && !isBusy && messages.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLastProgress(null);
+                    setMode("build");
+                    modeRef.current = "build";
+                    requestKeyRef.current = crypto.randomUUID();
+                    await sendMessage({
+                      text:
+                        lastProgress.status === "failed"
+                          ? `The last job failed${lastProgress.error ? ` with: ${lastProgress.error}` : ""}. Fix it and finish the work from where it stopped.`
+                          : "Continue where you left off and finish the unfinished work.",
+                    });
+                  }}
+                  className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left text-sm text-primary hover:bg-primary/10"
+                >
+                  <span className="block text-[10px] uppercase text-muted-foreground mb-1">
+                    {lastProgress.status === "failed" ? "Last job stopped with an error" : "Unfinished work"}
+                  </span>
+                  Continue where you left off{lastProgress.lastRequest ? ` — "${lastProgress.lastRequest.slice(0, 80)}"` : ""}
+                </button>
               ) : null}
               {nextBuildPrompt && !isStreaming ? (
                 <button

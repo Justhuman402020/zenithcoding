@@ -30,6 +30,7 @@ import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { StatusBadge } from "@/components/StatusBadge";
+import { BackendBadge } from "@/components/BackendBadge";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -1148,6 +1149,7 @@ function Dashboard() {
                   </p>
                 </Link>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <BackendBadge projectId={p.id} />
                   {p.published && p.slug ? (
                     <>
                       <a
