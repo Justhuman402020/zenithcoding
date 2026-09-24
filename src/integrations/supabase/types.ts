@@ -651,6 +651,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          agent_progress: Json | null
           created_at: string
           description: string | null
           id: string
@@ -665,6 +666,7 @@ export type Database = {
           workspace_id: string | null
         }
         Insert: {
+          agent_progress?: Json | null
           created_at?: string
           description?: string | null
           id?: string
@@ -679,6 +681,7 @@ export type Database = {
           workspace_id?: string | null
         }
         Update: {
+          agent_progress?: Json | null
           created_at?: string
           description?: string | null
           id?: string
