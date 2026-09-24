@@ -221,6 +221,23 @@ export const addProviderKey = createServerFn({ method: "POST" })
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Block saving the exact same token twice, but allow as many different tokens as you like.
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: existingKeys } = await supabaseAdmin
+      .from("custom_ai_providers")
+      .select("label, key_encrypted");
+    for (const row of existingKeys ?? []) {
+      try {
+        if ((await decryptSecret(row.key_encrypted as string)).trim() === apiKey) {
+          throw new Error(`That token is already saved as "${row.label}" — no need to add it again.`);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("already saved")) throw e;
+      }
+    }
+    if ((process.env["GITHUB_MODELS_TOKEN"] ?? "").trim() === apiKey) {
+      throw new Error("That GitHub token is already saved from your chat paste — no need to add it again.");
+    }
     // Every saved key gets its own id so a second key with the same name never overwrites the first.
     const id = `${slugifyProviderId(data.label)}-${crypto.randomUUID().slice(0, 8)}`;
     const { count } = await supabaseAdmin
