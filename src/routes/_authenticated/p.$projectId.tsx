@@ -719,6 +719,22 @@ function ProjectEditor() {
     };
   }, [token, chatReady, projectId, setMessages, isStreaming]);
 
+  useEffect(() => {
+    if (isStreaming) return;
+    let cancelled = false;
+    void supabase
+      .from("projects")
+      .select("agent_progress")
+      .eq("id", projectId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setLastProgress(((data as any)?.agent_progress as any) ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, isStreaming]);
+
   // A reply that hit the model's length cap carries a marker. Ask it to carry
   // on by itself instead of stopping mid-conversation waiting for "continue".
   useEffect(() => {
