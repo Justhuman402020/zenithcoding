@@ -102,15 +102,33 @@ export async function listModelIds(
       const text = await res.text().catch(() => "");
       return { ok: false, error: `${res.status}: ${text.slice(0, 200) || "request rejected"}`, models: [] };
     }
-    const json = (await res.json()) as { data?: Array<{ id?: string }> } | Array<{ id?: string }>;
-    const raw = Array.isArray(json) ? json : (json.data ?? []);
-    const models = raw.map((m) => m.id).filter((id): id is string => !!id);
+    const body = await res.text().catch(() => "");
+    let json: { data?: Array<{ id?: string }> } | Array<{ id?: string }> | null = null;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      json = null;
+    }
+    const raw = json ? (Array.isArray(json) ? json : (json.data ?? [])) : [];
+    let models = raw.map((m) => m.id).filter((id): id is string => !!id);
+    // Some networks answer with a plain "OK" instead of the list — the token was accepted, so use known GitHub models.
+    if (!models.length && isGitHub) models = [...GITHUB_FALLBACK_MODELS];
     if (!models.length) return { ok: false, error: "The credential worked but no models were returned.", models };
     return { ok: true, error: null, models };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not reach that address", models: [] };
   }
 }
+
+const GITHUB_FALLBACK_MODELS = [
+  "openai/gpt-4.1",
+  "openai/gpt-4.1-mini",
+  "openai/gpt-4o",
+  "openai/gpt-4o-mini",
+  "meta/llama-3.3-70b-instruct",
+  "mistral-ai/mistral-small-2503",
+  "deepseek/deepseek-v3-0324",
+];
 
 /** Verifies a pasted credential by listing the models it can reach. */
 export async function testProviderKey(baseURL: string, apiKey: string) {
