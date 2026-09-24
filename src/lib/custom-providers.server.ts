@@ -59,20 +59,36 @@ export async function loadCustomProviders(): Promise<Array<ProviderOption & { ap
   }
 }
 
-/** Verifies a pasted key by listing the models it can reach. */
-export async function testProviderKey(baseURL: string, apiKey: string) {
+/**
+ * Lists the chat model ids a credential can reach, using each provider's own listing endpoint.
+ * GitHub Models is special: the credential is a personal access token (sent as a Bearer token)
+ * and its catalog lives at /catalog/models, not under the inference base URL.
+ */
+export async function listModelIds(
+  baseURL: string,
+  apiKey: string,
+): Promise<{ ok: boolean; error: string | null; models: string[] }> {
   try {
-    const res = await fetch(`${baseURL}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
+    const isGitHub = /models\.github\.ai/i.test(baseURL);
+    const url = isGitHub ? "https://models.github.ai/catalog/models" : `${baseURL}/models`;
+    const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
+    if (isGitHub) headers.Accept = "application/vnd.github+json";
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      return { ok: false as const, error: `${res.status}: ${text.slice(0, 200) || "request rejected"}`, models: [] };
+      return { ok: false, error: `${res.status}: ${text.slice(0, 200) || "request rejected"}`, models: [] };
     }
     const json = (await res.json()) as { data?: Array<{ id?: string }> } | Array<{ id?: string }>;
     const raw = Array.isArray(json) ? json : (json.data ?? []);
     const models = raw.map((m) => m.id).filter((id): id is string => !!id);
-    if (!models.length) return { ok: false as const, error: "The key worked but no models were returned.", models };
-    return { ok: true as const, error: null, models };
+    if (!models.length) return { ok: false, error: "The credential worked but no models were returned.", models };
+    return { ok: true, error: null, models };
   } catch (e) {
-    return { ok: false as const, error: e instanceof Error ? e.message : "Could not reach that address", models: [] };
+    return { ok: false, error: e instanceof Error ? e.message : "Could not reach that address", models: [] };
   }
+}
+
+/** Verifies a pasted credential by listing the models it can reach. */
+export async function testProviderKey(baseURL: string, apiKey: string) {
+  return listModelIds(baseURL, apiKey);
 }

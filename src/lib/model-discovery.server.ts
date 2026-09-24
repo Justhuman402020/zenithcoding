@@ -40,17 +40,10 @@ export async function listProviderModels(
   if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
 
 
-  const curated = new Map(provider.models.map((m) => [m.id, m]));
   let ids: string[] = [];
   try {
-    const res = await fetch(`${provider.baseURL}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (res.ok) {
-      const json = (await res.json()) as { data?: Array<{ id?: string }> } | Array<{ id?: string }>;
-      const raw = Array.isArray(json) ? json : (json.data ?? []);
-      ids = raw.map((m) => m.id).filter((id): id is string => !!id);
-    }
+    const listed = await listModelIds(provider.baseURL, apiKey);
+    ids = listed.models;
   } catch {
     // fall back to the curated list below
   }
