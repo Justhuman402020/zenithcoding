@@ -64,9 +64,11 @@ function withGitHubToken(list: Array<ProviderOption & { apiKey: string }>) {
   const token = (process.env["GITHUB_MODELS_TOKEN"] ?? "").trim();
   if (!token) return list;
   if (list.some((p) => p.apiKey === token)) return list;
+  const id = list.some((p) => p.id === "custom-github-models") ? "custom-github-models-chat" : "custom-github-models";
+  const count = list.filter((p) => p.label.startsWith("GitHub Models")).length;
   list.push({
-    id: "custom-github-models",
-    label: "GitHub Models",
+    id,
+    label: count ? `GitHub Models #${count + 1}` : "GitHub Models",
     envKey: "GITHUB_MODELS_TOKEN",
     baseURL: "https://models.github.ai/inference",
     docs: "https://github.com/marketplace/models",
