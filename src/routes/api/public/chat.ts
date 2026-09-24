@@ -196,8 +196,11 @@ export const Route = createFileRoute("/api/public/chat")({
         const { ref: adminRef, autoFallback } = await readActiveModelRef();
         const availableProviders = Object.keys(providerKeys);
         // In plan mode prefer a strong reasoning model so it thinks longer.
-        const planPreference = planMode ? pickPlanPreference(availableProviders, hasImages) : null;
-        const preferred: ModelRef | null = requestedRef ?? planPreference ?? adminRef;
+        // The admin's chosen model (e.g. Grok 4.6) leads; for signup/login/admin/data
+        // work it always leads, even over a per-editor pick.
+        const backendIntent = /\b(sign ?up|sign ?in|log ?in|login|register|registration|auth|admin|dashboard|database|supabase|users?|account|save|data)\b/i.test(lastUserText);
+        const planPreference = planMode && !adminRef ? pickPlanPreference(availableProviders, hasImages) : null;
+        const preferred: ModelRef | null = backendIntent && adminRef ? adminRef : (requestedRef ?? adminRef ?? planPreference);
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
         // Providers the admin added by pasting a key join the backup chain too.
         const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id]);
@@ -265,7 +268,16 @@ export const Route = createFileRoute("/api/public/chat")({
             .limit(1)
             .maybeSingle(),
         ]);
+        const { loadProjectBackend } = await import("@/lib/project-backend.server");
+        const [projectBackend, { data: progressRow }] = await Promise.all([
+          loadProjectBackend(projectId),
+          supabaseAdmin.from("projects").select("agent_progress").eq("id", projectId).maybeSingle(),
+        ]);
+        const saveProgress = (progress: Record<string, unknown>) =>
+          supabaseAdmin.from("projects").update({ agent_progress: progress as any }).eq("id", projectId);
         const projectBrief = {
+          backend: projectBackend,
+          progress: (progressRow?.agent_progress as any) ?? null,
           description: proj.description,
           originalGoal: firstUserMessage?.content ?? null,
           filePaths: (briefFiles ?? []).map((file) => file.path),
@@ -345,6 +357,13 @@ export const Route = createFileRoute("/api/public/chat")({
               role: "assistant",
               content: finalText,
             });
+            await saveProgress({
+              status: truncated ? "unfinished" : "finished",
+              lastRequest: lastUserText.slice(0, 600),
+              lastReply: (text ?? "").slice(-800),
+              error: null,
+              at: new Date().toISOString(),
+            });
             await trace.flush();
           },
           onError: async ({ error }) => {
@@ -368,6 +387,12 @@ export const Route = createFileRoute("/api/public/chat")({
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
             }
+            await saveProgress({
+              status: "failed",
+              lastRequest: lastUserText.slice(0, 600),
+              error: (error instanceof Error ? error.message : String(error)).slice(0, 600),
+              at: new Date().toISOString(),
+            });
             await trace.flush();
           },
         });

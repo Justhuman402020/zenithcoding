@@ -135,6 +135,10 @@ export type ProjectBrief = {
   originalGoal?: string | null;
   /** Every file path currently in the project. */
   filePaths?: string[];
+  /** Connected backend (signup/login/data) for this project, if any. */
+  backend?: { url: string; anonKey: string; hasServiceKey: boolean } | null;
+  /** Where the previous agent stopped. */
+  progress?: { status?: string; lastRequest?: string; lastReply?: string; error?: string | null; at?: string } | null;
 };
 
 /**
@@ -154,8 +158,25 @@ export function buildProjectContext(projectName: string, brief?: ProjectBrief) {
   } else {
     lines.push("- Existing files: none yet (this is a fresh project).");
   }
+  const b = brief?.backend;
+  const backendBlock = b
+    ? `\n\n## Connected backend (use it for ALL signup, login, admin and saved data)
+This project is already connected to its own backend. NEVER ask the user for backend details or keys — they are saved.
+- Address: ${b.url}
+- Public key: ${b.anonKey}
+- In the site, load \`<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\` and create the client with \`supabase.createClient(window.FORGE_SUPABASE.url, window.FORGE_SUPABASE.anonKey)\` (window.FORGE_SUPABASE is injected on the live site; fall back to the literal address/key above in code).
+- Use \`client.auth.signUp / signInWithPassword / signOut / getUser\` for registration and login, and \`client.from('<table>')\` for data. Admin areas check a role stored in a separate roles table.
+- Do NOT use Forge.auth / Forge.db when this backend is connected.`
+    : "";
+  const p = brief?.progress;
+  const progressBlock = p && (p.lastRequest || p.error)
+    ? `\n\n## Where the last session stopped
+- Status: ${p.status ?? "unknown"}${p.at ? ` (${p.at})` : ""}
+- Last request: ${(p.lastRequest ?? "").slice(0, 400)}
+${p.lastReply ? `- Last reply summary: ${p.lastReply.slice(0, 500)}\n` : ""}${p.error ? `- It failed with: ${p.error.slice(0, 400)}\n` : ""}If the user says "continue", "finish" or "fix it", pick up exactly from here instead of starting over.`
+    : "";
   return `## What this project is (read this before doing anything)
-${lines.join("\n")}
+${lines.join("\n")}${backendBlock}${progressBlock}
 
 This briefing is the source of truth for the project's purpose. Every change must serve it.
 - Never replace, reset, or "start over" an existing project with a generic template, demo page, or unrelated content — extend what is already there.
