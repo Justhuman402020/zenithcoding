@@ -59,15 +59,11 @@ export async function loadCustomProviders(): Promise<Array<ProviderOption & { ap
   }
 }
 
-/** Uses the securely saved GitHub access token when no GitHub entry exists (or its token is empty). */
+/** Adds the securely saved GitHub access token as its own entry, unless that exact token is already saved. */
 function withGitHubToken(list: Array<ProviderOption & { apiKey: string }>) {
   const token = (process.env["GITHUB_MODELS_TOKEN"] ?? "").trim();
   if (!token) return list;
-  const existing = list.find((p) => /models\.github\.ai/i.test(p.baseURL));
-  if (existing) {
-    if (!existing.apiKey) existing.apiKey = token;
-    return list;
-  }
+  if (list.some((p) => p.apiKey === token)) return list;
   list.push({
     id: "custom-github-models",
     label: "GitHub Models",
