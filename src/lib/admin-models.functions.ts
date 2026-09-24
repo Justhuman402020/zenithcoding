@@ -221,10 +221,16 @@ export const addProviderKey = createServerFn({ method: "POST" })
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const id = slugifyProviderId(data.label);
-    const { error } = await supabaseAdmin.from("custom_ai_providers").upsert({
+    // Every saved key gets its own id so a second key with the same name never overwrites the first.
+    const id = `${slugifyProviderId(data.label)}-${crypto.randomUUID().slice(0, 8)}`;
+    const { count } = await supabaseAdmin
+      .from("custom_ai_providers")
+      .select("id", { count: "exact", head: true })
+      .eq("label", data.label.trim());
+    const label = count ? `${data.label.trim()} #${count + 1}` : data.label.trim();
+    const { error } = await supabaseAdmin.from("custom_ai_providers").insert({
       id,
-      label: data.label.trim(),
+      label,
       base_url: baseUrl,
       key_encrypted: await encryptSecret(apiKey),
       created_by: context.userId,
