@@ -232,6 +232,12 @@ function AdminModelsPage() {
             aria-label={selectedProvider.tokenLabel ?? "API key"}
           />
         </div>
+        {selectedProvider.tokenLabel ? (
+          <p className="text-xs text-muted-foreground">
+            GitHub uses a personal access token, not an API key. Create one at github.com/settings/personal-access-tokens
+            and give it the <span className="font-medium">Models: read</span> permission.
+          </p>
+        ) : null}
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || form.apiKey.trim().length < 8}>
             {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
