@@ -66,6 +66,7 @@ function AdminModelsPage() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const PROVIDER_PRESETS = [
     { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
+    { label: "GitHub Models", baseUrl: "https://models.github.ai/inference" },
     { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
     { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
     { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
