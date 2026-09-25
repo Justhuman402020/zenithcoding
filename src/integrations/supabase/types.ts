@@ -398,6 +398,30 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_integration_keys: {
+        Row: {
+          field: string
+          service: string
+          updated_at: string
+          updated_by: string | null
+          value_encrypted: string
+        }
+        Insert: {
+          field: string
+          service: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted: string
+        }
+        Update: {
+          field?: string
+          service?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted?: string
+        }
+        Relationships: []
+      }
       platform_supabase_connection: {
         Row: {
           anon_key_encrypted: string
