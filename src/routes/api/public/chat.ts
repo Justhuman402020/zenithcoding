@@ -288,9 +288,13 @@ export const Route = createFileRoute("/api/public/chat")({
 
         // A text-only model would 400 on image parts — drop them rather than fail.
         const visionOk = modelSupportsVision(pick.ref);
+        // GitHub Models' free tier only accepts ~8k input / 4k output tokens per
+        // request, so send a much shorter history there or it silently rejects.
+        const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);
+        const turnMessages = isGitHubModels ? compactChatMessages(body.messages, 3) : compactMessages;
         const outgoingMessages = visionOk
-          ? compactMessages
-          : compactMessages.map((message) => ({
+          ? turnMessages
+          : turnMessages.map((message) => ({
               ...message,
               parts: (message.parts ?? []).filter(
                 (part: any) => !(typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")),
@@ -348,7 +352,7 @@ export const Route = createFileRoute("/api/public/chat")({
           },
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
-          maxOutputTokens: maxOutputTokensFor(pick.ref),
+          maxOutputTokens: isGitHubModels ? 4_000 : maxOutputTokensFor(pick.ref),
           onFinish: async ({ finishReason, usage, text }) => {
             stopHeartbeat();
             trace.log("stream.finish", {
