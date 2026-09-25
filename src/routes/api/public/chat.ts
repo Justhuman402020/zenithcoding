@@ -138,7 +138,7 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .eq("user_id", userId)
           .in("status", ["queued", "running"])
-          .lt("updated_at", new Date(Date.now() - 75_000).toISOString());
+          .lt("updated_at", new Date(Date.now() - 180_000).toISOString());
 
         const { data: existingJob } = await supabase
           .from("chat_jobs")
@@ -241,9 +241,12 @@ export const Route = createFileRoute("/api/public/chat")({
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
+        const { createIntegrationTools } = await import("@/lib/integration-tools.server");
+        const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
         const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
+          ...((/models\.github\.ai/i.test(pick.baseURL) ? {} : integrationTools) as typeof integrationTools),
         };
         // Plan mode is read-only: it can look at the project but never change it.
         const tools = planMode
@@ -251,6 +254,8 @@ export const Route = createFileRoute("/api/public/chat")({
               list_files: allTools.list_files,
               read_file: allTools.read_file,
               list_secrets: allTools.list_secrets,
+              web_search: integrationTools.web_search,
+              search_images: integrationTools.search_images,
             } as typeof allTools)
           : allTools;
 
@@ -334,10 +339,10 @@ export const Route = createFileRoute("/api/public/chat")({
                 abortController.abort();
                 return;
               }
-              if (beats % 7 === 0) {
+              if (beats % 3 === 0) {
                 void supabaseAdmin
                   .from("chat_jobs")
-                  .update({ progress: "AI is working" })
+                  .update({ progress: "AI is working", updated_at: new Date().toISOString() })
                   .eq("id", jobId)
                   .in("status", ["queued", "running"]);
               }

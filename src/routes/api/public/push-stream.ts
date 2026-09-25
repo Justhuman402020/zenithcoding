@@ -91,8 +91,15 @@ export const Route = createFileRoute("/api/public/push-stream")({
                 .select("access_token")
                 .eq("user_id", userId)
                 .maybeSingle();
-              if (!tok) throw new Error("Connect GitHub first");
-              const ghToken = (tok as any).access_token as string;
+              let ghToken = (tok as any)?.access_token as string | undefined;
+              if (!ghToken) {
+                const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
+                if (isAdmin) {
+                  const { getIntegrationKey } = await import("@/lib/integration-keys.server");
+                  ghToken = (await getIntegrationKey("github", "token")) ?? undefined;
+                }
+              }
+              if (!ghToken) throw new Error("Connect GitHub first");
 
               log("info", "Loading project files…");
               const { data: filesRows, error: filesErr } = await supabase
