@@ -25,12 +25,16 @@ async function probe(service: string, v: Record<string, string>): Promise<{ ok: 
         return await call("https://api.unsplash.com/photos?per_page=1", { Authorization: `Client-ID ${v.accessKey}`, "Accept-Version": "v1" });
       case "openrouter":
         return await call("https://openrouter.ai/api/v1/key", { Authorization: `Bearer ${v.apiKey}` });
-      case "tavily":
+      case "tavily": {
+        const key = (v.apiKey || process.env["TAVILY_API_KEY"] || "").trim().replace(/^Bearer\s+/i, "");
+        const r = await call("https://api.tavily.com/usage", { Authorization: `Bearer ${key}` });
+        if (r.ok) return r;
         return await call(
           "https://api.tavily.com/search",
-          { Authorization: `Bearer ${v.apiKey}`, "content-type": "application/json" },
-          { method: "POST", body: JSON.stringify({ query: "test", max_results: 1 }) },
+          { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+          { method: "POST", body: JSON.stringify({ api_key: key, query: "test", max_results: 1 }) },
         );
+      }
       case "github":
         return await call("https://api.github.com/user", {
           Authorization: `Bearer ${v.token}`,
