@@ -53,9 +53,9 @@ export async function loadCustomProviders(): Promise<Array<ProviderOption & { ap
         apiKey: apiKey.trim(),
       });
     }
-    return withGitHubToken(out);
+    return out;
   } catch {
-    return withGitHubToken([]);
+    return [];
   }
 }
 

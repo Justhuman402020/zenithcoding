@@ -235,9 +235,6 @@ export const addProviderKey = createServerFn({ method: "POST" })
         if (e instanceof Error && e.message.includes("already saved")) throw e;
       }
     }
-    if ((process.env["GITHUB_MODELS_TOKEN"] ?? "").trim() === apiKey) {
-      throw new Error("That GitHub token is already saved from your chat paste — no need to add it again.");
-    }
     // Every saved key gets its own id so a second key with the same name never overwrites the first.
     const id = `${slugifyProviderId(data.label)}-${crypto.randomUUID().slice(0, 8)}`;
     const { count } = await supabaseAdmin
