@@ -766,7 +766,7 @@ export const exportProjectToGithub = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ projectId: z.string().uuid(), repoName: z.string().min(1).max(100), isPrivate: z.boolean().default(true) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: proj } = await context.supabase.from("projects").select("id").eq("id", data.projectId).eq("owner_id", context.userId).maybeSingle();
+    const { data: proj } = await context.supabase.from("projects").select("id").eq("id", data.projectId).eq("user_id", context.userId).maybeSingle();
     if (!proj) throw new Error("Project not found");
     const { data: tok } = await context.supabase.from("github_tokens" as any).select("access_token").eq("user_id", context.userId).maybeSingle();
     const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
