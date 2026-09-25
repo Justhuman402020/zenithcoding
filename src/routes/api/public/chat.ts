@@ -241,9 +241,12 @@ export const Route = createFileRoute("/api/public/chat")({
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
+        const { createIntegrationTools } = await import("@/lib/integration-tools.server");
+        const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
         const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
+          ...(isGitHubModels ? {} : integrationTools),
         };
         // Plan mode is read-only: it can look at the project but never change it.
         const tools = planMode
@@ -251,6 +254,8 @@ export const Route = createFileRoute("/api/public/chat")({
               list_files: allTools.list_files,
               read_file: allTools.read_file,
               list_secrets: allTools.list_secrets,
+              web_search: integrationTools.web_search,
+              search_images: integrationTools.search_images,
             } as typeof allTools)
           : allTools;
 
