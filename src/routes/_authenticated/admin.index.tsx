@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getMyRole } from "@/lib/admin-users.functions";
 import { getModelAccess } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu, Globe, Database } from "lucide-react";
+import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu, Globe, Database, KeyRound } from "lucide-react";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -80,6 +80,9 @@ function AdminPage() {
             </Button>
             <Button variant="outline" onClick={() => navigate({ to: "/admin/backend" })} className="w-full gap-1.5">
               <Database className="h-4 w-4" /> Backend connection
+            </Button>
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/integrations" })} className="w-full gap-1.5">
+              <KeyRound className="h-4 w-4" /> Integrations &amp; API keys
             </Button>
           </div>
         ) : (
