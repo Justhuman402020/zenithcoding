@@ -340,6 +340,7 @@ function ProjectEditor() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const refreshedToolResultsRef = useRef<Set<string>>(new Set());
   const suggestedMessagesRef = useRef<Set<string>>(new Set());
+  const lastSavedSignatureRef = useRef<string>("");
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
@@ -589,7 +590,7 @@ function ProjectEditor() {
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
       void discardUnansweredMessage();
-      toast.error(getChatErrorMessage(err));
+      toast.error(getChatErrorMessage(err), { id: "forge-chat-error" });
     },
     onFinish: () => {
       pendingUserRowRef.current = null;
@@ -746,7 +747,7 @@ function ProjectEditor() {
         await refreshFiles();
         setPreviewKey((key) => key + 1);
         const failed = (jobs ?? []).find((job) => job.status === "failed");
-        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)));
+        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)), { id: "forge-chat-error" });
         else toast.success("Build finished and the preview is updated");
         return;
       }
