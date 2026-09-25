@@ -246,7 +246,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
-          ...(/models\.github\.ai/i.test(pick.baseURL) ? {} : integrationTools),
+          ...((/models\.github\.ai/i.test(pick.baseURL) ? {} : integrationTools) as typeof integrationTools),
         };
         // Plan mode is read-only: it can look at the project but never change it.
         const tools = planMode
