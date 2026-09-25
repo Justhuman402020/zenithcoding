@@ -521,7 +521,7 @@ function ProjectEditor() {
     function onPreviewMessage(event: MessageEvent) {
       const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
       if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
-        setPreviewError(String(data.text).slice(0, 800));
+        setPreviewError(String(data.text).slice(0, 3000));
         return;
       }
       if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
