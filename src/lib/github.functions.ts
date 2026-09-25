@@ -5,6 +5,14 @@ import { currentOrigin, encodeReturnOrigin, getCanonicalCallbackUrl } from "@/li
 import { cleanGithubPathPart, isCloseGithubProjectName, readGithubBlobBatch, readGithubRepoFiles, readGithubRepoTree } from "@/lib/github-import.server";
 import { z } from "zod";
 
+/** Admins can use the Personal Access Token saved in Admin → Integrations instead of GitHub sign-in. */
+async function adminGithubPat(context: { supabase: any; userId: string }): Promise<string | undefined> {
+  const { data: isAdmin } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+  if (!isAdmin) return undefined;
+  const { getIntegrationKey } = await import("./integration-keys.server");
+  return (await getIntegrationKey("github", "token")) ?? undefined;
+}
+
 export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { origin?: string } | undefined) => input ?? {})
@@ -76,8 +84,8 @@ export const listGithubRepos = createServerFn({ method: "GET" })
       .select("access_token, scope")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
     const headers = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -312,8 +320,8 @@ export const listProjectGithubBranches = createServerFn({ method: "GET" })
       .select("access_token")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
     const l = link as any;
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -373,8 +381,8 @@ export const pushProjectToGithub = createServerFn({ method: "POST" })
       .select("access_token")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
 
     const { data: filesRows, error: filesErr } = await context.supabase
       .from("files" as any)
@@ -489,8 +497,8 @@ export const mirrorAllGithubRepos = createServerFn({ method: "POST" })
       .select("access_token, scope")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
     const headers = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -752,4 +760,29 @@ export const fetchGithubBlobBatch = createServerFn({ method: "POST" })
       .upsert(rows, { onConflict: "project_id,path" });
     if (error) throw new Error(error.message);
     return { saved: rows.length };
+  });
+// ============= One-click export: create a new repo and link it =============
+export const exportProjectToGithub = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ projectId: z.string().uuid(), repoName: z.string().min(1).max(100), isPrivate: z.boolean().default(true) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: proj } = await context.supabase.from("projects").select("id").eq("id", data.projectId).eq("owner_id", context.userId).maybeSingle();
+    if (!proj) throw new Error("Project not found");
+    const { data: tok } = await context.supabase.from("github_tokens" as any).select("access_token").eq("user_id", context.userId).maybeSingle();
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first (or save a GitHub token in Admin → Integrations).");
+    const name = data.repoName.trim().replace(/[^\w.-]+/g, "-").slice(0, 100);
+    const res = await fetch("https://api.github.com/user/repos", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", "User-Agent": "forge" },
+      body: JSON.stringify({ name, private: data.isPrivate, auto_init: true }),
+    });
+    if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 240)}`);
+    const repo = (await res.json()) as any;
+    const { error } = await context.supabase.from("project_github_links" as any).upsert(
+      { project_id: data.projectId, user_id: context.userId, owner: repo.owner.login, repo: repo.name, default_branch: repo.default_branch || "main" },
+      { onConflict: "project_id" },
+    );
+    if (error) throw new Error(error.message);
+    return { owner: repo.owner.login as string, repo: repo.name as string, url: repo.html_url as string };
   });
