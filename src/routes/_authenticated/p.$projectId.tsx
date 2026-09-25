@@ -108,7 +108,7 @@ type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
 type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
-const CHAT_JOB_STALE_MS = 75_000;
+const CHAT_JOB_STALE_MS = 180_000;
 
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
@@ -720,7 +720,22 @@ function ProjectEditor() {
       // Only touch chat state when the saved chat really changed.
       if (signature !== lastSavedSignatureRef.current) {
         lastSavedSignatureRef.current = signature;
-        setMessages(next);
+        // Keep prompts the user just sent visible even if the saved copy has
+        // not landed yet — never let a reload wipe an in-flight message.
+        setMessages((prev) => {
+          const savedTexts = new Set(
+            next.filter((m) => m.role === "user").map((m) => ((m.parts[0] as any).text as string).trim()),
+          );
+          const lastSavedIdx = next.length;
+          const pending: UIMessage[] = [];
+          for (let i = prev.length - 1; i >= 0 && i >= prev.length - 4; i--) {
+            const m = prev[i];
+            if (m.role !== "user") continue;
+            const text = (m.parts ?? []).map((p: any) => (p.type === "text" ? p.text : "")).join("").trim();
+            if (text && !savedTexts.has(text) && !next.some((n) => n.id === m.id)) pending.unshift(m);
+          }
+          return lastSavedIdx >= 0 && pending.length ? [...next, ...pending] : next;
+        });
       }
       return (saved ?? []).length;
     };

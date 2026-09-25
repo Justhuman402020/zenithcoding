@@ -138,7 +138,7 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .eq("user_id", userId)
           .in("status", ["queued", "running"])
-          .lt("updated_at", new Date(Date.now() - 75_000).toISOString());
+          .lt("updated_at", new Date(Date.now() - 180_000).toISOString());
 
         const { data: existingJob } = await supabase
           .from("chat_jobs")
@@ -246,7 +246,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
-          ...(isGitHubModels ? {} : integrationTools),
+          ...(/models\.github\.ai/i.test(pick.baseURL) ? {} : integrationTools),
         };
         // Plan mode is read-only: it can look at the project but never change it.
         const tools = planMode
@@ -339,10 +339,10 @@ export const Route = createFileRoute("/api/public/chat")({
                 abortController.abort();
                 return;
               }
-              if (beats % 7 === 0) {
+              if (beats % 3 === 0) {
                 void supabaseAdmin
                   .from("chat_jobs")
-                  .update({ progress: "AI is working" })
+                  .update({ progress: "AI is working", updated_at: new Date().toISOString() })
                   .eq("id", jobId)
                   .in("status", ["queued", "running"]);
               }
