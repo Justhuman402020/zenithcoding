@@ -140,14 +140,21 @@ function formatRelativeTime(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
-function getChatErrorMessage(error: Error): string {
+function getChatErrorMessage(error: unknown): string {
+  const raw = String((error as any)?.message ?? error ?? "").trim();
+  let text = raw;
   try {
-    const parsed = JSON.parse(error.message) as { message?: unknown };
-    if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+    const parsed = JSON.parse(raw) as { message?: unknown; error?: any };
+    if (typeof parsed.message === "string" && parsed.message.trim()) text = parsed.message;
+    else if (typeof parsed.error?.message === "string") text = parsed.error.message;
   } catch {
     // Plain-text and stream errors are already suitable for display.
   }
-  return error.message || "The AI build failed. Please try again.";
+  if (!text || /^bad request$/i.test(text) || /\b400\b/.test(text)) {
+    return "The AI model couldn't read that request. Forge will try another model — please send it once more.";
+  }
+  if (/maximum update depth/i.test(text)) return "The screen got stuck refreshing. Please reload the page.";
+  return text.slice(0, 400);
 }
 
 async function sampleVideoFrames(file: File, maxFrames = 4): Promise<AttachmentFrame[]> {
@@ -333,6 +340,7 @@ function ProjectEditor() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const refreshedToolResultsRef = useRef<Set<string>>(new Set());
   const suggestedMessagesRef = useRef<Set<string>>(new Set());
+  const lastSavedSignatureRef = useRef<string>("");
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
@@ -582,7 +590,7 @@ function ProjectEditor() {
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
       void discardUnansweredMessage();
-      toast.error(getChatErrorMessage(err));
+      toast.error(getChatErrorMessage(err), { id: "forge-chat-error" });
     },
     onFinish: () => {
       pendingUserRowRef.current = null;
@@ -697,14 +705,23 @@ function ProjectEditor() {
         .eq("project_id", projectId)
         .order("created_at");
       if (disposed) return 0;
-      const rows = cleanChatRows((saved ?? []) as any[]);
-      setMessages(
-        rows.map((message) => ({
-          id: message.id,
-          role: message.role as "user" | "assistant",
-          parts: [{ type: "text" as const, text: message.content }],
-        })) as UIMessage[],
-      );
+      const seen = new Set<string>();
+      const rows = cleanChatRows((saved ?? []) as any[]).filter((row) => {
+        if (seen.has(row.id) || !String(row.content ?? "").trim()) return false;
+        seen.add(row.id);
+        return true;
+      });
+      const next = rows.map((message) => ({
+        id: message.id,
+        role: message.role as "user" | "assistant",
+        parts: [{ type: "text" as const, text: message.content }],
+      })) as UIMessage[];
+      const signature = next.map((m) => `${m.id}:${(m.parts[0] as any).text.length}`).join("|");
+      // Only touch chat state when the saved chat really changed.
+      if (signature !== lastSavedSignatureRef.current) {
+        lastSavedSignatureRef.current = signature;
+        setMessages(next);
+      }
       return (saved ?? []).length;
     };
     const recover = async () => {
@@ -730,7 +747,7 @@ function ProjectEditor() {
         await refreshFiles();
         setPreviewKey((key) => key + 1);
         const failed = (jobs ?? []).find((job) => job.status === "failed");
-        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)));
+        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)), { id: "forge-chat-error" });
         else toast.success("Build finished and the preview is updated");
         return;
       }
@@ -819,6 +836,8 @@ function ProjectEditor() {
   // Track how long the AI spent "thinking" per assistant message, so we can
   // show "Thought for Xs" once it finishes.
   useEffect(() => {
+    const updates: Record<string, number> = {};
+    const lastId = messages[messages.length - 1]?.id;
     for (const m of messages) {
       if (m.role !== "assistant") continue;
       const hasReasoning = m.parts.some((p) => p.type === "reasoning");
@@ -826,20 +845,24 @@ function ProjectEditor() {
       if (!thinkingStartRef.current[m.id]) {
         thinkingStartRef.current[m.id] = Date.now();
       }
-      const isLast = m.id === messages[messages.length - 1]?.id;
       const done =
         !isStreaming ||
-        !isLast ||
+        m.id !== lastId ||
         m.parts.some((p) => p.type === "text" && (p as any).text?.trim());
-      if (done && thinkingDurations[m.id] === undefined) {
-        const seconds = Math.max(
-          1,
-          Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000),
-        );
-        setThinkingDurations((cur) => ({ ...cur, [m.id]: seconds }));
+      if (done) {
+        updates[m.id] = Math.max(1, Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000));
       }
     }
-  }, [messages, isStreaming, thinkingDurations]);
+    if (Object.keys(updates).length === 0) return;
+    // One batched update, and only for ids not recorded yet — never a loop.
+    setThinkingDurations((cur) => {
+      const missing = Object.keys(updates).filter((id) => cur[id] === undefined);
+      if (missing.length === 0) return cur;
+      const next = { ...cur };
+      for (const id of missing) next[id] = updates[id];
+      return next;
+    });
+  }, [messages, isStreaming]);
 
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);

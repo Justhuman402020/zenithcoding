@@ -292,7 +292,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // request, so send a much shorter history there or it silently rejects.
         const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);
         const turnMessages = isGitHubModels ? compactChatMessages(body.messages, 3) : compactMessages;
-        const outgoingMessages = visionOk
+        const strippedMessages = visionOk
           ? turnMessages
           : turnMessages.map((message) => ({
               ...message,
@@ -300,6 +300,22 @@ export const Route = createFileRoute("/api/public/chat")({
                 (part: any) => !(typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")),
               ),
             }));
+        // Empty turns (e.g. a reply that only "thought") make providers answer
+        // 400 Bad Request. Drop them and merge back-to-back user turns.
+        const outgoingMessages: typeof strippedMessages = [];
+        for (const message of strippedMessages) {
+          const parts = (message.parts ?? []).filter((part: any) =>
+            part?.type === "text" ? String(part.text ?? "").trim().length > 0 : part?.type !== "reasoning",
+          );
+          if (parts.length === 0) continue;
+          const prev = outgoingMessages[outgoingMessages.length - 1];
+          if (prev && prev.role === "user" && message.role === "user") {
+            prev.parts = [...(prev.parts ?? []), ...parts];
+            continue;
+          }
+          outgoingMessages.push({ ...message, parts });
+        }
+        if (outgoingMessages.length === 0) return fail(400, "Please type a message first.");
 
         // Keep long builds visibly alive. If the worker crashes, this stops and
         // the stale-job recovery above/client polling releases the next message.
