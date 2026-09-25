@@ -26,8 +26,11 @@ const CONSOLE_BRIDGE = `<script>(()=>{
     const orig=console[level];
     console[level]=function(){send(level,Array.from(arguments));return orig.apply(console,arguments);};
   });
-  window.addEventListener('error',e=>send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+')']));
-  window.addEventListener('unhandledrejection',e=>send('error',['Unhandled rejection: '+(e.reason&&e.reason.message||e.reason)]));
+  window.addEventListener('error',e=>{
+    if(!e.message&&e.target&&e.target!==window){send('error',['Failed to load resource: '+(e.target.src||e.target.href||e.target.tagName)]);return;}
+    send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)+')'+(e.error&&e.error.stack?'\\n'+e.error.stack:'')]);
+  },true);
+  window.addEventListener('unhandledrejection',e=>{const r=e.reason;send('error',['Unhandled rejection: '+(r&&r.message||r)+(r&&r.stack?'\\n'+r.stack:'')]);});
 })();<\/script>`;
 
 export function injectConsoleBridge(html: string): string {

@@ -521,7 +521,7 @@ function ProjectEditor() {
     function onPreviewMessage(event: MessageEvent) {
       const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
       if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
-        setPreviewError(String(data.text).slice(0, 800));
+        setPreviewError(String(data.text).slice(0, 3000));
         return;
       }
       if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
@@ -600,6 +600,31 @@ function ProjectEditor() {
   const isStreaming = status === "submitted" || status === "streaming";
   // Busy = this device is streaming, or another device/earlier run is working.
   const isBusy = isStreaming || !!remoteWorking;
+
+  // Never-break engine: when the preview throws, automatically ask the agent to
+  // fix it. Each distinct error gets at most 2 automatic attempts, so a fix that
+  // doesn't work can never loop forever; after that the manual "Fix it" card stays.
+  const autoFixAttemptsRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!previewError || isBusy || !isOnline) return;
+    const signature = previewError.split("\n")[0].slice(0, 200);
+    const attempts = autoFixAttemptsRef.current.get(signature) ?? 0;
+    if (attempts >= 2) return;
+    const timer = setTimeout(() => {
+      autoFixAttemptsRef.current.set(signature, attempts + 1);
+      const err = previewError;
+      setPreviewError(null);
+      setMode("build");
+      modeRef.current = "build";
+      requestKeyRef.current = crypto.randomUUID();
+      toast.info("Preview error found — fixing it automatically");
+      void sendMessage({
+        text: `Auto-fix (attempt ${attempts + 1}/2): the live preview crashed with this runtime error. Read the relevant files, find the root cause, patch it with a minimal change, and keep everything else as is:\n\n${err}`,
+      });
+    }, 2500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewError, isBusy, isOnline]);
   const stopJobs = useStopServerFn(stopChatJobs);
   const handleStop = useCallback(() => {
     // Instant on screen: cut the stream and clear the spinner right away.
