@@ -14,6 +14,8 @@ import {
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
 import { getMyRole } from "@/lib/admin-users.functions";
+import { applyPlatformBackend } from "@/lib/admin-supabase.functions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -22,11 +24,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
+import { StatusBadge } from "@/components/StatusBadge";
+import { BackendBadge } from "@/components/BackendBadge";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -70,7 +74,7 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
   );
 }
 
-function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
+function AdminNavItem({ onNavigate }: { onNavigate: (to?: string) => void }) {
   const fetchRole = useServerFn(getMyRole);
   const [isAdmin, setIsAdmin] = useState(false);
   const [ready, setReady] = useState(false);
@@ -83,7 +87,13 @@ function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
   }, []);
 
   if (!ready || !isAdmin) return null;
-  return <SidebarItem icon={ShieldCheck} label="Admin" onClick={onNavigate} />;
+  return (
+    <>
+      <SidebarItem icon={ShieldCheck} label="Admin" onClick={() => onNavigate()} />
+      <SidebarItem icon={Cpu} label="AI models" onClick={() => onNavigate("/admin/models")} />
+      <SidebarItem icon={Database} label="Backend" onClick={() => onNavigate("/admin/backend")} />
+    </>
+  );
 }
 
 function AdminBadge() {
@@ -188,6 +198,8 @@ function Dashboard() {
   const fetchLovableImports = useServerFn(getLovableImportedProjects);
   const doImportLovable = useServerFn(importLovableProject);
   const doDeleteLovableImport = useServerFn(deleteLovableImport);
+  const applyBackend = useServerFn(applyPlatformBackend);
+
 
   const [lovableImports, setLovableImports] = useState<Project[]>([]);
   const [lovableImportOpen, setLovableImportOpen] = useState(false);
@@ -461,10 +473,13 @@ function Dashboard() {
 </html>`,
     });
 
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
+
     setOpen(false);
     setNewName("");
     setNewDesc("");
     navigate({ to: "/p/$projectId", params: { projectId: data.id } });
+
   }
 
   async function createFromPrompt(e: React.FormEvent) {
@@ -487,7 +502,9 @@ function Dashboard() {
       path: "index.html",
       content: `<!doctype html><html><head><meta charset="utf-8"/><title>${name}</title></head><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0f0c1a;color:#e8e3f5"><p>Building…</p></body></html>`,
     });
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
     setPrompt("");
+
     navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: text } as any });
   }
 
@@ -644,7 +661,7 @@ function Dashboard() {
             <nav className="px-2 py-2 space-y-0.5">
               <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
               <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
-              <AdminNavItem onNavigate={() => { setSidebarOpen(false); void navigate({ to: "/admin/users" }); }} />
+              <AdminNavItem onNavigate={(to = "/admin/users") => { setSidebarOpen(false); void navigate({ to }); }} />
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
               </Link>
@@ -1123,11 +1140,8 @@ function Dashboard() {
                 <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
                   <div className="flex items-center gap-2">
                     <h3 className="font-display text-xl truncate group-hover:text-gold transition-colors">{p.name}</h3>
-                    {p.published && p.slug && (
-                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium border border-primary/30">
-                        <Globe className="h-2.5 w-2.5" /> Live
-                      </span>
-                    )}
+                    <StatusBadge status={p.published && p.slug ? "published" : p.slug ? "pending" : "not_live"} />
+
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1.5 min-h-[2.5rem]">{p.description || "No description"}</p>
                   <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 mt-3">
@@ -1135,6 +1149,7 @@ function Dashboard() {
                   </p>
                 </Link>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <BackendBadge projectId={p.id} />
                   {p.published && p.slug ? (
                     <>
                       <a

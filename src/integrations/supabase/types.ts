@@ -86,6 +86,62 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_jobs: {
+        Row: {
+          assistant_reply: string | null
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          progress: string | null
+          project_id: string
+          prompt: string
+          request_key: string
+          status: string
+          trace_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assistant_reply?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          progress?: string | null
+          project_id: string
+          prompt?: string
+          request_key: string
+          status?: string
+          trace_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assistant_reply?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          progress?: string | null
+          project_id?: string
+          prompt?: string
+          request_key?: string
+          status?: string
+          trace_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           content: string
@@ -342,6 +398,60 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_integration_keys: {
+        Row: {
+          field: string
+          service: string
+          updated_at: string
+          updated_by: string | null
+          value_encrypted: string
+        }
+        Insert: {
+          field: string
+          service: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted: string
+        }
+        Update: {
+          field?: string
+          service?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted?: string
+        }
+        Relationships: []
+      }
+      platform_supabase_connection: {
+        Row: {
+          anon_key_encrypted: string
+          created_at: string
+          id: string
+          label: string | null
+          project_url: string
+          service_key_encrypted: string | null
+          updated_at: string
+        }
+        Insert: {
+          anon_key_encrypted: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          project_url: string
+          service_key_encrypted?: string | null
+          updated_at?: string
+        }
+        Update: {
+          anon_key_encrypted?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          project_url?: string
+          service_key_encrypted?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       project_domains: {
         Row: {
           created_at: string
@@ -565,6 +675,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          agent_progress: Json | null
           created_at: string
           description: string | null
           id: string
@@ -579,6 +690,7 @@ export type Database = {
           workspace_id: string | null
         }
         Insert: {
+          agent_progress?: Json | null
           created_at?: string
           description?: string | null
           id?: string
@@ -593,6 +705,7 @@ export type Database = {
           workspace_id?: string | null
         }
         Update: {
+          agent_progress?: Json | null
           created_at?: string
           description?: string | null
           id?: string
@@ -993,12 +1106,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1022,11 +1135,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1047,11 +1160,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1072,11 +1185,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1089,11 +1202,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

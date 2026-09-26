@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
+import { consumeStream, convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
 import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
@@ -11,13 +11,21 @@ import {
   createSupabaseSecretStore,
 } from "@/lib/chat-tools.server";
 import {
+  buildPlanSystemPrompt,
   buildSystemPrompt,
   compactChatMessages,
   createPrepareStep,
   detectFileChangeIntent,
 } from "@/lib/chat-agent.server";
 
-import { buildModelChain, modelSupportsVision, parseModelKey, type ModelRef } from "@/lib/ai-providers";
+import {
+  buildModelChain,
+  maxOutputTokensFor,
+  modelSupportsVision,
+  parseModelKey,
+  pickPlanPreference,
+  type ModelRef,
+} from "@/lib/ai-providers";
 import {
   loadProviderRegistry,
   pickAvailableModel,
@@ -88,7 +96,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // confirm project belongs to user
         const { data: proj } = await supabase
           .from("projects")
-          .select("id,name")
+          .select("id,name,description")
           .eq("id", projectId)
           .maybeSingle();
         if (!proj) {
@@ -108,10 +116,50 @@ export const Route = createFileRoute("/api/public/chat")({
           ?.parts
           ?.map((part) => (part.type === "text" ? part.text : ""))
           .join(" ") ?? "";
-        const needsFileChange = detectFileChangeIntent(lastUserText);
+        // Plan mode thinks and proposes; build mode writes files.
+        const planMode = (request.headers.get("x-forge-mode") ?? "build").toLowerCase() === "plan";
+        const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
+        const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
         trace.log("request.parsed", {
-          detail: { messages: body.messages.length, needsFileChange, prompt: lastUserText },
+          detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
+
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        // Recover jobs whose request died before its completion handler ran.
+        // Healthy jobs refresh updated_at every 15 seconds below.
+        await supabaseAdmin
+          .from("chat_jobs")
+          .update({
+            status: "failed",
+            progress: "Stopped before completion",
+            error: "The previous AI request stopped unexpectedly. Your next message can run normally.",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("project_id", projectId)
+          .eq("user_id", userId)
+          .in("status", ["queued", "running"])
+          .lt("updated_at", new Date(Date.now() - 600_000).toISOString());
+
+        const { data: existingJob } = await supabase
+          .from("chat_jobs")
+          .select("id,status,assistant_reply,error")
+          .eq("project_id", projectId)
+          .eq("user_id", userId)
+          .eq("request_key", requestKey)
+          .maybeSingle();
+        if (existingJob?.status === "completed" && existingJob.assistant_reply) {
+          return new Response(existingJob.assistant_reply, {
+            headers: { "content-type": "text/plain; charset=utf-8", "x-forge-job-id": existingJob.id, ...traceHeaders },
+          });
+        }
+        const { data: createdJob } = existingJob
+          ? { data: existingJob }
+          : await supabase
+              .from("chat_jobs")
+              .insert({ project_id: projectId, user_id: userId, request_key: requestKey, prompt: lastUserText, status: "running", progress: "AI is working" })
+              .select("id")
+              .single();
+        const jobId = createdJob?.id;
 
         // Snapshot current files BEFORE the AI mutates anything, so the user
         // can one-click revert to this stable version if the build fails.
@@ -146,8 +194,13 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const requestedRef = parseModelKey(request.headers.get("x-forge-model"));
         const { ref: adminRef, autoFallback } = await readActiveModelRef();
-        const preferred: ModelRef | null = requestedRef ?? adminRef;
         const availableProviders = Object.keys(providerKeys);
+        // In plan mode prefer a strong reasoning model so it thinks longer.
+        // The admin's chosen model (e.g. Grok 4.6) leads; for signup/login/admin/data
+        // work it always leads, even over a per-editor pick.
+        const backendIntent = /\b(sign ?up|sign ?in|log ?in|login|register|registration|auth|admin|dashboard|database|supabase|users?|account|save|data)\b/i.test(lastUserText);
+        const planPreference = planMode && !adminRef ? pickPlanPreference(availableProviders, hasImages) : null;
+        const preferred: ModelRef | null = backendIntent && adminRef ? adminRef : (requestedRef ?? adminRef ?? planPreference);
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
         // Providers the admin added by pasting a key join the backup chain too.
         const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id]);
@@ -188,31 +241,141 @@ export const Route = createFileRoute("/api/public/chat")({
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
         const store = createSupabaseFileStore(supabase, projectId, userId);
-        const tools = {
+        const { createIntegrationTools } = await import("@/lib/integration-tools.server");
+        const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
+        const allTools = {
           ...createProjectFileTools(store, trace),
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
+          ...((/models\.github\.ai/i.test(pick.baseURL) ? {} : integrationTools) as typeof integrationTools),
         };
+        // Plan mode is read-only: it can look at the project but never change it.
+        const tools = planMode
+          ? ({
+              list_files: allTools.list_files,
+              read_file: allTools.read_file,
+              list_secrets: allTools.list_secrets,
+              web_search: integrationTools.web_search,
+              search_images: integrationTools.search_images,
+            } as typeof allTools)
+          : allTools;
+
+        // Brief the model on what this project IS. Chat history gets compacted
+        // away over time and the fallback chain can hand the turn to a model
+        // that has never seen this project, so the purpose is restated every turn.
+        const [{ data: briefFiles }, { data: firstUserMessage }] = await Promise.all([
+          supabase.from("files").select("path").eq("project_id", projectId).limit(200),
+          supabase
+            .from("chat_messages")
+            .select("content")
+            .eq("project_id", projectId)
+            .eq("role", "user")
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        const { loadProjectBackend } = await import("@/lib/project-backend.server");
+        const [projectBackend, { data: progressRow }] = await Promise.all([
+          loadProjectBackend(projectId),
+          supabaseAdmin.from("projects").select("agent_progress").eq("id", projectId).maybeSingle(),
+        ]);
+        const saveProgress = (progress: Record<string, unknown>) =>
+          supabaseAdmin.from("projects").update({ agent_progress: progress as any }).eq("id", projectId);
+        const projectBrief = {
+          backend: projectBackend,
+          progress: (progressRow?.agent_progress as any) ?? null,
+          description: proj.description,
+          originalGoal: firstUserMessage?.content ?? null,
+          filePaths: (briefFiles ?? []).map((file) => file.path),
+        };
+        trace.log("project.brief", {
+          detail: { files: projectBrief.filePaths.length, hasGoal: Boolean(projectBrief.originalGoal) },
+        });
 
         // A text-only model would 400 on image parts — drop them rather than fail.
         const visionOk = modelSupportsVision(pick.ref);
-        const outgoingMessages = visionOk
-          ? compactMessages
-          : compactMessages.map((message) => ({
+        // GitHub Models' free tier only accepts ~8k input / 4k output tokens per
+        // request, so send a much shorter history there or it silently rejects.
+        const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);
+        const turnMessages = isGitHubModels ? compactChatMessages(body.messages, 3) : compactMessages;
+        const strippedMessages = visionOk
+          ? turnMessages
+          : turnMessages.map((message) => ({
               ...message,
               parts: (message.parts ?? []).filter(
                 (part: any) => !(typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")),
               ),
             }));
+        // Empty turns (e.g. a reply that only "thought") make providers answer
+        // 400 Bad Request. Drop them and merge back-to-back user turns.
+        const outgoingMessages: typeof strippedMessages = [];
+        for (const message of strippedMessages) {
+          const parts = (message.parts ?? []).filter((part: any) =>
+            part?.type === "text" ? String(part.text ?? "").trim().length > 0 : part?.type !== "reasoning",
+          );
+          if (parts.length === 0) continue;
+          const prev = outgoingMessages[outgoingMessages.length - 1];
+          if (prev && prev.role === "user" && message.role === "user") {
+            prev.parts = [...(prev.parts ?? []), ...parts];
+            continue;
+          }
+          outgoingMessages.push({ ...message, parts });
+        }
+        if (outgoingMessages.length === 0) return fail(400, "Please type a message first.");
+
+        // Keep long builds visibly alive. If the worker crashes, this stops and
+        // the stale-job recovery above/client polling releases the next message.
+        // Stop button: the editor marks the job stopped; we notice within ~2s and abort.
+        const abortController = new AbortController();
+        let beats = 0;
+        const heartbeat = jobId
+          ? setInterval(async () => {
+              beats += 1;
+              const { data: jobRow } = await supabaseAdmin
+                .from("chat_jobs")
+                .select("status")
+                .eq("id", jobId)
+                .maybeSingle();
+              if (jobRow && jobRow.status !== "queued" && jobRow.status !== "running") {
+                abortController.abort();
+                return;
+              }
+              if (beats % 2 === 0) {
+                void supabaseAdmin
+                  .from("chat_jobs")
+                  .update({ progress: "AI is working", updated_at: new Date().toISOString() })
+                  .eq("id", jobId)
+                  .in("status", ["queued", "running"]);
+              }
+            }, 2_000)
+          : undefined;
+        const stopHeartbeat = () => {
+          if (heartbeat) clearInterval(heartbeat);
+        };
 
         const result = streamText({
           model,
-          system: buildSystemPrompt(proj.name),
+          system: planMode
+            ? buildPlanSystemPrompt(proj.name, projectBrief)
+            : buildSystemPrompt(proj.name, projectBrief),
           messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
 
           tools,
+          abortSignal: abortController.signal,
+          onAbort: async () => {
+            stopHeartbeat();
+            await saveProgress({
+              status: "unfinished",
+              lastRequest: lastUserText.slice(0, 600),
+              error: "Stopped by the user",
+              at: new Date().toISOString(),
+            });
+            await trace.flush();
+          },
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
+          maxOutputTokens: isGitHubModels ? 4_000 : maxOutputTokensFor(pick.ref),
           onFinish: async ({ finishReason, usage, text }) => {
+            stopHeartbeat();
             trace.log("stream.finish", {
               status: needsFileChange ? "ok" : "ok",
               detail: {
@@ -222,9 +385,40 @@ export const Route = createFileRoute("/api/public/chat")({
                 replyChars: text?.length ?? 0,
               },
             });
+            // Hitting the length cap is not a failure: the editor sees this
+            // marker and asks the model to carry on automatically, so a long
+            // job never stops half way waiting to be told "continue".
+            const truncated = finishReason === "length";
+            const finalText =
+              (text?.trim() || (truncated ? "" : "The build finished and all completed file changes were saved.")) +
+              (truncated ? "\n\n[[FORGE_CONTINUE]]" : "");
+            if (jobId) {
+              await supabaseAdmin.from("chat_jobs").update({
+                status: "completed",
+                progress: truncated ? "Continuing…" : "Finished",
+                assistant_reply: finalText,
+                error: null,
+                trace_id: trace.traceId,
+                completed_at: new Date().toISOString(),
+              }).eq("id", jobId);
+            }
+            await supabaseAdmin.from("chat_messages").insert({
+              project_id: projectId,
+              user_id: userId,
+              role: "assistant",
+              content: finalText,
+            });
+            await saveProgress({
+              status: truncated ? "unfinished" : "finished",
+              lastRequest: lastUserText.slice(0, 600),
+              lastReply: (text ?? "").slice(-800),
+              error: null,
+              at: new Date().toISOString(),
+            });
             await trace.flush();
           },
           onError: async ({ error }) => {
+            stopHeartbeat();
             await recordModelStatus(
               pick.ref,
               "unavailable",
@@ -235,6 +429,21 @@ export const Route = createFileRoute("/api/public/chat")({
               status: "error",
               message: error instanceof Error ? error.message : String(error),
             });
+            if (jobId) {
+              await supabaseAdmin.from("chat_jobs").update({
+                status: "failed",
+                progress: "Stopped with an error",
+                error: error instanceof Error ? error.message : String(error),
+                trace_id: trace.traceId,
+                completed_at: new Date().toISOString(),
+              }).eq("id", jobId);
+            }
+            await saveProgress({
+              status: "failed",
+              lastRequest: lastUserText.slice(0, 600),
+              error: (error instanceof Error ? error.message : String(error)).slice(0, 600),
+              at: new Date().toISOString(),
+            });
             await trace.flush();
           },
         });
@@ -242,7 +451,10 @@ export const Route = createFileRoute("/api/public/chat")({
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          headers: traceHeaders,
+          headers: { ...traceHeaders, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
+          // Keep consuming the model/tool stream after the browser connection
+          // disappears so accepted file writes and the final reply still land.
+          consumeSseStream: ({ stream }) => consumeStream({ stream }),
           onError: (error) => {
             const message = error instanceof Error ? error.message : String(error ?? "");
             if (/request too large|tokens per minute|TPM/i.test(message)) {
