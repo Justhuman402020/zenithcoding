@@ -69,7 +69,9 @@ function TemplatesPage() {
       toast.success(`Remix ready — ${res.files} files copied`, { id });
       await navigate({ to: "/p/$projectId", params: { projectId: res.projectId } });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to remix";
+      let msg = e instanceof Error ? e.message : "Failed to remix";
+      if (/\b403\b|forbidden|rate limit/i.test(msg))
+        msg = "GitHub blocked the copy. Wait a minute and try again, or check the saved GitHub token in Admin → Integrations.";
       toast.error(msg, { id });
       if (/unauthorized|no authorization|invalid token/i.test(msg)) navigate({ to: "/auth" });
     } finally {

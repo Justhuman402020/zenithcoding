@@ -39,6 +39,46 @@ export function isCloseGithubProjectName(a: string, b: string) {
   return previous[right.length] <= maxDistance;
 }
 
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Fetch with backoff on 403/429 (secondary rate limits), honoring Retry-After,
+// then one unauthenticated retry (public repos need no token).
+export async function ghFetch(url: string, headers: Record<string, string>, tries = 4): Promise<Response> {
+  let res: Response | null = null;
+  for (let a = 0; a < tries; a += 1) {
+    res = await fetch(url, { headers }).catch(() => null as any);
+    if (res && res.status !== 403 && res.status !== 429) return res;
+    const ra = Number(res?.headers.get("retry-after"));
+    const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 20) * 1000 : Math.min(800 * 2 ** a, 8000);
+    await sleep(wait + Math.random() * 300);
+  }
+  if (headers.Authorization) {
+    const { Authorization: _drop, ...anon } = headers;
+    const r2 = await fetch(url, { headers: anon }).catch(() => null as any);
+    if (r2) return r2;
+  }
+  return res as Response;
+}
+
+// Drop a saved token GitHub rejects (401/403) so public repos still import.
+export async function verifiedGithubToken(owner: string, repo: string, token?: string) {
+  if (!token) return undefined;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, {
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "User-Agent": "code-haven" },
+    });
+    if (r.status === 401 || r.status === 403) return undefined;
+  } catch {}
+  return token;
+}
+
+export function friendlyGithubError(status: number, fallback: string) {
+  if (status === 403 || status === 429)
+    return "GitHub blocked the copy. Wait a minute and try again, or check the saved GitHub token in Admin → Integrations.";
+  return fallback;
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -59,6 +99,7 @@ export async function readGithubRepoFiles({
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "code-haven",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -71,7 +112,7 @@ export async function readGithubRepoFiles({
 
   let resolvedBranch = branch?.trim();
   if (!resolvedBranch) {
-    const mr = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, { headers });
+    const mr = await ghFetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, headers);
     if (!mr.ok) {
       if (mr.status === 404) {
         const ownerRes = await fetch(
@@ -93,17 +134,17 @@ export async function readGithubRepoFiles({
         );
       }
       const body = await mr.text().catch(() => "");
-      throw new Error(`Could not read repo ${owner}/${repo} (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
+      throw new Error(friendlyGithubError(mr.status, `Could not read repo ${owner}/${repo}: ${body.slice(0, 160) || mr.statusText}`));
     }
     resolvedBranch = (await mr.json()).default_branch || "main";
   }
 
   const treeBranch = resolvedBranch || "main";
   const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(treeBranch)}?recursive=1`;
-  const tr = await fetch(treeUrl, { headers });
+  const tr = await ghFetch(treeUrl, headers);
   if (!tr.ok) {
     const body = await tr.text().catch(() => "");
-    throw new Error(`Tree read failed (${tr.status}): ${body.slice(0, 180) || tr.statusText}`);
+    throw new Error(friendlyGithubError(tr.status, `Could not read the repo files: ${body.slice(0, 180) || tr.statusText}`));
   }
   const tree = await tr.json();
   if (!tree.tree) throw new Error("Empty repo");
@@ -126,9 +167,10 @@ export async function readGithubRepoFiles({
       const i = idx++;
       const b = blobs[i];
       try {
-        const r = await fetch(
+        await sleep(40 + Math.random() * 120);
+        const r = await ghFetch(
           `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/blobs/${b.sha}`,
-          { headers },
+          headers,
         );
         if (r.ok) {
           const j = await r.json();
@@ -142,7 +184,7 @@ export async function readGithubRepoFiles({
       } catch {}
     }
   }
-  await Promise.all(Array.from({ length: 8 }, worker));
+  await Promise.all(Array.from({ length: 3 }, worker));
   files.sort((a, b) => a.path.localeCompare(b.path));
 
   return { branch: treeBranch, files };
@@ -167,6 +209,7 @@ export async function readGithubRepoTree({
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "code-haven",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -179,24 +222,24 @@ export async function readGithubRepoTree({
 
   let resolvedBranch = branch?.trim();
   if (!resolvedBranch) {
-    const mr = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, { headers });
+    const mr = await ghFetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, headers);
     if (!mr.ok) {
       if (mr.status === 404) {
         if (token) throw new Error(`Repo ${owner}/${repo} not found or not visible to your GitHub account.`);
         throw new Error(`Repo ${owner}/${repo} not found or is private. Connect GitHub first.`);
       }
       const body = await mr.text().catch(() => "");
-      throw new Error(`Could not read repo (${mr.status}): ${body.slice(0, 160) || mr.statusText}`);
+      throw new Error(friendlyGithubError(mr.status, `Could not read repo: ${body.slice(0, 160) || mr.statusText}`));
     }
     resolvedBranch = (await mr.json()).default_branch || "main";
   }
 
   const treeBranch = resolvedBranch || "main";
   const treeUrl = `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/trees/${cleanGithubPathPart(treeBranch)}?recursive=1`;
-  const tr = await fetch(treeUrl, { headers });
+  const tr = await ghFetch(treeUrl, headers);
   if (!tr.ok) {
     const body = await tr.text().catch(() => "");
-    throw new Error(`Tree read failed (${tr.status}): ${body.slice(0, 180) || tr.statusText}`);
+    throw new Error(friendlyGithubError(tr.status, `Could not read the repo files: ${body.slice(0, 180) || tr.statusText}`));
   }
   const tree = await tr.json();
   if (!tree.tree) throw new Error("Empty repo");
@@ -231,6 +274,7 @@ export async function readGithubBlobBatch({
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "code-haven",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   const strip = stripPrefix || "";
@@ -242,9 +286,10 @@ export async function readGithubBlobBatch({
       const i = idx++;
       const b = blobs[i];
       try {
-        const r = await fetch(
+        await sleep(40 + Math.random() * 120);
+        const r = await ghFetch(
           `https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}/git/blobs/${b.sha}`,
-          { headers },
+          headers,
         );
         if (!r.ok) continue;
         const j = await r.json();
@@ -257,6 +302,6 @@ export async function readGithubBlobBatch({
       } catch {}
     }
   }
-  await Promise.all(Array.from({ length: 6 }, worker));
+  await Promise.all(Array.from({ length: 3 }, worker));
   return out;
 }
