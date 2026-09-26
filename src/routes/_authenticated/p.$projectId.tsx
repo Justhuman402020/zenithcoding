@@ -65,6 +65,7 @@ import {
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
+import { stripLeakedToolJson, summarizeToolInput } from "@/lib/chat-sanitize";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
@@ -1459,12 +1460,13 @@ function ProjectEditor() {
               {messages.map((m) => {
                 // Separate text parts with a blank line so multi-step replies
                 // render as distinct paragraphs instead of one jam-packed blob.
-                const text = m.parts
+                const rawText = m.parts
                   .map((p) => (p.type === "text" ? p.text : ""))
                   .filter((t) => t.trim())
                   .join(m.role === "assistant" ? "\n\n" : "")
                   .replace("[[FORGE_CONTINUE]]", "")
                   .trim();
+                const text = m.role === "assistant" ? stripLeakedToolJson(rawText) : rawText;
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const reasoningParts = m.parts.filter(
@@ -1570,7 +1572,7 @@ function ProjectEditor() {
                               const detailOpen = !!openToolDetails[entry.key];
                               const path = t.input?.path as string | undefined;
                               const verb = label.split(" ")[0];
-                              const inputPreview = t.input ? JSON.stringify(t.input, null, 2) : "";
+                              const inputPreview = t.state === "input-streaming" ? "" : summarizeToolInput(t.input);
                               const outputRaw = (t.output ?? t.result) as any;
                               const outputPreview =
                                 outputRaw !== undefined
