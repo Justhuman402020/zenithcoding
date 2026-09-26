@@ -90,7 +90,8 @@ describe("Groq chat edit flow", () => {
     const now = new Date("2026-09-11T00:00:00Z").getTime();
     expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:59:30Z" }, now)).toBe(true);
     expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:58:00Z" }, now)).toBe(true);
-    expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:56:00Z" }, now)).toBe(false);
+    expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:56:00Z" }, now)).toBe(true);
+    expect(isActiveChatJob({ status: "running", updated_at: "2026-09-10T23:49:00Z" }, now)).toBe(false);
     expect(isActiveChatJob({ status: "completed", updated_at: "2026-09-10T23:59:59Z" }, now)).toBe(false);
   });
 
