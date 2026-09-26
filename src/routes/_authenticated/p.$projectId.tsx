@@ -109,7 +109,7 @@ type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
 type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
-const CHAT_JOB_STALE_MS = 180_000;
+const CHAT_JOB_STALE_MS = 600_000;
 
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
@@ -523,14 +523,15 @@ function ProjectEditor() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
   useEffect(() => {
-    setPreviewError(null);
+    setPreviewError((cur) => (cur === null ? cur : null));
   }, [files]);
 
   useEffect(() => {
     function onPreviewMessage(event: MessageEvent) {
       const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
       if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
-        setPreviewError(String(data.text).slice(0, 3000));
+        const nextError = String(data.text).slice(0, 3000);
+        setPreviewError((cur) => (cur === nextError ? cur : nextError));
         return;
       }
       if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
@@ -587,6 +588,9 @@ function ProjectEditor() {
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
+    // Batch streamed chunks: re-rendering on every token (plus effects that
+    // react to messages) could exceed React's nested-update limit (#185).
+    experimental_throttle: 100,
     onError: (err) => {
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
@@ -762,7 +766,9 @@ function ProjectEditor() {
         if (disposed) return;
         await refreshFiles();
         setPreviewKey((key) => key + 1);
-        const failed = (jobs ?? []).find((job) => job.status === "failed");
+        // Only the newest job decides the outcome; older failures are history.
+        const latest = (jobs ?? [])[0];
+        const failed = latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") ? latest : null;
         if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)), { id: "forge-chat-error" });
         else toast.success("Build finished and the preview is updated");
         return;
@@ -937,7 +943,10 @@ function ProjectEditor() {
 
   // auto-scroll chat
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const el = scrollRef.current;
+    if (!el) return;
+    const frame = requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "auto" : "smooth" }));
+    return () => cancelAnimationFrame(frame);
   }, [messages, isStreaming]);
 
   // keep input focused
