@@ -65,6 +65,7 @@ import {
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
+import { stripLeakedToolJson, summarizeToolInput } from "@/lib/chat-sanitize";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
@@ -108,7 +109,7 @@ type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
 type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
-const CHAT_JOB_STALE_MS = 180_000;
+const CHAT_JOB_STALE_MS = 600_000;
 
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
@@ -522,14 +523,15 @@ function ProjectEditor() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
   useEffect(() => {
-    setPreviewError(null);
+    setPreviewError((cur) => (cur === null ? cur : null));
   }, [files]);
 
   useEffect(() => {
     function onPreviewMessage(event: MessageEvent) {
       const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
       if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
-        setPreviewError(String(data.text).slice(0, 3000));
+        const nextError = String(data.text).slice(0, 3000);
+        setPreviewError((cur) => (cur === nextError ? cur : nextError));
         return;
       }
       if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
@@ -586,6 +588,9 @@ function ProjectEditor() {
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
+    // Batch streamed chunks: re-rendering on every token (plus effects that
+    // react to messages) could exceed React's nested-update limit (#185).
+    experimental_throttle: 100,
     onError: (err) => {
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
@@ -761,7 +766,9 @@ function ProjectEditor() {
         if (disposed) return;
         await refreshFiles();
         setPreviewKey((key) => key + 1);
-        const failed = (jobs ?? []).find((job) => job.status === "failed");
+        // Only the newest job decides the outcome; older failures are history.
+        const latest = (jobs ?? [])[0];
+        const failed = latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") ? latest : null;
         if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)), { id: "forge-chat-error" });
         else toast.success("Build finished and the preview is updated");
         return;
@@ -936,7 +943,10 @@ function ProjectEditor() {
 
   // auto-scroll chat
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const el = scrollRef.current;
+    if (!el) return;
+    const frame = requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "auto" : "smooth" }));
+    return () => cancelAnimationFrame(frame);
   }, [messages, isStreaming]);
 
   // keep input focused
@@ -1459,12 +1469,13 @@ function ProjectEditor() {
               {messages.map((m) => {
                 // Separate text parts with a blank line so multi-step replies
                 // render as distinct paragraphs instead of one jam-packed blob.
-                const text = m.parts
+                const rawText = m.parts
                   .map((p) => (p.type === "text" ? p.text : ""))
                   .filter((t) => t.trim())
                   .join(m.role === "assistant" ? "\n\n" : "")
                   .replace("[[FORGE_CONTINUE]]", "")
                   .trim();
+                const text = m.role === "assistant" ? stripLeakedToolJson(rawText) : rawText;
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 const showTools = toolParts.length > 0;
                 const reasoningParts = m.parts.filter(
@@ -1570,7 +1581,7 @@ function ProjectEditor() {
                               const detailOpen = !!openToolDetails[entry.key];
                               const path = t.input?.path as string | undefined;
                               const verb = label.split(" ")[0];
-                              const inputPreview = t.input ? JSON.stringify(t.input, null, 2) : "";
+                              const inputPreview = t.state === "input-streaming" ? "" : summarizeToolInput(t.input);
                               const outputRaw = (t.output ?? t.result) as any;
                               const outputPreview =
                                 outputRaw !== undefined
