@@ -115,8 +115,9 @@ export const remixGithubTemplate = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const [owner, repo] = data.fullName.split("/") as [string, string];
     const { getIntegrationKey } = await import("./integration-keys.server");
-    const { readGithubRepoFiles } = await import("./github-import.server");
-    const token = (await getIntegrationKey("github", "token")) ?? undefined;
+    const { readGithubRepoFiles, verifiedGithubToken } = await import("./github-import.server");
+    const saved = (await getIntegrationKey("github", "token")) ?? undefined;
+    const token = await verifiedGithubToken(owner, repo, saved);
     const { files } = await readGithubRepoFiles({ owner, repo, branch: data.branch, token });
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
