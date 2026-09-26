@@ -1,17 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { listTemplates, remixTemplate } from "@/lib/templates.functions";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { searchGithubTemplates, remixGithubTemplate } from "@/lib/github-templates.functions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, Sparkles, ArrowLeft, LayoutGrid } from "lucide-react";
+import { Loader2, Sparkles, ArrowLeft, LayoutGrid, Star, Search, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/templates")({
   head: () => ({
     meta: [
-      { title: "Templates — Forge" },
-      { name: "description", content: "One-click remix of production-ready starter templates." },
+      { title: "Template Gallery — Forge" },
+      { name: "description", content: "Browse hundreds of live GitHub templates and remix any of them into an editable project." },
+      { property: "og:title", content: "Template Gallery — Forge" },
+      { property: "og:description", content: "Browse live GitHub templates and remix them in one click." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: TemplatesPage,
@@ -19,24 +24,54 @@ export const Route = createFileRoute("/templates")({
   notFoundComponent: () => <div className="p-8">Not found</div>,
 });
 
-function TemplatesPage() {
-  const fetchTemplates = useServerFn(listTemplates);
-  const remix = useServerFn(remixTemplate);
-  const navigate = useNavigate();
-  const [pending, setPending] = useState<string | null>(null);
-  const { data, isLoading } = useQuery({ queryKey: ["templates"], queryFn: () => fetchTemplates() });
+const TABS = [
+  { id: "all", label: "All" },
+  { id: "landing", label: "Landing Pages" },
+  { id: "dashboard", label: "Dashboards" },
+  { id: "saas", label: "SaaS" },
+  { id: "portfolio", label: "Portfolios" },
+  { id: "ecommerce", label: "E-Commerce" },
+] as const;
 
-  async function onRemix(templateId: string) {
-    setPending(templateId);
+function TemplatesPage() {
+  const search = useServerFn(searchGithubTemplates);
+  const remix = useServerFn(remixGithubTemplate);
+  const navigate = useNavigate();
+  const [category, setCategory] = useState<(typeof TABS)[number]["id"]>("all");
+  const [draft, setDraft] = useState("");
+  const [query, setQuery] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(draft.trim()), 500);
+    return () => clearTimeout(t);
+  }, [draft]);
+
+  const q = useInfiniteQuery({
+    queryKey: ["gh-templates", category, query],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => search({ data: { category, query, page: pageParam } }),
+    getNextPageParam: (last, all) =>
+      last.ok && last.items.length === 100 && all.length < 5 && all.length * 100 < last.total ? all.length + 1 : undefined,
+    staleTime: 5 * 60_000,
+  });
+
+  const pages = q.data?.pages ?? [];
+  const seen = new Set<number>();
+  const items = pages.flatMap((p) => p.items).filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
+  const failure = pages.find((p) => !p.ok) as { message?: string } | undefined;
+
+  async function onRemix(fullName: string, branch: string, description: string | null) {
+    setPending(fullName);
+    const id = toast.loading(`Copying ${fullName}… this can take up to a minute`);
     try {
-      const res = await remix({ data: { templateId } });
-      toast.success("Remix created");
+      const res = await remix({ data: { fullName, branch, description } });
+      toast.success(`Remix ready — ${res.files} files copied`, { id });
       await navigate({ to: "/p/$projectId", params: { projectId: res.projectId } });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to remix");
-      if (e instanceof Error && /unauthorized|no authorization|invalid token/i.test(e.message)) {
-        navigate({ to: "/auth" });
-      }
+      const msg = e instanceof Error ? e.message : "Failed to remix";
+      toast.error(msg, { id });
+      if (/unauthorized|no authorization|invalid token/i.test(msg)) navigate({ to: "/auth" });
     } finally {
       setPending(null);
     }
@@ -55,33 +90,80 @@ function TemplatesPage() {
           </Link>
         </div>
       </header>
-      <div className="max-w-6xl mx-auto p-6">
-        <p className="text-sm text-muted-foreground mb-6">Pick a starter and remix it in one click — you get your own copy to edit.</p>
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
+      <div className="max-w-6xl mx-auto p-6 space-y-5">
+        <p className="text-sm text-muted-foreground">
+          Live templates from GitHub. Pick one and remix it — you get your own copy to edit.
+        </p>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Search templates — try crypto, restaurant, blog…"
+            className="pl-9"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((t) => (
+            <Button
+              key={t.id}
+              size="sm"
+              variant={category === t.id ? "default" : "outline"}
+              onClick={() => setCategory(t.id)}
+            >
+              {t.label}
+            </Button>
+          ))}
+        </div>
+
+        {failure?.message && (
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">{failure.message}</div>
+        )}
+
+        {q.isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading templates…
+          </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(data ?? []).map((t) => (
-              <div key={t.id} className="rounded-xl border overflow-hidden bg-card flex flex-col">
-                <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/30 flex items-center justify-center text-2xl font-bold text-primary/80">
-                  {t.name}
-                </div>
-                <div className="p-4 flex-1 flex flex-col">
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold">{t.name}</div>
-                    {t.category ? <span className="text-xs text-muted-foreground">{t.category}</span> : null}
+            {items.map((t) => (
+              <div key={t.id} className="rounded-xl border overflow-hidden bg-card flex flex-col p-4">
+                <div className="flex items-center gap-3">
+                  <img src={t.avatar} alt={t.owner} className="h-9 w-9 rounded-full border" loading="lazy" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold truncate">{t.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{t.owner}</div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1 flex-1">{t.description}</p>
-                  <Button className="mt-3" onClick={() => onRemix(t.id)} disabled={pending !== null}>
-                    {pending === t.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                    Remix
-                  </Button>
+                  <a href={t.url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground" title="View on GitHub">
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
                 </div>
+                <p className="text-sm text-muted-foreground mt-3 flex-1 line-clamp-3">{t.description ?? "No description."}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                    <Star className="h-3 w-3" /> {t.stars.toLocaleString()}
+                  </span>
+                  {t.language && <span className="rounded-full bg-muted px-2 py-0.5">{t.language}</span>}
+                  <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5">{t.category}</span>
+                </div>
+                <Button className="mt-3" onClick={() => onRemix(t.fullName, t.branch, t.description)} disabled={pending !== null}>
+                  {pending === t.fullName ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                  Remix
+                </Button>
               </div>
             ))}
-            {(data ?? []).length === 0 ? (
-              <div className="col-span-full text-center text-muted-foreground py-16">No templates yet.</div>
+            {items.length === 0 && !failure ? (
+              <div className="col-span-full text-center text-muted-foreground py-16">No templates found. Try another word.</div>
             ) : null}
+          </div>
+        )}
+
+        {q.hasNextPage && (
+          <div className="flex justify-center">
+            <Button variant="outline" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}>
+              {q.isFetchingNextPage ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              Load more ({items.length} shown)
+            </Button>
           </div>
         )}
       </div>
