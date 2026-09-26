@@ -52,7 +52,7 @@ function TemplatesPage() {
     initialPageParam: 1,
     queryFn: ({ pageParam }) => search({ data: { category, query, page: pageParam } }),
     getNextPageParam: (last, all) =>
-      last.ok && last.items.length === 100 && all.length < 5 && all.length * 100 < last.total ? all.length + 1 : undefined,
+      last.ok && last.items.length === 100 && all.length < 10 && all.length * 100 < last.total ? all.length + 1 : undefined,
     staleTime: 5 * 60_000,
   });
 

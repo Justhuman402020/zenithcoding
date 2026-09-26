@@ -45,7 +45,7 @@ export const searchGithubTemplates = createServerFn({ method: "GET" })
       .object({
         category: z.enum(["all", "landing", "dashboard", "saas", "portfolio", "ecommerce"]).default("all"),
         query: z.string().max(100).default(""),
-        page: z.number().int().min(1).max(5).default(1),
+        page: z.number().int().min(1).max(10).default(1),
       })
       .parse(d),
   )
@@ -94,7 +94,7 @@ export const searchGithubTemplates = createServerFn({ method: "GET" })
       url: r.html_url,
       branch: r.default_branch ?? "main",
     }));
-    const value = { items, total: Math.min(j.total_count ?? 0, 500) };
+    const value = { items, total: Math.min(j.total_count ?? 0, 1000) };
     cache.set(key, { at: Date.now(), value });
     if (cache.size > 200) cache.delete(cache.keys().next().value!);
     return { ok: true as const, ...value };
