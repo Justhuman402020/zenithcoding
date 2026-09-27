@@ -215,7 +215,28 @@ export const Route = createFileRoute("/api/public/chat")({
             }
           }
         }
-        const chain = autoFallback ? fullChain : fullChain.slice(0, 1);
+        // The editor's Auto-switch toggle: off means use only the chosen model.
+        const editorAuto = request.headers.get("x-forge-auto") !== "off";
+        // Models that just stopped mid-work go to the back so a retry lands on a different one.
+        let orderedChain = fullChain;
+        if (editorAuto && fullChain.length > 1) {
+          try {
+            const since = new Date(Date.now() - 5 * 60_000).toISOString();
+            const { data: recentFails } = await supabaseAdmin
+              .from("ai_model_status")
+              .select("provider, model")
+              .in("last_status", ["unavailable", "rate_limited"])
+              .gte("updated_at", since);
+            const bad = new Set((recentFails ?? []).map((r: any) => `${r.provider}:${r.model}`));
+            orderedChain = [
+              ...fullChain.filter((r) => !bad.has(`${r.provider}:${r.model}`)),
+              ...fullChain.filter((r) => bad.has(`${r.provider}:${r.model}`)),
+            ];
+          } catch {
+            /* ordering is best effort */
+          }
+        }
+        const chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
 
 
         const pick = await trace.time("model.pick", () => pickAvailableModel(chain, providerKeys, providerRegistry));
