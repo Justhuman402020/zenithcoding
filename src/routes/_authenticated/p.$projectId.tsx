@@ -320,6 +320,29 @@ function ProjectEditor() {
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  // Auto-switch: when a model stops mid-work, count 0→10 then hand the job to
+  // the next available model. Turning it off stops all automatic picking.
+  const [autoSwitch, setAutoSwitch] = useState(true);
+  const autoSwitchRef = useRef(true);
+  const [switchCountdown, setSwitchCountdown] = useState<number | null>(null);
+  const userStoppedRef = useRef(false);
+  const switchTriesRef = useRef(0);
+  useEffect(() => {
+    const saved = window.localStorage.getItem("forge:auto-switch");
+    const on = saved !== "off";
+    setAutoSwitch(on);
+    autoSwitchRef.current = on;
+  }, []);
+  const toggleAutoSwitch = useCallback(() => {
+    setAutoSwitch((prev) => {
+      const next = !prev;
+      autoSwitchRef.current = next;
+      window.localStorage.setItem("forge:auto-switch", next ? "on" : "off");
+      if (!next) setSwitchCountdown(null);
+      toast.success(next ? "Auto-switch on" : "Auto-switch off — Forge will only use the chosen model");
+      return next;
+    });
+  }, []);
   // Plan first (think + approve) or build straight away.
   const [mode, setMode] = useState<"plan" | "build">("build");
   const modeRef = useRef<"plan" | "build">("build");
@@ -577,6 +600,7 @@ function ProjectEditor() {
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
           headers["x-forge-mode"] = modeRef.current;
+          headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
         },
@@ -594,10 +618,16 @@ function ProjectEditor() {
     onError: (err) => {
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
+      if (!userStoppedRef.current && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
+        switchTriesRef.current += 1;
+        setSwitchCountdown(0);
+        return;
+      }
       void discardUnansweredMessage();
       toast.error(getChatErrorMessage(err), { id: "forge-chat-error" });
     },
-    onFinish: () => {
+    onFinish: ({ isError }: { isError?: boolean }) => {
+      if (!isError) switchTriesRef.current = 0;
       pendingUserRowRef.current = null;
       // AI may have written files via tools
       refreshFiles();
@@ -639,7 +669,31 @@ function ProjectEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewError, isBusy, isOnline]);
   const stopJobs = useStopServerFn(stopChatJobs);
+  // Count 0 → 10, then continue the unfinished job on the next working model.
+  useEffect(() => {
+    if (switchCountdown === null) return;
+    if (!autoSwitch) {
+      setSwitchCountdown(null);
+      return;
+    }
+    if (switchCountdown >= 10) {
+      setSwitchCountdown(null);
+      requestKeyRef.current = crypto.randomUUID();
+      void sendMessage({
+        text: "The previous model stopped mid-work. Continue exactly where it stopped. Do not repeat finished work, and finish the remaining steps.",
+      });
+      return;
+    }
+    const t = setTimeout(() => setSwitchCountdown((c) => (c === null ? null : c + 1)), 1000);
+    return () => clearTimeout(t);
+  }, [switchCountdown, autoSwitch, sendMessage]);
+
   const handleStop = useCallback(() => {
+    userStoppedRef.current = true;
+    setSwitchCountdown(null);
+    setTimeout(() => {
+      userStoppedRef.current = false;
+    }, 3000);
     // Instant on screen: cut the stream and clear the spinner right away.
     try {
       void stop();
@@ -1843,6 +1897,26 @@ function ProjectEditor() {
               })()}
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
+              {switchCountdown !== null ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
+                  <span>
+                    The model stopped mid-work. Finding another model to finish it… <strong className="tabular-nums">{switchCountdown}</strong>/10
+                  </span>
+                  <button type="button" className="font-medium underline" onClick={() => setSwitchCountdown(null)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={toggleAutoSwitch}
+                  className={`rounded-full border px-2.5 py-0.5 text-[11px] ${autoSwitch ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
+                  title="When on, Forge switches to another model if one stops mid-work"
+                >
+                  Auto-switch: {autoSwitch ? "On" : "Off"}
+                </button>
+              </div>
               {!isOnline && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                   Offline — reconnect to send. Work already accepted by Forge will keep finishing.
