@@ -545,9 +545,16 @@ function ProjectEditor() {
 
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
+  // Only clear the error when the page itself really changed. Re-fetching the
+  // same files used to wipe the error while the iframe (unchanged) never
+  // re-reported it, so crashes went undetected.
+  const lastDocRef = useRef(previewDoc);
   useEffect(() => {
+    if (lastDocRef.current === previewDoc) return;
+    lastDocRef.current = previewDoc;
     setPreviewError((cur) => (cur === null ? cur : null));
-  }, [files]);
+    autoFixAttemptsRef.current.clear();
+  }, [previewDoc]);
 
   useEffect(() => {
     function onPreviewMessage(event: MessageEvent) {
