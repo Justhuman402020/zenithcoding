@@ -73,7 +73,7 @@ function AdminModelsPage() {
     { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
     { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
     { label: "DeepInfra", baseUrl: "https://api.deepinfra.com/v1/openai" },
-    { label: "TokenLLM7.io", baseUrl: "https://api.tokenllm7.io/v1" },
+    { label: "LLM7", baseUrl: "https://api.llm7.io/v1" },
 
   ];
   const [form, setForm] = useState({ label: PROVIDER_PRESETS[0].label, baseUrl: PROVIDER_PRESETS[0].baseUrl, apiKey: "" });
