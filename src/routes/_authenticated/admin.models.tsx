@@ -74,10 +74,13 @@ function AdminModelsPage() {
     { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
     { label: "DeepInfra", baseUrl: "https://api.deepinfra.com/v1/openai" },
     { label: "LLM7", baseUrl: "https://api.llm7.io/v1" },
-
+    { label: "Cloudflare Workers AI", baseUrl: CF_BASE("ACCOUNT_ID"), tokenLabel: "Cloudflare API token" },
   ];
   const [form, setForm] = useState({ label: PROVIDER_PRESETS[0].label, baseUrl: PROVIDER_PRESETS[0].baseUrl, apiKey: "" });
+  const [cfAccount, setCfAccount] = useState("");
   const selectedProvider = PROVIDER_PRESETS.find((provider) => provider.label === form.label) ?? PROVIDER_PRESETS[0];
+  const isCloudflare = form.label === "Cloudflare Workers AI";
+  const keyTooShort = form.apiKey.trim().length < 8 || (isCloudflare && cfAccount.trim().length < 16);
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);

@@ -90,6 +90,28 @@ export async function listModelIds(
   try {
     const isGitHub = /models\.github\.ai/i.test(baseURL);
     apiKey = apiKey.trim().replace(/^Bearer\s+/i, "");
+    const cf = /api\.cloudflare\.com\/client\/v4\/accounts\/([^/]+)\/ai/i.exec(baseURL);
+    if (cf) {
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${cf[1]}/ai/models/search?task=Text%20Generation&per_page=200`,
+        { headers: { Authorization: `Bearer ${apiKey}` } },
+      );
+      const text = await res.text().catch(() => "");
+      let json: { success?: boolean; result?: Array<{ name?: string }>; errors?: Array<{ message?: string }> } | null = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      if (!res.ok || !json?.success) {
+        const msg = json?.errors?.[0]?.message ?? text.slice(0, 200) ?? "request rejected";
+        const hint = res.status === 403 || res.status === 401 ? " (check the token has Workers AI Read permission and the Account ID is right)" : "";
+        return { ok: false, error: `${res.status}: ${msg}${hint}`, models: [] };
+      }
+      const models = (json.result ?? []).map((m) => m.name).filter((n): n is string => !!n);
+      if (!models.length) return { ok: false, error: "The token worked but no text models were returned.", models };
+      return { ok: true, error: null, models };
+    }
     if (isGitHub && !apiKey) apiKey = (process.env["GITHUB_MODELS_TOKEN"] ?? "").trim();
     const url = isGitHub ? "https://models.github.ai/catalog/models" : `${baseURL}/models`;
     const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
