@@ -64,6 +64,7 @@ function AdminModelsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const CF_BASE = (id: string) => `https://api.cloudflare.com/client/v4/accounts/${id}/ai/v1`;
   const PROVIDER_PRESETS: Array<{ label: string; baseUrl: string; tokenLabel?: string }> = [
     { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
     { label: "GitHub Models", baseUrl: "https://models.github.ai/inference", tokenLabel: "GitHub access token" },
@@ -114,7 +115,7 @@ function AdminModelsPage() {
     try {
       const res = await addKey({ data: form });
       toast.success(`Saved — ${res.modelCount} models added`);
-      setForm({ label: selectedProvider.label, baseUrl: selectedProvider.baseUrl, apiKey: "" });
+      setForm({ label: selectedProvider.label, baseUrl: isCloudflare ? form.baseUrl : selectedProvider.baseUrl, apiKey: "" });
       setTestResult(null);
       refetch();
     } catch (e) {
@@ -226,7 +227,20 @@ function AdminModelsPage() {
           >
             {PROVIDER_PRESETS.map((preset) => <option key={preset.label}>{preset.label}</option>)}
           </select>
-          <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
+          {isCloudflare ? (
+            <Input
+              placeholder="Cloudflare Account ID"
+              value={cfAccount}
+              onChange={(e) => {
+                const id = e.target.value.trim();
+                setCfAccount(id);
+                setForm({ ...form, baseUrl: CF_BASE(id || "ACCOUNT_ID") });
+              }}
+              aria-label="Cloudflare Account ID"
+            />
+          ) : (
+            <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
+          )}
           <Input
             placeholder={selectedProvider.tokenLabel ?? "Paste API key"}
             type="password"
@@ -235,17 +249,22 @@ function AdminModelsPage() {
             aria-label={selectedProvider.tokenLabel ?? "API key"}
           />
         </div>
-        {selectedProvider.tokenLabel ? (
+        {isCloudflare ? (
+          <p className="text-xs text-muted-foreground">
+            Paste your Account ID and an API token (the one starting with cfat_) that has the{" "}
+            <span className="font-medium">Workers AI Read</span> permission. Add as many Cloudflare accounts as you like.
+          </p>
+        ) : selectedProvider.tokenLabel ? (
           <p className="text-xs text-muted-foreground">
             GitHub uses a personal access token, not an API key. Create one at github.com/settings/personal-access-tokens
             and give it the <span className="font-medium">Models: read</span> permission.
           </p>
         ) : null}
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || form.apiKey.trim().length < 8}>
+          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || keyTooShort}>
             {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={busy !== null || form.apiKey.trim().length < 8}>
+          <Button size="sm" onClick={onSave} disabled={busy !== null || keyTooShort}>
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
           </Button>
           {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
