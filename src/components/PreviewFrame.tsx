@@ -26,11 +26,15 @@ const CONSOLE_BRIDGE = `<script>(()=>{
     const orig=console[level];
     console[level]=function(){send(level,Array.from(arguments));return orig.apply(console,arguments);};
   });
+  const snap=()=>{try{const b=document.body;return{title:document.title,path:location.pathname+location.hash,text:(b&&b.innerText||'').replace(/\\s+/g,' ').trim().slice(0,1500),elements:b?b.getElementsByTagName('*').length:0,empty:!b||!(b.innerText||'').trim()}}catch(_){return null}};
+  const report=(o)=>{try{setTimeout(()=>parent.postMessage(Object.assign({type:'forge-preview-error'},o,{snapshot:snap()}),'*'),50)}catch(_){}};
   window.addEventListener('error',e=>{
-    if(!e.message&&e.target&&e.target!==window){send('error',['Failed to load resource: '+(e.target.src||e.target.href||e.target.tagName)]);return;}
+    if(!e.message&&e.target&&e.target!==window){const u=e.target.src||e.target.href||e.target.tagName;send('error',['Failed to load resource: '+u]);report({kind:'resource',message:'Failed to load resource: '+u});return;}
     send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)+')'+(e.error&&e.error.stack?'\\n'+e.error.stack:'')]);
+    report({kind:'exception',message:String(e.message),stack:e.error&&e.error.stack||'',file:e.filename||'',line:e.lineno||0,col:e.colno||0});
   },true);
-  window.addEventListener('unhandledrejection',e=>{const r=e.reason;send('error',['Unhandled rejection: '+(r&&r.message||r)+(r&&r.stack?'\\n'+r.stack:'')]);});
+  window.addEventListener('unhandledrejection',e=>{const r=e.reason;send('error',['Unhandled rejection: '+(r&&r.message||r)+(r&&r.stack?'\\n'+r.stack:'')]);report({kind:'rejection',message:'Unhandled rejection: '+(r&&r.message||r),stack:r&&r.stack||''});});
+  const oe=console.error;console.error=function(){try{const a=Array.from(arguments);const er=a.find(x=>x instanceof Error);report({kind:'console',message:a.map(x=>x instanceof Error?x.message:typeof x==='object'?(()=>{try{return JSON.stringify(x)}catch(_){return String(x)}})():String(x)).join(' ').slice(0,1000),stack:er&&er.stack||''})}catch(_){}return oe.apply(console,arguments)};
 })();<\/script>`;
 
 export function injectConsoleBridge(html: string): string {

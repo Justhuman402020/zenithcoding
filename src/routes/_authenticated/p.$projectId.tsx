@@ -93,6 +93,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+type PreviewErrorCtx = {
+  kind?: string;
+  message?: string;
+  stack?: string;
+  file?: string;
+  line?: number;
+  col?: number;
+  snapshot?: { title?: string; path?: string; text?: string; elements?: number; empty?: boolean } | null;
+};
+
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Forge — editor" }] }),
   validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
@@ -544,6 +554,32 @@ function ProjectEditor() {
   }, [files, previewPath]);
 
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewErrorCtxRef = useRef<PreviewErrorCtx | null>(null);
+  /** Full, exact error context for the agent: message, stack, line, code around it and what the page showed. */
+  function buildErrorReport(fallback: string | null) {
+    const ctx = previewErrorCtxRef.current;
+    const lines: string[] = [`Current preview page: ${previewPath}`];
+    if (!ctx) return `${lines.join("\n")}\nError:\n${fallback ?? ""}`;
+    lines.push(`Error type: ${ctx.kind ?? "error"}`, `Message: ${ctx.message ?? fallback ?? ""}`);
+    if (ctx.line) {
+      const where = /srcdoc|about:/i.test(ctx.file ?? "") || !ctx.file ? `inline code of ${previewPath}` : ctx.file;
+      lines.push(`Location: ${where}, line ${ctx.line}, column ${ctx.col ?? 0} (line numbers of the rendered preview document)`);
+      const doc = injectConsoleBridge(previewDoc).split("\n");
+      const from = Math.max(0, ctx.line - 5);
+      const excerpt = doc.slice(from, ctx.line + 4).map((l, i) => `${from + i + 1 === ctx.line ? ">" : " "} ${from + i + 1}| ${l.slice(0, 240)}`);
+      if (excerpt.length) lines.push("Code around the failing line (exact code the preview ran):", ...excerpt);
+    }
+    if (ctx.stack) lines.push("Stack trace:", ctx.stack.slice(0, 2000));
+    if (fallback && ctx.message && !fallback.includes(ctx.message)) lines.push("Console error:", fallback);
+    const snap = ctx.snapshot;
+    if (snap) {
+      lines.push(
+        `Rendered preview state: title "${snap.title ?? ""}", ${snap.elements ?? 0} elements${snap.empty ? ", PAGE IS BLANK (no visible text)" : ""}.`,
+        `Visible text: ${snap.text ? snap.text : "(none)"}`,
+      );
+    }
+    return lines.join("\n");
+  }
   const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
   // Only clear the error when the page itself really changed. Re-fetching the
   // same files used to wipe the error while the iframe (unchanged) never
@@ -553,12 +589,19 @@ function ProjectEditor() {
     if (lastDocRef.current === previewDoc) return;
     lastDocRef.current = previewDoc;
     setPreviewError((cur) => (cur === null ? cur : null));
+    previewErrorCtxRef.current = null;
     autoFixAttemptsRef.current.clear();
   }, [previewDoc]);
 
   useEffect(() => {
     function onPreviewMessage(event: MessageEvent) {
       const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
+      if ((data as { type?: string } | undefined)?.type === "forge-preview-error") {
+        previewErrorCtxRef.current = data as unknown as PreviewErrorCtx;
+        const msg = String((data as unknown as PreviewErrorCtx).message ?? "").slice(0, 3000);
+        if (msg) setPreviewError((cur) => cur ?? msg);
+        return;
+      }
       if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
         const nextError = String(data.text).slice(0, 3000);
         setPreviewError((cur) => (cur === nextError ? cur : nextError));
@@ -662,14 +705,14 @@ function ProjectEditor() {
     if (attempts >= 2) return;
     const timer = setTimeout(() => {
       autoFixAttemptsRef.current.set(signature, attempts + 1);
-      const err = previewError;
+      const err = buildErrorReport(previewError);
       setPreviewError(null);
       setMode("build");
       modeRef.current = "build";
       requestKeyRef.current = crypto.randomUUID();
       toast.info("Preview error found — fixing it automatically");
       void sendMessage({
-        text: `Auto-fix (attempt ${attempts + 1}/2): the live preview crashed with this runtime error. Read the relevant files, find the root cause, patch it with a minimal change, and keep everything else as is:\n\n${err}`,
+        text: `Auto-fix (attempt ${attempts + 1}/2): the live preview crashed with this runtime error. Use the exact message, line number, code excerpt and stack below — do not guess. Open the file that contains that code, fix the root cause with a minimal change, and keep everything else as is:\n\n${err}`,
       });
     }, 2500);
     return () => clearTimeout(timer);
@@ -1814,12 +1857,12 @@ function ProjectEditor() {
                       size="sm"
                       className="flex-1 bg-gold-gradient text-primary-foreground"
                       onClick={async () => {
-                        const err = previewError;
+                        const err = buildErrorReport(previewError);
                         setPreviewError(null);
                         setMode("build");
                         modeRef.current = "build";
                         requestKeyRef.current = crypto.randomUUID();
-                        await sendMessage({ text: `Fix this error in the preview. Read the relevant files, find the cause and fix it:\n\n${err}` });
+                        await sendMessage({ text: `Fix this error in the preview. Use the exact message, line number, code excerpt and stack below instead of guessing, then fix the root cause:\n\n${err}` });
                       }}
                     >
                       Fix it
