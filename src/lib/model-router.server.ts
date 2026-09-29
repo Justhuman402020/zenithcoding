@@ -219,7 +219,7 @@ export async function pickAvailableModel(
       const quota = readQuotaHeaders(res.headers);
       if (res.ok) {
         await recordModelStatus(ref, "ok", quota, null, true);
-        return { ok: true, ref, apiKey, baseURL: provider.baseURL };
+        return { ok: true, ref, apiKey, baseURL };
       }
 
       const text = await res.text().catch(() => "");
