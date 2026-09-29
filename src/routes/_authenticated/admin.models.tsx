@@ -5,10 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   addProviderKey,
+  getAiGateway,
   getModelBoard,
   removeProviderKey,
+  saveAiGateway,
   setActiveModel,
   setAutoFallback,
+  testAiGateway,
   testProviderConnection,
 } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
@@ -19,6 +22,7 @@ import {
   Loader2,
   ShieldAlert,
   CheckCircle2,
+  Globe,
   KeyRound,
   PlusCircle,
   Trash2,
