@@ -94,6 +94,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type PreviewErrorCtx = {
+  count?: number;
   kind?: string;
   message?: string;
   stack?: string;
@@ -555,12 +556,17 @@ function ProjectEditor() {
 
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewErrorCtxRef = useRef<PreviewErrorCtx | null>(null);
+  const [previewErrorCount, setPreviewErrorCount] = useState(0);
+  useEffect(() => {
+    if (!previewError) setPreviewErrorCount(0);
+  }, [previewError]);
   /** Full, exact error context for the agent: message, stack, line, code around it and what the page showed. */
   function buildErrorReport(fallback: string | null) {
     const ctx = previewErrorCtxRef.current;
     const lines: string[] = [`Current preview page: ${previewPath}`];
     if (!ctx) return `${lines.join("\n")}\nError:\n${fallback ?? ""}`;
     lines.push(`Error type: ${ctx.kind ?? "error"}`, `Message: ${ctx.message ?? fallback ?? ""}`);
+    if ((ctx.count ?? 1) > 1) lines.push(`Occurrences: this same error repeated ${ctx.count} times (likely inside a loop, timer or re-render).`);
     if (ctx.line) {
       const where = /srcdoc|about:/i.test(ctx.file ?? "") || !ctx.file ? `inline code of ${previewPath}` : ctx.file;
       lines.push(`Location: ${where}, line ${ctx.line}, column ${ctx.col ?? 0} (line numbers of the rendered preview document)`);
@@ -599,7 +605,11 @@ function ProjectEditor() {
       if ((data as { type?: string } | undefined)?.type === "forge-preview-error") {
         previewErrorCtxRef.current = data as unknown as PreviewErrorCtx;
         const msg = String((data as unknown as PreviewErrorCtx).message ?? "").slice(0, 3000);
-        if (msg) setPreviewError((cur) => cur ?? msg);
+        if (msg) {
+          const n = Number((data as unknown as PreviewErrorCtx).count ?? 1);
+          setPreviewErrorCount((c) => Math.max(c + 1, n));
+          setPreviewError((cur) => cur ?? msg);
+        }
         return;
       }
       if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
@@ -693,6 +703,15 @@ function ProjectEditor() {
   const isStreaming = status === "submitted" || status === "streaming";
   // Busy = this device is streaming, or another device/earlier run is working.
   const isBusy = isStreaming || !!remoteWorking;
+  // Live badge: the model named on the newest assistant reply. Each fallback
+  // hand-off starts a new reply, so the badge follows whichever model took over.
+  const activeModel = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const meta = (messages[i] as { role: string; metadata?: { model?: string } }).metadata;
+      if (messages[i]!.role === "assistant" && meta?.model) return meta.model;
+    }
+    return null;
+  }, [messages]);
 
   // Never-break engine: when the preview throws, automatically ask the agent to
   // fix it. Each distinct error gets at most 2 automatic attempts, so a fix that
@@ -1849,7 +1868,10 @@ function ProjectEditor() {
               ) : null}
               {previewError && !isBusy ? (
                 <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2">
-                  <p className="text-xs font-medium text-destructive">Something is broken in the preview</p>
+                  <p className="text-xs font-medium text-destructive">
+                    Something is broken in the preview
+                    {previewErrorCount > 1 ? ` · repeated ${previewErrorCount > 99 ? "99+" : previewErrorCount}×` : ""}
+                  </p>
                   <p className="text-[11px] text-muted-foreground font-mono line-clamp-3 break-all">{previewError}</p>
                   <div className="flex gap-2">
                     <Button
@@ -1957,7 +1979,16 @@ function ProjectEditor() {
                   </button>
                 </div>
               ) : null}
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-2">
+                {activeModel ? (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
+                    title={isBusy ? "Model writing this reply" : "Model that wrote the last reply"}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${isBusy ? "bg-primary animate-pulse" : "bg-muted-foreground"}`} />
+                    {activeModel}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={toggleAutoSwitch}

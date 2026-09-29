@@ -133,12 +133,16 @@ export async function listModelIds(
     let models = raw.map((m) => m.id).filter((id): id is string => !!id);
     // Some networks answer with a plain "OK" instead of the list — the token was accepted, so use known GitHub models.
     if (!models.length && isGitHub) models = [...GITHUB_FALLBACK_MODELS];
+    // Alibaba Model Studio: make sure the main Qwen coding/chat models are always offered.
+    if (/aliyuncs\.com/i.test(baseURL)) models = [...new Set([...QWEN_MODELS, ...models])];
     if (!models.length) return { ok: false, error: "The credential worked but no models were returned.", models };
     return { ok: true, error: null, models };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not reach that address", models: [] };
   }
 }
+
+const QWEN_MODELS = ["qwen2.5-coder-32b-instruct", "qwen-plus", "qwen-max", "qwen-turbo", "qwen3-coder-plus"];
 
 const GITHUB_FALLBACK_MODELS = [
   "openai/gpt-4.1",

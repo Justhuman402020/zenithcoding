@@ -373,11 +373,30 @@ export const Route = createFileRoute("/api/public/chat")({
           if (heartbeat) clearInterval(heartbeat);
         };
 
+        // Shared work record: compaction drops old tool parts, so list the file
+        // changes already made in this chat. A fallback model then continues
+        // from the real state instead of starting blind.
+        const workLog: string[] = [];
+        for (const message of body.messages as any[]) {
+          if (message?.role !== "assistant") continue;
+          for (const part of message.parts ?? []) {
+            const type = String(part?.type ?? "");
+            if (!type.startsWith("tool-")) continue;
+            const input = part?.input ?? {};
+            const target = input.path ?? input.file ?? input.query ?? "";
+            const state = part?.state === "output-error" ? " (failed)" : "";
+            workLog.push(`- ${type.slice(5)}${target ? ` ${String(target).slice(0, 160)}` : ""}${state}`);
+          }
+        }
+        const sharedContext = workLog.length
+          ? `\n\nWork already done earlier in this chat (most recent last; previous models may have made these changes — read files before editing, do not redo finished work):\n${workLog.slice(-40).join("\n")}`
+          : "";
+
         const result = streamText({
           model,
-          system: planMode
-            ? buildPlanSystemPrompt(proj.name, projectBrief)
-            : buildSystemPrompt(proj.name, projectBrief),
+          system:
+            (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
+            sharedContext,
           messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
 
           tools,
@@ -472,7 +491,10 @@ export const Route = createFileRoute("/api/public/chat")({
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          headers: { ...traceHeaders, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
+          // Tells the editor exactly which model is writing this reply (live badge).
+          messageMetadata: ({ part }) =>
+            part.type === "start" ? { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}` } : undefined,
+          headers: { ...traceHeaders, "x-forge-model-used": `${pick.ref.provider}:${pick.ref.model}`, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
           // Keep consuming the model/tool stream after the browser connection
           // disappears so accepted file writes and the final reply still land.
           consumeSseStream: ({ stream }) => consumeStream({ stream }),
