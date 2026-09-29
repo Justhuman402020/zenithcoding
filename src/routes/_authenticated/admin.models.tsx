@@ -75,6 +75,11 @@ function AdminModelsPage() {
     { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
     { label: "DeepInfra", baseUrl: "https://api.deepinfra.com/v1/openai" },
     { label: "LLM7", baseUrl: "https://api.llm7.io/v1" },
+    {
+      label: "Alibaba Cloud Model Studio",
+      baseUrl: "https://ws-w68rj1chv3ty9eac.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      tokenLabel: "Alibaba Model Studio API key",
+    },
     { label: "Cloudflare Workers AI", baseUrl: CF_BASE("ACCOUNT_ID"), tokenLabel: "Cloudflare API token" },
   ];
   const [form, setForm] = useState({ label: PROVIDER_PRESETS[0].label, baseUrl: PROVIDER_PRESETS[0].baseUrl, apiKey: "" });
