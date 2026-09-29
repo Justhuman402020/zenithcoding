@@ -254,6 +254,57 @@ export const addProviderKey = createServerFn({ method: "POST" })
     return { ok: true, id, modelCount: test.models.length };
   });
 
+/** Reads the saved AI Gateway / proxy setting (admin only). */
+export const getAiGateway = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertModelsAdmin(context);
+    const { readAiGatewaySetting } = await import("./model-router.server");
+    return readAiGatewaySetting();
+  });
+
+/** Saves (or clears) the AI Gateway / proxy setting. */
+export const saveAiGateway = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { url: string; enabled: boolean }) =>
+    z.object({ url: z.string().max(500), enabled: z.boolean() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const url = data.url.trim().replace(/\/+$/, "") || null;
+    if (url && !/^https:\/\//i.test(url)) throw new Error("The gateway address must start with https://");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("ai_gateway_settings").upsert({
+      id: "global",
+      url,
+      enabled: data.enabled && !!url,
+      updated_at: new Date().toISOString(),
+      updated_by: context.userId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Checks the gateway address answers before it is saved. */
+export const testAiGateway = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { url: string }) => z.object({ url: z.string().min(8).max(500) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const base = data.url.trim().replace(/\/+$/, "");
+    if (!/^https:\/\//i.test(base)) return { ok: false, error: "The address must start with https://" };
+    try {
+      const res = await fetch(`${base}/groq/models`, {
+        headers: { Authorization: "Bearer gateway-probe" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      // Any HTTP answer (even 401/404) proves the gateway is reachable.
+      return { ok: true, status: res.status };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "No answer from that address" };
+    }
+  });
+
 export const removeProviderKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
