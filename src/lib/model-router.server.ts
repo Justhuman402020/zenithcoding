@@ -119,6 +119,38 @@ export type ModelPick =
   | { ok: true; ref: ModelRef; apiKey: string; baseURL: string }
   | { ok: false; error: string; status: number };
 
+export type AiGatewaySetting = { url: string | null; enabled: boolean };
+
+/** Reads the admin-configured AI Gateway / proxy setting. */
+export async function readAiGatewaySetting(): Promise<AiGatewaySetting> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("ai_gateway_settings")
+      .select("url, enabled")
+      .eq("id", "global")
+      .maybeSingle();
+    const url = (data?.url as string | null)?.trim() || null;
+    return { url, enabled: !!data?.enabled && !!url };
+  } catch {
+    return { url: null, enabled: false };
+  }
+}
+
+/**
+ * When a gateway is enabled, provider requests go through it instead of the
+ * provider's own address. Cloudflare AI Gateways are OpenAI-compatible and
+ * forward to the provider named in the path, e.g. `${gateway}/groq`.
+ */
+export function gatewayBaseURL(gateway: AiGatewaySetting, providerId: string, fallback: string): string {
+  if (!gateway.enabled || !gateway.url) return fallback;
+  const base = gateway.url.replace(/\/+$/, "");
+  // Custom providers point at their own server; only known hosted providers
+  // are routed through the gateway.
+  if (providerId.startsWith("custom-")) return fallback;
+  return `${base}/${providerId}`;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
