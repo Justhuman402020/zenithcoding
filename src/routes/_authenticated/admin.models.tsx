@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
@@ -99,6 +99,55 @@ function AdminModelsPage() {
   const testKey = useServerFn(testProviderConnection);
   const addKey = useServerFn(addProviderKey);
   const removeKey = useServerFn(removeProviderKey);
+  const loadGateway = useServerFn(getAiGateway);
+  const saveGateway = useServerFn(saveAiGateway);
+  const testGateway = useServerFn(testAiGateway);
+
+  const DEFAULT_GATEWAY_URL =
+    "https://gateway.ai.cloudflare.com/v1/d51370edd74081c6688d32ae7de5d8a7/code-haven";
+  const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY_URL);
+  const [gatewayEnabled, setGatewayEnabled] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState<"test" | "save" | null>(null);
+  const [gatewayResult, setGatewayResult] = useState<string | null>(null);
+
+  const gatewayQuery = useQuery({
+    queryKey: ["admin", "ai-gateway"],
+    queryFn: () => loadGateway({}),
+  });
+  const gatewayLoaded = useRef(false);
+  useEffect(() => {
+    if (gatewayLoaded.current || !gatewayQuery.data) return;
+    gatewayLoaded.current = true;
+    setGatewayUrl(gatewayQuery.data.url ?? DEFAULT_GATEWAY_URL);
+    setGatewayEnabled(gatewayQuery.data.enabled);
+  }, [gatewayQuery.data]);
+
+  async function onTestGateway() {
+    setGatewayBusy("test");
+    setGatewayResult(null);
+    try {
+      const res = await testGateway({ data: { url: gatewayUrl } });
+      setGatewayResult(res.ok ? `Reachable — it answered (status ${res.status})` : `Not reachable — ${res.error}`);
+    } catch (e) {
+      setGatewayResult(e instanceof Error ? e.message : "Could not test that address");
+    } finally {
+      setGatewayBusy(null);
+    }
+  }
+
+  async function onSaveGateway() {
+    setGatewayBusy("save");
+    try {
+      await saveGateway({ data: { url: gatewayUrl, enabled: gatewayEnabled } });
+      toast.success(gatewayUrl.trim() ? "Gateway saved" : "Gateway cleared");
+      gatewayQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save the gateway");
+    } finally {
+      setGatewayBusy(null);
+    }
+  }
+
 
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
