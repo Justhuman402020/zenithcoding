@@ -472,7 +472,10 @@ export const Route = createFileRoute("/api/public/chat")({
         return result.toUIMessageStreamResponse({
           originalMessages: body.messages,
           sendReasoning: true,
-          headers: { ...traceHeaders, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
+          // Tells the editor exactly which model is writing this reply (live badge).
+          messageMetadata: ({ part }) =>
+            part.type === "start" ? { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}` } : undefined,
+          headers: { ...traceHeaders, "x-forge-model-used": `${pick.ref.provider}:${pick.ref.model}`, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
           // Keep consuming the model/tool stream after the browser connection
           // disappears so accepted file writes and the final reply still land.
           consumeSseStream: ({ stream }) => consumeStream({ stream }),

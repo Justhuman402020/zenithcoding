@@ -703,6 +703,15 @@ function ProjectEditor() {
   const isStreaming = status === "submitted" || status === "streaming";
   // Busy = this device is streaming, or another device/earlier run is working.
   const isBusy = isStreaming || !!remoteWorking;
+  // Live badge: the model named on the newest assistant reply. Each fallback
+  // hand-off starts a new reply, so the badge follows whichever model took over.
+  const activeModel = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const meta = (messages[i] as { role: string; metadata?: { model?: string } }).metadata;
+      if (messages[i]!.role === "assistant" && meta?.model) return meta.model;
+    }
+    return null;
+  }, [messages]);
 
   // Never-break engine: when the preview throws, automatically ask the agent to
   // fix it. Each distinct error gets at most 2 automatic attempts, so a fix that
