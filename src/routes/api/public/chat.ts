@@ -239,7 +239,11 @@ export const Route = createFileRoute("/api/public/chat")({
         const chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
 
 
-        const pick = await trace.time("model.pick", () => pickAvailableModel(chain, providerKeys, providerRegistry));
+        const { readAiGatewaySetting } = await import("@/lib/model-router.server");
+        const gateway = await readAiGatewaySetting();
+        const pick = await trace.time("model.pick", () =>
+          pickAvailableModel(chain, providerKeys, providerRegistry, gateway),
+        );
         if (!pick.ok) {
           trace.log("model.unavailable", { status: "error", message: pick.error });
           return fail(
