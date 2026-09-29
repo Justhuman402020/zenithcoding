@@ -202,6 +202,9 @@ export function PreviewFrame({
                 >
                   <span className="opacity-50 mr-2">{l.level.toUpperCase()}</span>
                   {l.text}
+                  {l.count > 1 ? (
+                    <span className="ml-2 rounded-full bg-destructive/15 px-1.5 text-[10px] font-semibold">×{l.count}</span>
+                  ) : null}
                 </div>
               ))
             )}
