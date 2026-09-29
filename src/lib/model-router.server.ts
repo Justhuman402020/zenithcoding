@@ -188,6 +188,7 @@ export async function pickAvailableModel(
   chain: ModelRef[],
   keys: ProviderKeys,
   providers?: ProviderOption[],
+  gateway?: AiGatewaySetting,
 ): Promise<ModelPick> {
   let rateLimited = false;
   let lastError: string | null = null;
@@ -199,12 +200,12 @@ export async function pickAvailableModel(
     const apiKey = keys[ref.provider];
     if (!provider || !apiKey) continue;
 
-
+    const baseURL = gateway ? gatewayBaseURL(gateway, ref.provider, provider.baseURL) : provider.baseURL;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response;
       try {
-        res = await fetch(`${provider.baseURL}/chat/completions`, {
+        res = await fetch(`${baseURL}/chat/completions`, {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model: ref.model, messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
