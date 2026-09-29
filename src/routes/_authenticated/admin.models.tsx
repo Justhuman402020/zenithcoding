@@ -264,6 +264,56 @@ function AdminModelsPage() {
       <div className="rounded-xl border p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" />
+            <div className="font-medium text-sm">AI Gateway &amp; Proxy URL</div>
+          </div>
+          <Button
+            variant={gatewayEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => setGatewayEnabled(!gatewayEnabled)}
+          >
+            {gatewayEnabled ? "Enabled" : "Disabled"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When enabled, requests to your providers (OpenRouter, Groq and the rest) go through this gateway address
+          first. Turn it off or clear the box to talk to each provider directly.
+        </p>
+        <Input
+          value={gatewayUrl}
+          onChange={(e) => setGatewayUrl(e.target.value)}
+          placeholder="https://gateway.ai.cloudflare.com/v1/…"
+          aria-label="AI Gateway URL"
+        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onTestGateway}
+            disabled={gatewayBusy !== null || gatewayUrl.trim().length < 8}
+          >
+            {gatewayBusy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test Gateway"}
+          </Button>
+          <Button size="sm" onClick={onSaveGateway} disabled={gatewayBusy !== null}>
+            {gatewayBusy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setGatewayUrl("");
+              setGatewayEnabled(false);
+            }}
+          >
+            Clear
+          </Button>
+          {gatewayResult ? <span className="text-xs text-muted-foreground">{gatewayResult}</span> : null}
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
             <PlusCircle className="h-4 w-4 text-primary" />
             <div className="font-medium text-sm">Connect a provider</div>
           </div>
