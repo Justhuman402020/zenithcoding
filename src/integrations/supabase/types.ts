@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_gateway_settings: {
+        Row: {
+          enabled: boolean
+          id: string
+          updated_at: string
+          updated_by: string | null
+          url: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          url?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       ai_model_settings: {
         Row: {
           auto_fallback: boolean

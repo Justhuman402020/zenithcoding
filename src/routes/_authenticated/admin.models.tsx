@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   addProviderKey,
+  getAiGateway,
   getModelBoard,
   removeProviderKey,
+  saveAiGateway,
   setActiveModel,
   setAutoFallback,
+  testAiGateway,
   testProviderConnection,
 } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
@@ -19,6 +22,7 @@ import {
   Loader2,
   ShieldAlert,
   CheckCircle2,
+  Globe,
   KeyRound,
   PlusCircle,
   Trash2,
@@ -95,6 +99,55 @@ function AdminModelsPage() {
   const testKey = useServerFn(testProviderConnection);
   const addKey = useServerFn(addProviderKey);
   const removeKey = useServerFn(removeProviderKey);
+  const loadGateway = useServerFn(getAiGateway);
+  const saveGateway = useServerFn(saveAiGateway);
+  const testGateway = useServerFn(testAiGateway);
+
+  const DEFAULT_GATEWAY_URL =
+    "https://gateway.ai.cloudflare.com/v1/d51370edd74081c6688d32ae7de5d8a7/code-haven";
+  const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY_URL);
+  const [gatewayEnabled, setGatewayEnabled] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState<"test" | "save" | null>(null);
+  const [gatewayResult, setGatewayResult] = useState<string | null>(null);
+
+  const gatewayQuery = useQuery({
+    queryKey: ["admin", "ai-gateway"],
+    queryFn: () => loadGateway({}),
+  });
+  const gatewayLoaded = useRef(false);
+  useEffect(() => {
+    if (gatewayLoaded.current || !gatewayQuery.data) return;
+    gatewayLoaded.current = true;
+    setGatewayUrl(gatewayQuery.data.url ?? DEFAULT_GATEWAY_URL);
+    setGatewayEnabled(gatewayQuery.data.enabled);
+  }, [gatewayQuery.data]);
+
+  async function onTestGateway() {
+    setGatewayBusy("test");
+    setGatewayResult(null);
+    try {
+      const res = await testGateway({ data: { url: gatewayUrl } });
+      setGatewayResult(res.ok ? `Reachable — it answered (status ${res.status})` : `Not reachable — ${res.error}`);
+    } catch (e) {
+      setGatewayResult(e instanceof Error ? e.message : "Could not test that address");
+    } finally {
+      setGatewayBusy(null);
+    }
+  }
+
+  async function onSaveGateway() {
+    setGatewayBusy("save");
+    try {
+      await saveGateway({ data: { url: gatewayUrl, enabled: gatewayEnabled } });
+      toast.success(gatewayUrl.trim() ? "Gateway saved" : "Gateway cleared");
+      gatewayQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save the gateway");
+    } finally {
+      setGatewayBusy(null);
+    }
+  }
+
 
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
@@ -206,6 +259,56 @@ function AdminModelsPage() {
         >
           {data?.autoFallback ? "On" : "Off"}
         </Button>
+      </div>
+
+      <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" />
+            <div className="font-medium text-sm">AI Gateway &amp; Proxy URL</div>
+          </div>
+          <Button
+            variant={gatewayEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => setGatewayEnabled(!gatewayEnabled)}
+          >
+            {gatewayEnabled ? "Enabled" : "Disabled"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When enabled, requests to your providers (OpenRouter, Groq and the rest) go through this gateway address
+          first. Turn it off or clear the box to talk to each provider directly.
+        </p>
+        <Input
+          value={gatewayUrl}
+          onChange={(e) => setGatewayUrl(e.target.value)}
+          placeholder="https://gateway.ai.cloudflare.com/v1/…"
+          aria-label="AI Gateway URL"
+        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onTestGateway}
+            disabled={gatewayBusy !== null || gatewayUrl.trim().length < 8}
+          >
+            {gatewayBusy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test Gateway"}
+          </Button>
+          <Button size="sm" onClick={onSaveGateway} disabled={gatewayBusy !== null}>
+            {gatewayBusy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setGatewayUrl("");
+              setGatewayEnabled(false);
+            }}
+          >
+            Clear
+          </Button>
+          {gatewayResult ? <span className="text-xs text-muted-foreground">{gatewayResult}</span> : null}
+        </div>
       </div>
 
       <div className="rounded-xl border p-4 space-y-3">
