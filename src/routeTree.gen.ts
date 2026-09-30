@@ -9,42 +9,36 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TemplatesRouteImport } from './routes/templates'
-import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
-import { Route as ShareTokenRouteImport } from './routes/share.$token'
-import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
-import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
-import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
-import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
-import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
-import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
-import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
-import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
-import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
-import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
+import { Route as SSlugRouteImport } from './routes/s.$slug'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
+import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
-import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
-import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
-import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
-import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
+import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
+import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
+import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
+import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
+import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
+import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
-import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
-import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
+import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
+import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
+import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/sites.auth.me'
+import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
+import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
 
-const TemplatesRoute = TemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
-  id: '/forge-sdk.js',
-  path: '/forge-sdk.js',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -52,8 +46,14 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
+  id: '/forge-sdk.js',
+  path: '/forge-sdk.js',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
@@ -61,14 +61,9 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const TransfersTokenRoute = TransfersTokenRouteImport.update({
-  id: '/transfers/$token',
-  path: '/transfers/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareTokenRoute = ShareTokenRouteImport.update({
-  id: '/share/$token',
-  path: '/share/$token',
+const LiveProjectIdRoute = LiveProjectIdRouteImport.update({
+  id: '/live/$projectId',
+  path: '/live/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SSlugRoute = SSlugRouteImport.update({
@@ -76,46 +71,31 @@ const SSlugRoute = SSlugRouteImport.update({
   path: '/s/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LiveProjectIdRoute = LiveProjectIdRouteImport.update({
-  id: '/live/$projectId',
-  path: '/live/$projectId',
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TransfersTokenRoute = TransfersTokenRouteImport.update({
+  id: '/transfers/$token',
+  path: '/transfers/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAccountBillingRoute =
+  AuthenticatedAccountBillingRouteImport.update({
+    id: '/account/billing',
+    path: '/account/billing',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
-  id: '/api/public/push-stream',
-  path: '/api/public/push-stream',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
-  id: '/api/public/chat',
-  path: '/api/public/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
-  id: '/p/$projectId',
-  path: '/p/$projectId',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
-  id: '/admin/users',
-  path: '/admin/users',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAdminModelsRoute =
-  AuthenticatedAdminModelsRouteImport.update({
-    id: '/admin/models',
-    path: '/admin/models',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAdminIntegrationsRoute =
-  AuthenticatedAdminIntegrationsRouteImport.update({
-    id: '/admin/integrations',
-    path: '/admin/integrations',
+const AuthenticatedAdminBackendRoute =
+  AuthenticatedAdminBackendRouteImport.update({
+    id: '/admin/backend',
+    path: '/admin/backend',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAdminDomainsRoute =
@@ -124,36 +104,36 @@ const AuthenticatedAdminDomainsRoute =
     path: '/admin/domains',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAdminBackendRoute =
-  AuthenticatedAdminBackendRouteImport.update({
-    id: '/admin/backend',
-    path: '/admin/backend',
+const AuthenticatedAdminIntegrationsRoute =
+  AuthenticatedAdminIntegrationsRouteImport.update({
+    id: '/admin/integrations',
+    path: '/admin/integrations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAccountBillingRoute =
-  AuthenticatedAccountBillingRouteImport.update({
-    id: '/account/billing',
-    path: '/account/billing',
+const AuthenticatedAdminModelsRoute =
+  AuthenticatedAdminModelsRouteImport.update({
+    id: '/admin/models',
+    path: '/admin/models',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
-  id: '/api/public/stripe/webhook',
-  path: '/api/public/stripe/webhook',
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
+  id: '/p/$projectId',
+  path: '/p/$projectId',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
+  id: '/api/public/chat',
+  path: '/api/public/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicSitesEnvRoute = ApiPublicSitesEnvRouteImport.update({
-  id: '/api/public/sites/env',
-  path: '/api/public/sites/env',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
-  id: '/api/public/sites/data',
-  path: '/api/public/sites/data',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
-  id: '/api/public/github/callback',
-  path: '/api/public/github/callback',
+const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
+  id: '/api/public/push-stream',
+  path: '/api/public/push-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedPProjectIdSettingsRoute =
@@ -162,23 +142,43 @@ const AuthenticatedPProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedPProjectIdRoute,
   } as any)
-const ApiPublicSitesAuthSignupRoute =
-  ApiPublicSitesAuthSignupRouteImport.update({
-    id: '/api/public/sites/auth/signup',
-    path: '/api/public/sites/auth/signup',
-    getParentRoute: () => rootRouteImport,
-  } as any)
+const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
+  id: '/api/public/github/callback',
+  path: '/api/public/github/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
+  id: '/api/public/sites/data',
+  path: '/api/public/sites/data',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicSitesEnvRoute = ApiPublicSitesEnvRouteImport.update({
+  id: '/api/public/sites/env',
+  path: '/api/public/sites/env',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
+  id: '/api/public/stripe/webhook',
+  path: '/api/public/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
+  id: '/api/public/sites/auth/me',
+  path: '/api/public/sites/auth/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSitesAuthSigninRoute =
   ApiPublicSitesAuthSigninRouteImport.update({
     id: '/api/public/sites/auth/signin',
     path: '/api/public/sites/auth/signin',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
-  id: '/api/public/sites/auth/me',
-  path: '/api/public/sites/auth/me',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const ApiPublicSitesAuthSignupRoute =
+  ApiPublicSitesAuthSignupRouteImport.update({
+    id: '/api/public/sites/auth/signup',
+    path: '/api/public/sites/auth/signup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -376,18 +376,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/templates': {
-      id: '/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof TemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forge-sdk.js': {
-      id: '/forge-sdk.js'
-      path: '/forge-sdk.js'
-      fullPath: '/forge-sdk.js'
-      preLoaderRoute: typeof ForgeSdkDotjsRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -397,11 +390,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+    '/forge-sdk.js': {
+      id: '/forge-sdk.js'
+      path: '/forge-sdk.js'
+      fullPath: '/forge-sdk.js'
+      preLoaderRoute: typeof ForgeSdkDotjsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -411,18 +411,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/transfers/$token': {
-      id: '/transfers/$token'
-      path: '/transfers/$token'
-      fullPath: '/transfers/$token'
-      preLoaderRoute: typeof TransfersTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/$token': {
-      id: '/share/$token'
-      path: '/share/$token'
-      fullPath: '/share/$token'
-      preLoaderRoute: typeof ShareTokenRouteImport
+    '/live/$projectId': {
+      id: '/live/$projectId'
+      path: '/live/$projectId'
+      fullPath: '/live/$projectId'
+      preLoaderRoute: typeof LiveProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$slug': {
@@ -432,67 +425,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/live/$projectId': {
-      id: '/live/$projectId'
-      path: '/live/$projectId'
-      fullPath: '/live/$projectId'
-      preLoaderRoute: typeof LiveProjectIdRouteImport
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/transfers/$token': {
+      id: '/transfers/$token'
+      path: '/transfers/$token'
+      fullPath: '/transfers/$token'
+      preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/account/billing': {
+      id: '/_authenticated/account/billing'
+      path: '/account/billing'
+      fullPath: '/account/billing'
+      preLoaderRoute: typeof AuthenticatedAccountBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/': {
       id: '/_authenticated/admin/'
       path: '/admin'
       fullPath: '/admin/'
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/public/push-stream': {
-      id: '/api/public/push-stream'
-      path: '/api/public/push-stream'
-      fullPath: '/api/public/push-stream'
-      preLoaderRoute: typeof ApiPublicPushStreamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/chat': {
-      id: '/api/public/chat'
-      path: '/api/public/chat'
-      fullPath: '/api/public/chat'
-      preLoaderRoute: typeof ApiPublicChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/p/$projectId': {
-      id: '/_authenticated/p/$projectId'
-      path: '/p/$projectId'
-      fullPath: '/p/$projectId'
-      preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/users': {
-      id: '/_authenticated/admin/users'
-      path: '/admin/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/models': {
-      id: '/_authenticated/admin/models'
-      path: '/admin/models'
-      fullPath: '/admin/models'
-      preLoaderRoute: typeof AuthenticatedAdminModelsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/integrations': {
-      id: '/_authenticated/admin/integrations'
-      path: '/admin/integrations'
-      fullPath: '/admin/integrations'
-      preLoaderRoute: typeof AuthenticatedAdminIntegrationsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/domains': {
-      id: '/_authenticated/admin/domains'
-      path: '/admin/domains'
-      fullPath: '/admin/domains'
-      preLoaderRoute: typeof AuthenticatedAdminDomainsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/backend': {
@@ -502,39 +460,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminBackendRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/account/billing': {
-      id: '/_authenticated/account/billing'
-      path: '/account/billing'
-      fullPath: '/account/billing'
-      preLoaderRoute: typeof AuthenticatedAccountBillingRouteImport
+    '/_authenticated/admin/domains': {
+      id: '/_authenticated/admin/domains'
+      path: '/admin/domains'
+      fullPath: '/admin/domains'
+      preLoaderRoute: typeof AuthenticatedAdminDomainsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/stripe/webhook': {
-      id: '/api/public/stripe/webhook'
-      path: '/api/public/stripe/webhook'
-      fullPath: '/api/public/stripe/webhook'
-      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+    '/_authenticated/admin/integrations': {
+      id: '/_authenticated/admin/integrations'
+      path: '/admin/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AuthenticatedAdminIntegrationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/models': {
+      id: '/_authenticated/admin/models'
+      path: '/admin/models'
+      fullPath: '/admin/models'
+      preLoaderRoute: typeof AuthenticatedAdminModelsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/p/$projectId': {
+      id: '/_authenticated/p/$projectId'
+      path: '/p/$projectId'
+      fullPath: '/p/$projectId'
+      preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/chat': {
+      id: '/api/public/chat'
+      path: '/api/public/chat'
+      fullPath: '/api/public/chat'
+      preLoaderRoute: typeof ApiPublicChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/sites/env': {
-      id: '/api/public/sites/env'
-      path: '/api/public/sites/env'
-      fullPath: '/api/public/sites/env'
-      preLoaderRoute: typeof ApiPublicSitesEnvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/sites/data': {
-      id: '/api/public/sites/data'
-      path: '/api/public/sites/data'
-      fullPath: '/api/public/sites/data'
-      preLoaderRoute: typeof ApiPublicSitesDataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/github/callback': {
-      id: '/api/public/github/callback'
-      path: '/api/public/github/callback'
-      fullPath: '/api/public/github/callback'
-      preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
+    '/api/public/push-stream': {
+      id: '/api/public/push-stream'
+      path: '/api/public/push-stream'
+      fullPath: '/api/public/push-stream'
+      preLoaderRoute: typeof ApiPublicPushStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/p/$projectId/settings': {
@@ -544,11 +516,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdSettingsRouteImport
       parentRoute: typeof AuthenticatedPProjectIdRoute
     }
-    '/api/public/sites/auth/signup': {
-      id: '/api/public/sites/auth/signup'
-      path: '/api/public/sites/auth/signup'
-      fullPath: '/api/public/sites/auth/signup'
-      preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
+    '/api/public/github/callback': {
+      id: '/api/public/github/callback'
+      path: '/api/public/github/callback'
+      fullPath: '/api/public/github/callback'
+      preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/data': {
+      id: '/api/public/sites/data'
+      path: '/api/public/sites/data'
+      fullPath: '/api/public/sites/data'
+      preLoaderRoute: typeof ApiPublicSitesDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/env': {
+      id: '/api/public/sites/env'
+      path: '/api/public/sites/env'
+      fullPath: '/api/public/sites/env'
+      preLoaderRoute: typeof ApiPublicSitesEnvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/stripe/webhook': {
+      id: '/api/public/stripe/webhook'
+      path: '/api/public/stripe/webhook'
+      fullPath: '/api/public/stripe/webhook'
+      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/auth/me': {
+      id: '/api/public/sites/auth/me'
+      path: '/api/public/sites/auth/me'
+      fullPath: '/api/public/sites/auth/me'
+      preLoaderRoute: typeof ApiPublicSitesAuthMeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/sites/auth/signin': {
@@ -558,11 +558,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSitesAuthSigninRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/sites/auth/me': {
-      id: '/api/public/sites/auth/me'
-      path: '/api/public/sites/auth/me'
-      fullPath: '/api/public/sites/auth/me'
-      preLoaderRoute: typeof ApiPublicSitesAuthMeRouteImport
+    '/api/public/sites/auth/signup': {
+      id: '/api/public/sites/auth/signup'
+      path: '/api/public/sites/auth/signup'
+      fullPath: '/api/public/sites/auth/signup'
+      preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
