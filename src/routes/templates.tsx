@@ -20,7 +20,7 @@ export const Route = createFileRoute("/templates")({
     ],
   }),
   component: TemplatesPage,
-  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">Templates error: {error.message}</div>,
+  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">Templates error: {(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-8">Not found</div>,
 });
 

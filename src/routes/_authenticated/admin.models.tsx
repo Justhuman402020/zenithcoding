@@ -45,7 +45,7 @@ export const Route = createFileRoute("/_authenticated/admin/models")({
   component: AdminModelsPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-sm text-destructive flex items-center gap-2">
-      <ShieldAlert className="h-4 w-4" /> {error.message}
+      <ShieldAlert className="h-4 w-4" /> {(error as Error).message}
     </div>
   ),
 });
