@@ -38,7 +38,7 @@ async function probe(service: string, v: Record<string, string>): Promise<{ ok: 
       case "github":
         return await call("https://api.github.com/user", {
           Authorization: `Bearer ${v.token}`,
-          "User-Agent": "forge-admin",
+          "User-Agent": "CodeHaven/1.0",
           "X-GitHub-Api-Version": "2022-11-28",
         });
       case "e2b":
