@@ -52,6 +52,21 @@ async function probe(service: string, v: Record<string, string>): Promise<{ ok: 
         if (!r.ok && /40[13]/.test(r.message)) r.message += " — check the Account ID and that the token has Cloudflare Pages: Edit permission";
         return r.ok ? { ok: true, message: "Connected to Cloudflare Pages" } : r;
       }
+      case "cloudflare_dns": {
+        const token = v.apiToken.trim().replace(/^Bearer\s+/i, "");
+        const domain = (v.domain || "").trim().toLowerCase();
+        const url = `https://api.cloudflare.com/client/v4/zones${domain ? `?name=${encodeURIComponent(domain)}` : "?per_page=5"}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, accept: "application/json" } });
+        const json: any = await res.json().catch(() => ({}));
+        if (!res.ok || !json.success) {
+          const msg = json?.errors?.[0]?.message || res.statusText || "rejected";
+          return { ok: false, message: `${res.status}: ${msg} — the token needs Zone: Read and DNS: Edit permission` };
+        }
+        const zones = (json.result ?? []) as any[];
+        if (domain && zones.length === 0) return { ok: false, message: `Key works, but it can't see ${domain}. Give the token access to that domain.` };
+        const z = zones[0];
+        return { ok: true, message: z ? `Connected to ${z.name} (${z.status}) · nameservers: ${(z.name_servers ?? []).join(", ")}` : "Key works" };
+      }
       case "neon":
         return await call("https://console.neon.tech/api/v2/users/me", { Authorization: `Bearer ${v.apiKey}` });
     }
