@@ -66,7 +66,7 @@ export async function verifiedGithubToken(owner: string, repo: string, token?: s
   if (!token) return undefined;
   try {
     const r = await fetch(`https://api.github.com/repos/${cleanGithubPathPart(owner)}/${cleanGithubPathPart(repo)}`, {
-      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "User-Agent": "code-haven" },
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "User-Agent": "CodeHaven/1.0" },
     });
     if (r.status === 401 || r.status === 403) return undefined;
   } catch {}
@@ -99,7 +99,7 @@ export async function readGithubRepoFiles({
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "code-haven",
+    "User-Agent": "CodeHaven/1.0",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -209,7 +209,7 @@ export async function readGithubRepoTree({
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "code-haven",
+    "User-Agent": "CodeHaven/1.0",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -274,7 +274,7 @@ export async function readGithubBlobBatch({
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "code-haven",
+    "User-Agent": "CodeHaven/1.0",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   const strip = stripPrefix || "";
