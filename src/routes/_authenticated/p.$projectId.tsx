@@ -74,7 +74,7 @@ import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { BuildDialog } from "@/components/BuildDialog";
-import { isBuildable, type BuildFile } from "@/lib/browser-build";
+import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
 import { Github } from "lucide-react";
 import { BackendBadge } from "@/components/BackendBadge";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
@@ -427,7 +427,7 @@ function ProjectEditor() {
     (async () => {
       const [{ data: proj }, { data: fileData }, { data: msgs }, { data: sess }] = await Promise.all([
         supabase.from("projects").select("name,published,slug,cloudflare_pages_url").eq("id", projectId).maybeSingle(),
-        supabase.from("files").select("id,path,content").eq("project_id", projectId).order("path"),
+        supabase.from("files").select("id,path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build").order("path"),
         supabase.from("chat_messages").select("id,role,content,created_at").eq("project_id", projectId).order("created_at"),
         supabase.auth.getSession(),
       ]);
@@ -495,6 +495,7 @@ function ProjectEditor() {
       .from("files")
       .select("id,path,content")
       .eq("project_id", projectId)
+      .or("kind.is.null,kind.neq.build")
       .order("path");
     setFiles((data ?? []) as ProjectFile[]);
   }
@@ -529,8 +530,32 @@ function ProjectEditor() {
   }
 
   // build preview srcDoc
+  // Auto-build framework projects (Vite/React etc.) so the preview shows the real site, not a blank page.
+  const needsBuild = useMemo(() => isBuildable(files.map((f) => ({ path: f.path, content: f.content }))).buildable, [files]);
+  const [autoBuild, setAutoBuild] = useState<{ files: BuildFile[] | null; status: "idle" | "building" | "error"; error?: string }>({ files: null, status: "idle" });
+  const buildSeq = useRef(0);
+  useEffect(() => {
+    if (!needsBuild) { setAutoBuild({ files: null, status: "idle" }); return; }
+    const seq = ++buildSeq.current;
+    setAutoBuild((b) => ({ ...b, status: "building" }));
+    const t = setTimeout(async () => {
+      const res = await buildInBrowser(files.map((f) => ({ path: f.path, content: f.content })));
+      if (seq !== buildSeq.current) return;
+      if (res.ok) setAutoBuild({ files: res.files, status: "idle" });
+      else setAutoBuild((b) => ({ files: b.files, status: "error", error: res.error }));
+    }, 700);
+    return () => clearTimeout(t);
+  }, [files, needsBuild]);
+
   const previewDoc = useMemo(() => {
-    const fileMap = new Map(files.map((f) => [normalizeAssetPath(f.path), f.content]));
+    if (needsBuild && !autoBuild.files) {
+      const msg = autoBuild.status === "error"
+        ? `Could not build this project yet: ${String(autoBuild.error || "").replace(/[<>&]/g, "").slice(0, 600)}`
+        : "Building your site…";
+      return injectConsoleBridge(`<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem;white-space:pre-wrap'>${msg}</body></html>`);
+    }
+    const sourceFiles = needsBuild && autoBuild.files ? autoBuild.files : files;
+    const fileMap = new Map(sourceFiles.map((f) => [normalizeAssetPath(f.path), f.content]));
     const currentPath = fileMap.has(normalizeAssetPath(previewPath)) ? normalizeAssetPath(previewPath) : "index.html";
     const currentHtml = fileMap.get(currentPath);
     if (!currentHtml) return "<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem'>No <code>index.html</code> yet. Ask the AI to create one.</body></html>";
@@ -551,7 +576,7 @@ function ProjectEditor() {
     const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
     const withNav = html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
     return injectConsoleBridge(withNav);
-  }, [files, previewPath]);
+  }, [files, previewPath, needsBuild, autoBuild]);
 
   useEffect(() => {
     const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
