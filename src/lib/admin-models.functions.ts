@@ -241,11 +241,29 @@ export const addProviderKey = createServerFn({ method: "POST" })
     }
     // Every saved key gets its own id so a second key with the same name never overwrites the first.
     const id = `${slugifyProviderId(data.label)}-${crypto.randomUUID().slice(0, 8)}`;
-    const { count } = await supabaseAdmin
+    // Find the highest "#N" already used for this name and take N+1 (a plain name counts as #1).
+    const base = data.label.trim().replace(/\s*#\d+$/, "");
+    const { data: siblings } = await supabaseAdmin
       .from("custom_ai_providers")
-      .select("id", { count: "exact", head: true })
-      .eq("label", data.label.trim());
-    const label = count ? `${data.label.trim()} #${count + 1}` : data.label.trim();
+      .select("label, base_url, pool_position" as any)
+      .like("label", `${base}%`);
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${esc}(?:\\s*#(\\d+))?$`);
+    let maxN = 0;
+    for (const s of (siblings ?? []) as any[]) {
+      const m = re.exec(String(s.label).trim());
+      if (m) maxN = Math.max(maxN, m[1] ? Number(m[1]) : 1);
+    }
+    const label = maxN ? `${base} #${maxN + 1}` : base;
+    const { isCloudflareBaseUrl } = await import("./cloudflare-pool.server");
+    let poolPosition: number | null = null;
+    if (isCloudflareBaseUrl(baseUrl)) {
+      const { data: cfRows } = await supabaseAdmin
+        .from("custom_ai_providers")
+        .select("base_url, pool_position" as any);
+      const cf = ((cfRows ?? []) as any[]).filter((r) => isCloudflareBaseUrl(r.base_url));
+      poolPosition = cf.reduce((mx, r) => Math.max(mx, r.pool_position ?? 0), 0) + 1;
+    }
     const { error } = await supabaseAdmin.from("custom_ai_providers").insert({
       id,
       label,
@@ -253,7 +271,8 @@ export const addProviderKey = createServerFn({ method: "POST" })
       key_encrypted: await encryptSecret(apiKey),
       created_by: context.userId,
       updated_at: new Date().toISOString(),
-    });
+      ...(poolPosition ? { pool_position: poolPosition } : {}),
+    } as any);
     if (error) throw new Error(error.message);
     return { ok: true, id, modelCount: test.models.length };
   });
