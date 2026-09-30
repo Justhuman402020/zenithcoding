@@ -228,6 +228,13 @@ export async function pickAvailableModel(
       if (res.status === 429) {
         rateLimited = true;
         await recordModelStatus(ref, "rate_limited", quota, lastError);
+        // Cloudflare pool: a 429 means this key's Neurons are gone — go straight to the next key.
+        if (/api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(provider.baseURL)) {
+          const { markExhausted } = await import("./cloudflare-pool.server");
+          await markExhausted(ref.provider);
+          exhaustedProviders.add(ref.provider);
+          break;
+        }
         const retryAfter = Number(res.headers.get("retry-after") ?? "0");
         if (attempt === 0 && retryAfter > 0 && retryAfter <= 8) {
           await sleep(retryAfter * 1000);
