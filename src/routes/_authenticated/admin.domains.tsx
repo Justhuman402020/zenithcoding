@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   attachDomain,
   autoSetupDns,
+  registerSaasHostname,
   checkDomainDns,
   detachDomain,
   listProjectSites,
@@ -41,6 +42,17 @@ function AdminDomains() {
   const detachFn = useServerFn(detachDomain);
   const dnsFn = useServerFn(checkDomainDns);
   const autoFn = useServerFn(autoSetupDns);
+  const saasFn = useServerFn(registerSaasHostname);
+  const [saas, setSaas] = useState<Record<string, any>>({});
+  const saasM = useMutation({
+    mutationFn: (domainId: string) => saasFn({ data: { domainId } }),
+    onSuccess: (r: any) => {
+      setSaas((c) => ({ ...c, [r.hostname]: r }));
+      toast.success(r.live ? `${r.hostname} is live with SSL` : `Registered on Cloudflare — SSL ${r.sslStatus}`);
+      qc.invalidateQueries({ queryKey: ["admin-project-sites"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Cloudflare registration failed"),
+  });
   const auto = useMutation({
     mutationFn: (domainId: string) => autoFn({ data: { domainId } }),
     onSuccess: (r) => {
@@ -190,6 +202,9 @@ function AdminDomains() {
                           <Button size="sm" disabled={auto.isPending} onClick={() => auto.mutate(d.id)}>
                             {auto.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Set up automatically
                           </Button>
+                          <Button size="sm" variant="outline" disabled={saasM.isPending} onClick={() => saasM.mutate(d.id)}>
+                            Go live (SSL)
+                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => runDnsCheck(d.hostname)}>
                             <RefreshCw className="h-3.5 w-3.5" /> Check DNS
                           </Button>
@@ -221,6 +236,26 @@ function AdminDomains() {
                         ))}
                       </div>
 
+                      {saas[d.hostname] && (
+                        <div className="mt-2 space-y-1 text-xs">
+                          <p>
+                            Cloudflare: hostname <b>{saas[d.hostname].status}</b> · SSL <b>{saas[d.hostname].sslStatus}</b>
+                          </p>
+                          {saas[d.hostname].records.map((r: any) => (
+                            <div key={r.type + r.name} className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                              <span className="w-12 shrink-0">{r.type}</span>
+                              <span className="truncate">{r.name}</span>
+                              <span className="truncate">→ {r.value}</span>
+                              <button type="button" onClick={() => copy(r.value)} className="ml-auto opacity-60 hover:opacity-100" aria-label="Copy value">
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!saas[d.hostname] && d.last_check_error && (
+                        <p className="mt-2 text-xs text-muted-foreground">{d.last_check_error}</p>
+                      )}
                       {check && (
                         <p className="mt-2 text-xs">
                           Root:{" "}
