@@ -217,6 +217,10 @@ export const addProviderKey = createServerFn({ method: "POST" })
     const { encryptSecret } = await import("./secrets-crypto.server");
     const baseUrl = normalizeBaseUrl(data.baseUrl);
     const apiKey = data.apiKey.trim();
+    const cfPool = await import("./cloudflare-pool.server");
+    if (cfPool.isCloudflareBaseUrl(baseUrl) && (await cfPool.loadCloudflarePool()).length >= cfPool.MAX_POOL_KEYS) {
+      throw new Error(`The Cloudflare pool is full (${cfPool.MAX_POOL_KEYS} keys). Delete one first.`);
+    }
     const test = await testProviderKey(baseUrl, apiKey);
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
 
