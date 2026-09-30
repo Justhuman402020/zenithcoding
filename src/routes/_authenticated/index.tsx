@@ -9,6 +9,7 @@ import {
   importGithubRepoAsProject,
   mirrorAllGithubRepos,
   disconnectGithub,
+  connectGithubWithToken,
   startGithubImport,
   fetchGithubBlobBatch,
 } from "@/lib/github.functions";
@@ -194,6 +195,9 @@ function Dashboard() {
   const fetchGhBlobs = useServerFn(fetchGithubBlobBatch);
   const mirrorRepos = useServerFn(mirrorAllGithubRepos);
   const disconnectGh = useServerFn(disconnectGithub);
+  const connectGhPat = useServerFn(connectGithubWithToken);
+  const [ghPat, setGhPat] = useState("");
+  const [ghPatSaving, setGhPatSaving] = useState(false);
 
   const fetchLovableImports = useServerFn(getLovableImportedProjects);
   const doImportLovable = useServerFn(importLovableProject);
@@ -425,7 +429,27 @@ function Dashboard() {
       window.location.assign(url);
     } catch (e: any) {
       setGhConnecting(false);
-      toast.error(e?.message || "Could not start GitHub auth");
+      setGhOpen(true);
+      toast.error(
+        (e?.message || "Could not start GitHub sign-in") +
+          " — you can paste a GitHub access token in the Import window instead.",
+      );
+    }
+  }
+
+  async function connectGithubPat(e: React.FormEvent) {
+    e.preventDefault();
+    if (ghPat.trim().length < 10) return;
+    setGhPatSaving(true);
+    try {
+      const res = await connectGhPat({ data: { token: ghPat.trim() } });
+      setGhPat("");
+      setGhConnected({ connected: true, login: res.login });
+      toast.success(`GitHub connected${res.login ? ` as ${res.login}` : ""}`);
+    } catch (err: any) {
+      toast.error(err?.message || "That token didn't work");
+    } finally {
+      setGhPatSaving(false);
     }
   }
 
@@ -1224,6 +1248,25 @@ function Dashboard() {
                 {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
                 {ghConnecting ? "Opening GitHub…" : "Connect GitHub"}
               </Button>
+              <form onSubmit={connectGithubPat} className="space-y-2 rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Or connect with a GitHub access token. Make one at{" "}
+                  <a href="https://github.com/settings/tokens/new?scopes=repo,read:org,read:user&description=Code%20Haven" target="_blank" rel="noreferrer" className="underline">github.com/settings/tokens</a>{" "}
+                  and tick <b>repo</b> and <b>read:org</b>.
+                </p>
+                <Input
+                  type="password"
+                  value={ghPat}
+                  onChange={(e) => setGhPat(e.target.value)}
+                  placeholder="Paste token (ghp_… or github_pat_…)"
+                  disabled={ghPatSaving}
+                  autoComplete="off"
+                />
+                <Button type="submit" variant="secondary" disabled={ghPatSaving || ghPat.trim().length < 10} className="w-full gap-2">
+                  {ghPatSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+                  {ghPatSaving ? "Checking token…" : "Connect with token"}
+                </Button>
+              </form>
               <div className="relative my-2">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
                 <div className="relative flex justify-center text-[10px] uppercase tracking-wide"><span className="bg-background px-2 text-muted-foreground">or paste a public URL</span></div>
