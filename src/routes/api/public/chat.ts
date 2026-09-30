@@ -285,6 +285,7 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
+        progressModel.name = `${pick.ref.model} (${pick.ref.provider})`;
         const store = createSupabaseFileStore(supabase, projectId, userId);
         const { createIntegrationTools } = await import("@/lib/integration-tools.server");
         const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
@@ -437,6 +438,12 @@ export const Route = createFileRoute("/api/public/chat")({
               at: new Date().toISOString(),
             });
             await trace.flush();
+          },
+          onStepFinish: ({ toolCalls }) => {
+            for (const c of (toolCalls ?? []) as any[]) {
+              const path = c?.input?.path ?? c?.args?.path;
+              if (typeof path === "string") progressModel.files.add(path);
+            }
           },
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
