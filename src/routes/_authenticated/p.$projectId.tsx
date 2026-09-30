@@ -309,7 +309,7 @@ function ProjectEditor() {
   const [publishing, setPublishing] = useState(false);
   const [cfPagesUrl, setCfPagesUrl] = useState<string | null>(null);
   const [cfDeploying, setCfDeploying] = useState(false);
-  const cfDeployFn = useServerFn(deployToCloudflarePages);
+  const cfDeployFn = useStopServerFn(deployToCloudflarePages);
   const [buildDialogOpen, setBuildDialogOpen] = useState(false);
   const [pendingPublishSlug, setPendingPublishSlug] = useState<string | null>(null);
 
@@ -425,7 +425,7 @@ function ProjectEditor() {
   useEffect(() => {
     (async () => {
       const [{ data: proj }, { data: fileData }, { data: msgs }, { data: sess }] = await Promise.all([
-        supabase.from("projects").select("name,published,slug").eq("id", projectId).maybeSingle(),
+        supabase.from("projects").select("name,published,slug,cloudflare_pages_url" as any).eq("id", projectId).maybeSingle(),
         supabase.from("files").select("id,path,content").eq("project_id", projectId).order("path"),
         supabase.from("chat_messages").select("id,role,content,created_at").eq("project_id", projectId).order("created_at"),
         supabase.auth.getSession(),
