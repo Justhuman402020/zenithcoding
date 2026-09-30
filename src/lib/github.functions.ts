@@ -30,7 +30,7 @@ export const getGithubAuthUrl = createServerFn({ method: "POST" })
     const url = new URL("https://github.com/login/oauth/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", getCanonicalCallbackUrl());
-    url.searchParams.set("scope", "repo read:user");
+    url.searchParams.set("scope", "repo read:user read:org");
     url.searchParams.set("state", stateParam);
     return { url: url.toString() };
   });
@@ -112,22 +112,37 @@ export const listGithubRepos = createServerFn({ method: "GET" })
 
     const all: any[] = [];
     const seen = new Set<string>();
-    const sources = [
-      "https://api.github.com/user/repos?sort=updated&affiliation=owner,collaborator,organization_member",
-      "https://api.github.com/user/repos?sort=updated&type=all",
-    ];
-    for (const source of sources) {
-      const batch = await fetchRepoPages(source);
+    const add = (batch: any[]) => {
       for (const repo of batch) {
         if (!repo?.full_name || seen.has(repo.full_name)) continue;
         seen.add(repo.full_name);
         all.push(repo);
       }
+    };
+    try {
+      add(await fetchRepoPages("https://api.github.com/user/repos?sort=updated&affiliation=owner,collaborator,organization_member&visibility=all"));
+    } catch (e: any) {
+      if (/GitHub error 401/.test(String(e?.message))) {
+        throw new Error("Your GitHub sign-in expired. Press Disconnect, then Connect GitHub again.");
+      }
+      throw e;
     }
+    // Also list each organization's repos directly — some orgs only show up this way.
+    try {
+      const orgRes = await fetch("https://api.github.com/user/orgs?per_page=100", { headers });
+      const orgs = orgRes.ok ? ((await orgRes.json()) as any[]) : [];
+      for (const org of orgs) {
+        if (!org?.login) continue;
+        try {
+          add(await fetchRepoPages(`https://api.github.com/orgs/${encodeURIComponent(org.login)}/repos?type=all&sort=updated`));
+        } catch {}
+      }
+    } catch {}
 
     all.sort((a, b) => new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime());
 
-    if (all.length === 0 && !String((tok as any).scope ?? "").split(/[,\s]+/).includes("repo")) {
+    const scope = String((tok as any)?.scope ?? "");
+    if (all.length === 0 && tok && !scope.split(/[,\s]+/).includes("repo")) {
       throw new Error("GitHub is connected without private repo access. Disconnect and connect again so Forge can request repo access.");
     }
 
