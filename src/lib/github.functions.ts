@@ -4,6 +4,9 @@ import { getRequest } from "@tanstack/react-start/server";
 import { currentOrigin, encodeReturnOrigin, getCanonicalCallbackUrl } from "@/lib/github-shared";
 import { cleanGithubPathPart, isCloseGithubProjectName, readGithubBlobBatch, readGithubRepoFiles, readGithubRepoTree } from "@/lib/github-import.server";
 import { z } from "zod";
+import { githubFetch } from "@/lib/github-shared";
+// Every GitHub request in this file carries the required User-Agent.
+const fetch = githubFetch;
 
 /** Admins can use the Personal Access Token saved in Admin → Integrations instead of GitHub sign-in. */
 async function adminGithubPat(context: { supabase: any; userId: string }): Promise<string | undefined> {
