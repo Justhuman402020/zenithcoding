@@ -47,4 +47,14 @@ export const INTEGRATIONS: IntegrationDef[] = [
     getUrl: "https://console.neon.tech/app/settings/api-keys",
     fields: [{ key: "apiKey", label: "API Key", required: true, placeholder: "napi_..." }],
   },
+  {
+    id: "cloudflare_pages",
+    name: "Cloudflare Pages",
+    purpose: "Live preview hosting on .pages.dev",
+    getUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    fields: [
+      { key: "accountId", label: "Account ID", required: true, placeholder: "d51370edd74081c6688d32ae7de5d8a7" },
+      { key: "apiToken", label: "API Token", required: true, placeholder: "cfat_..." },
+    ],
+  },
 ];
