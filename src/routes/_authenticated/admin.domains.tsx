@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   attachDomain,
+  autoSetupDns,
   checkDomainDns,
   detachDomain,
   listProjectSites,
@@ -39,6 +40,15 @@ function AdminDomains() {
   const attachFn = useServerFn(attachDomain);
   const detachFn = useServerFn(detachDomain);
   const dnsFn = useServerFn(checkDomainDns);
+  const autoFn = useServerFn(autoSetupDns);
+  const auto = useMutation({
+    mutationFn: (domainId: string) => autoFn({ data: { domainId } }),
+    onSuccess: (r) => {
+      toast.success(`DNS set up on Cloudflare for ${r.zone}`);
+      qc.invalidateQueries({ queryKey: ["admin-project-sites"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Could not set up DNS"),
+  });
 
   const [search, setSearch] = useState("");
   const [domainDraft, setDomainDraft] = useState<Record<string, string>>({});
@@ -177,6 +187,9 @@ function AdminDomains() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-mono text-sm">{d.hostname}</span>
                         <div className="flex gap-1">
+                          <Button size="sm" disabled={auto.isPending} onClick={() => auto.mutate(d.id)}>
+                            {auto.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Set up automatically
+                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => runDnsCheck(d.hostname)}>
                             <RefreshCw className="h-3.5 w-3.5" /> Check DNS
                           </Button>

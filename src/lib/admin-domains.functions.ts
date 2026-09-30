@@ -165,3 +165,62 @@ export const checkDomainDns = createServerFn({ method: "POST" })
       checkedAt: new Date().toISOString(),
     };
   });
+
+/** Use the saved Cloudflare Domains key to write the DNS records for a connected domain. */
+export const autoSetupDns = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ domainId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: row } = await supabaseAdmin
+      .from("project_domains")
+      .select("id,hostname,verification_token")
+      .eq("id", data.domainId)
+      .maybeSingle();
+    if (!row) throw new Error("Domain not found");
+    const { data: keyRow } = await supabaseAdmin
+      .from("platform_integration_keys" as any)
+      .select("value_encrypted")
+      .eq("service", "cloudflare_dns")
+      .eq("field", "apiToken")
+      .maybeSingle();
+    if (!keyRow) throw new Error("Save your Cloudflare Domains key in Admin → Integrations first");
+    const token = (await decryptSecret((keyRow as any).value_encrypted)).trim().replace(/^Bearer\s+/i, "");
+    const cf = async (path: string, init: RequestInit = {}) => {
+      const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      });
+      const j: any = await res.json().catch(() => ({}));
+      if (!res.ok || !j.success) throw new Error(`Cloudflare said: ${j?.errors?.[0]?.message ?? res.status}`);
+      return j.result;
+    };
+    const host = row.hostname.replace(/^www\./, "");
+    const zones = await cf(`/zones?name=${encodeURIComponent(host)}`);
+    const zone = zones?.[0];
+    if (!zone) throw new Error(`Your Cloudflare key can't see ${host}`);
+    const wanted = [
+      { type: "A", name: host, content: FORGE_IP, proxied: false },
+      { type: "A", name: `www.${host}`, content: FORGE_IP, proxied: false },
+      { type: "TXT", name: `_forge-verify.${host}`, content: row.verification_token, proxied: false },
+    ];
+    for (const rec of wanted) {
+      const existing = (await cf(`/zones/${zone.id}/dns_records?name=${encodeURIComponent(rec.name)}`)) as any[];
+      // Remove records that would clash (other A/AAAA/CNAME on the same name, or old verify TXT).
+      for (const e of existing) {
+        const clash = rec.type === "A" ? ["A", "AAAA", "CNAME"].includes(e.type) : e.type === "TXT";
+        if (clash && !(e.type === rec.type && e.content.replace(/^"|"$/g, "") === rec.content)) {
+          await cf(`/zones/${zone.id}/dns_records/${e.id}`, { method: "DELETE" });
+        }
+      }
+      const has = existing.some((e) => e.type === rec.type && e.content.replace(/^"|"$/g, "") === rec.content);
+      if (!has) await cf(`/zones/${zone.id}/dns_records`, { method: "POST", body: JSON.stringify({ ...rec, ttl: 1 }) });
+    }
+    await supabaseAdmin
+      .from("project_domains")
+      .update({ verified: true, verified_at: new Date().toISOString(), last_check_error: null })
+      .eq("id", row.id);
+    return { ok: true as const, zone: zone.name };
+  });
