@@ -15,6 +15,7 @@ import {
   testProviderConnection,
 } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
+import { CloudflarePoolPanel, NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -232,6 +233,9 @@ function AdminModelsPage() {
       >
         <ArrowLeft className="h-3 w-3" /> Back to admin
       </button>
+
+      <NeuronsBar />
+      <CloudflarePoolPanel />
 
       <div className="flex items-start gap-3">
         <Cpu className="h-6 w-6 text-primary mt-1" />

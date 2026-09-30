@@ -243,6 +243,30 @@ export type Database = {
         }
         Relationships: []
       }
+      cloudflare_neuron_usage: {
+        Row: {
+          day: string
+          exhausted: boolean
+          neurons_used: number
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          day: string
+          exhausted?: boolean
+          neurons_used?: number
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          day?: string
+          exhausted?: boolean
+          neurons_used?: number
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       credit_ledger: {
         Row: {
           created_at: string
@@ -278,6 +302,7 @@ export type Database = {
           id: string
           key_encrypted: string
           label: string
+          pool_position: number | null
           updated_at: string
         }
         Insert: {
@@ -287,6 +312,7 @@ export type Database = {
           id: string
           key_encrypted: string
           label: string
+          pool_position?: number | null
           updated_at?: string
         }
         Update: {
@@ -296,6 +322,7 @@ export type Database = {
           id?: string
           key_encrypted?: string
           label?: string
+          pool_position?: number | null
           updated_at?: string
         }
         Relationships: []

@@ -1,3 +1,4 @@
+import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { deployToCloudflarePages } from "@/lib/cloudflare-pages.functions";
 import { useChat } from "@ai-sdk/react";
@@ -1997,7 +1998,8 @@ function ProjectEditor() {
                   </button>
                 </div>
               ) : null}
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <NeuronsBar />
                 {activeModel ? (
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}

@@ -236,7 +236,20 @@ export const Route = createFileRoute("/api/public/chat")({
             /* ordering is best effort */
           }
         }
-        const chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
+        let chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
+        // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
+        // unless the user picked a model by hand in the editor.
+        if (!requestedRef) {
+          const { loadCloudflarePool, CLOUDFLARE_CODING_MODEL } = await import("@/lib/cloudflare-pool.server");
+          const pool = (await loadCloudflarePool()).filter((k) => k.remaining > 0 && providerKeys[k.id]);
+          if (pool.length) {
+            const poolRefs = pool.map((k) => ({ provider: k.id, model: CLOUDFLARE_CODING_MODEL }));
+            const poolIds = new Set(pool.map((k) => k.id));
+            chain = autoFallback && editorAuto
+              ? [...poolRefs, ...chain.filter((r) => !poolIds.has(r.provider))]
+              : poolRefs;
+          }
+        }
 
 
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
@@ -420,6 +433,12 @@ export const Route = createFileRoute("/api/public/chat")({
           maxOutputTokens: isGitHubModels ? 4_000 : maxOutputTokensFor(pick.ref),
           onFinish: async ({ finishReason, usage, text }) => {
             stopHeartbeat();
+            {
+              const cfPool = await import("@/lib/cloudflare-pool.server");
+              if (cfPool.isCloudflareBaseUrl(pick.baseURL)) {
+                await cfPool.addNeurons(pick.ref.provider, cfPool.estimateNeurons(usage?.inputTokens, usage?.outputTokens));
+              }
+            }
             trace.log("stream.finish", {
               status: needsFileChange ? "ok" : "ok",
               detail: {

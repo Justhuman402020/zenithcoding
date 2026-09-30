@@ -217,6 +217,10 @@ export const addProviderKey = createServerFn({ method: "POST" })
     const { encryptSecret } = await import("./secrets-crypto.server");
     const baseUrl = normalizeBaseUrl(data.baseUrl);
     const apiKey = data.apiKey.trim();
+    const cfPool = await import("./cloudflare-pool.server");
+    if (cfPool.isCloudflareBaseUrl(baseUrl) && (await cfPool.loadCloudflarePool()).length >= cfPool.MAX_POOL_KEYS) {
+      throw new Error(`The Cloudflare pool is full (${cfPool.MAX_POOL_KEYS} keys). Delete one first.`);
+    }
     const test = await testProviderKey(baseUrl, apiKey);
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
 
@@ -314,4 +318,54 @@ export const removeProviderKey = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin.from("custom_ai_providers").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+/** Cloudflare key pool with today's Neurons per key (null for non-admins). */
+export const getCloudflarePool = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    if (!(await isModelsAdmin(context))) return null;
+    const { loadCloudflarePool, nextResetAt, NEURONS_PER_KEY, MAX_POOL_KEYS } = await import("./cloudflare-pool.server");
+    const keys = await loadCloudflarePool();
+    return {
+      keys,
+      totalRemaining: keys.reduce((s, k) => s + k.remaining, 0),
+      totalLimit: keys.length * NEURONS_PER_KEY,
+      maxKeys: MAX_POOL_KEYS,
+      resetAt: nextResetAt(),
+    };
+  });
+
+/** Moves a Cloudflare key up or down in the 1–21 order. */
+export const moveCloudflareKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; direction: "up" | "down" }) =>
+    z.object({ id: z.string().min(1), direction: z.enum(["up", "down"]) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const { loadCloudflarePool } = await import("./cloudflare-pool.server");
+    const ids = (await loadCloudflarePool()).map((k) => k.id);
+    const i = ids.indexOf(data.id);
+    const j = data.direction === "up" ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= ids.length) return { ok: true };
+    [ids[i], ids[j]] = [ids[j]!, ids[i]!];
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    for (let n = 0; n < ids.length; n++) {
+      await supabaseAdmin.from("custom_ai_providers").update({ pool_position: n + 1 } as any).eq("id", ids[n]!);
+    }
+    return { ok: true };
+  });
+
+/** Re-tests one saved Cloudflare key by its id. */
+export const testSavedProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const { loadCustomProviders, testProviderKey } = await import("./custom-providers.server");
+    const p = (await loadCustomProviders()).find((x) => x.id === data.id);
+    if (!p) return { ok: false, error: "Key not found", modelCount: 0 };
+    const r = await testProviderKey(p.baseURL, p.apiKey);
+    return { ok: r.ok, error: r.error, modelCount: r.models.length };
   });
