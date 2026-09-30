@@ -1,3 +1,4 @@
+import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { deployToCloudflarePages } from "@/lib/cloudflare-pages.functions";
 import { useChat } from "@ai-sdk/react";
