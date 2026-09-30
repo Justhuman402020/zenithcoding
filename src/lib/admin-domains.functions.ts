@@ -224,3 +224,18 @@ export const autoSetupDns = createServerFn({ method: "POST" })
       .eq("id", row.id);
     return { ok: true as const, zone: zone.name };
   });
+
+/** Register a domain on Cloudflare for SaaS (custom hostname + SSL). */
+export const registerSaasHostname = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ domainId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin.from("project_domains").select("id,hostname").eq("id", data.domainId).maybeSingle();
+    if (!row) throw new Error("Domain not found");
+    const { registerAndRecord } = await import("./cloudflare-saas.server");
+    const r = await registerAndRecord(row.id, row.hostname);
+    if (!r.ok) throw new Error(r.message);
+    return r;
+  });
