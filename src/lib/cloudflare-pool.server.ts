@@ -4,7 +4,7 @@
 
 export const NEURONS_PER_KEY = 10_000;
 export const MAX_POOL_KEYS = 21;
-export const CLOUDFLARE_CODING_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct";
+export const CLOUDFLARE_CODING_MODEL = "@cf/qwen/qwen3.8-27b";
 const CF_RE = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i;
 
 export const isCloudflareBaseUrl = (url: string) => CF_RE.test(url);
