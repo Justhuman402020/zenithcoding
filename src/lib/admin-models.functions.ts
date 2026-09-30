@@ -356,3 +356,16 @@ export const moveCloudflareKey = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+/** Re-tests one saved Cloudflare key by its id. */
+export const testSavedProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const { loadCustomProviders, testProviderKey } = await import("./custom-providers.server");
+    const p = (await loadCustomProviders()).find((x) => x.id === data.id);
+    if (!p) return { ok: false, error: "Key not found", modelCount: 0 };
+    const r = await testProviderKey(p.baseURL, p.apiKey);
+    return { ok: r.ok, error: r.error, modelCount: r.models.length };
+  });
