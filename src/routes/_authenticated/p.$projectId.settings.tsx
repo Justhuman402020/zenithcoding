@@ -18,7 +18,7 @@ import { ArrowLeft, Loader2, Copy, X, Globe, ExternalLink, CheckCircle2 } from "
 export const Route = createFileRoute("/_authenticated/p/$projectId/settings")({
   head: () => ({ meta: [{ title: "Project settings — Forge" }] }),
   component: SettingsPage,
-  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{error.message}</div>,
+  errorComponent: ({ error }: { error: Error }) => <div className="p-8 text-sm text-destructive">{error.message}</div>,
   notFoundComponent: () => <div className="p-8">Not found</div>,
 });
 

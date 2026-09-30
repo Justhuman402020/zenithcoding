@@ -11,7 +11,7 @@ import { Loader2, ArrowRight } from "lucide-react";
 export const Route = createFileRoute("/transfers/$token")({
   head: () => ({ meta: [{ title: "Accept project transfer — Forge" }] }),
   component: TransferPage,
-  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{error.message}</div>,
+  errorComponent: ({ error }: { error: Error }) => <div className="p-8 text-sm text-destructive">{error.message}</div>,
   notFoundComponent: () => <div className="p-8">Transfer not found</div>,
 });
 
