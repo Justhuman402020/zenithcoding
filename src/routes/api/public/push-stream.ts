@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
+import { githubFetch } from "@/lib/github-shared";
+// Every GitHub request in this file carries the required User-Agent.
+const fetch = githubFetch;
 
 type Evt =
   | { type: "log"; level: "info" | "warn" | "error" | "success"; message: string; meta?: unknown }

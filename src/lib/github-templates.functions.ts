@@ -62,7 +62,7 @@ export const searchGithubTemplates = createServerFn({ method: "GET" })
     const headers: Record<string, string> = {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "code-haven",
+      "User-Agent": "CodeHaven/1.0",
     };
     if (token) headers.Authorization = `Bearer ${token}`;
     const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=100&page=${data.page}`;
