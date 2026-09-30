@@ -138,7 +138,7 @@ export type ProjectBrief = {
   /** Connected backend (signup/login/data) for this project, if any. */
   backend?: { url: string; anonKey: string; hasServiceKey: boolean } | null;
   /** Where the previous agent stopped. */
-  progress?: { status?: string; lastRequest?: string; lastReply?: string; error?: string | null; at?: string } | null;
+  progress?: { status?: string; lastRequest?: string; lastReply?: string; error?: string | null; at?: string; model?: string; filesChanged?: string[] } | null;
 };
 
 /**
@@ -172,8 +172,8 @@ This project is already connected to its own backend. NEVER ask the user for bac
   const progressBlock = p && (p.lastRequest || p.error)
     ? `\n\n## Where the last session stopped
 - Status: ${p.status ?? "unknown"}${p.at ? ` (${p.at})` : ""}
-- Last request: ${(p.lastRequest ?? "").slice(0, 400)}
-${p.lastReply ? `- Last reply summary: ${p.lastReply.slice(0, 500)}\n` : ""}${p.error ? `- It failed with: ${p.error.slice(0, 400)}\n` : ""}If the user says "continue", "finish" or "fix it", pick up exactly from here instead of starting over.`
+${p.model ? `- Agent/model that was working: ${p.model}\n` : ""}- Last request: ${(p.lastRequest ?? "").slice(0, 400)}
+${p.filesChanged?.length ? `- Files it already changed: ${p.filesChanged.slice(0, 30).join(", ")}\n` : ""}${p.lastReply ? `- Last reply summary: ${p.lastReply.slice(0, 500)}\n` : ""}${p.error ? `- It failed with: ${p.error.slice(0, 400)}\n` : ""}If the user says "continue", "finish" or "fix it", pick up exactly from here instead of starting over. This may have been a different agent/model — trust its saved work, check those files, and only do what's left.`
     : "";
   return `## What this project is (read this before doing anything)
 ${lines.join("\n")}${backendBlock}${progressBlock}

@@ -769,18 +769,18 @@ function ProjectEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewError, isBusy, isOnline]);
   const stopJobs = useStopServerFn(stopChatJobs);
-  // Count 0 → 10, then continue the unfinished job on the next working model.
+  // Count 0 → 5, then continue the unfinished job on the next working model.
   useEffect(() => {
     if (switchCountdown === null) return;
     if (!autoSwitch) {
       setSwitchCountdown(null);
       return;
     }
-    if (switchCountdown >= 10) {
+    if (switchCountdown >= 5) {
       setSwitchCountdown(null);
       requestKeyRef.current = crypto.randomUUID();
       void sendMessage({
-        text: "The previous model stopped mid-work. Continue exactly where it stopped. Do not repeat finished work, and finish the remaining steps.",
+        text: "The previous model stopped mid-work (limit reached). Read \"Where the last session stopped\" and continue exactly where it stopped. Do not repeat finished work, and finish the remaining steps.",
       });
       return;
     }
@@ -2016,7 +2016,7 @@ function ProjectEditor() {
               {switchCountdown !== null ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
                   <span>
-                    The model stopped mid-work. Finding another model to finish it… <strong className="tabular-nums">{switchCountdown}</strong>/10
+                    The model stopped mid-work. Switching to the next Qwen 3.8 key… <strong className="tabular-nums">{switchCountdown}</strong>/5
                   </span>
                   <button type="button" className="font-medium underline" onClick={() => setSwitchCountdown(null)}>
                     Cancel
