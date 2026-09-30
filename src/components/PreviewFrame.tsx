@@ -35,6 +35,8 @@ const CONSOLE_BRIDGE = `<script>(()=>{
     send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)+')'+(e.error&&e.error.stack?'\\n'+e.error.stack:'')]);
     report({kind:'exception',message:String(e.message),stack:e.error&&e.error.stack||'',file:e.filename||'',line:e.lineno||0,col:e.colno||0});
   },true);
+  const blankCheck=()=>{try{const b=document.body;const txt=(b&&b.innerText||'').trim();const media=b?b.querySelectorAll('img,svg,canvas,video,iframe').length:0;if(!txt&&!media){report({kind:'blank',message:'Blank page: the preview rendered nothing visible (empty body). The app likely failed to mount or render.'})}}catch(_){}};
+  window.addEventListener('load',()=>{setTimeout(blankCheck,4000)});
   window.addEventListener('unhandledrejection',e=>{const r=e.reason;send('error',['Unhandled rejection: '+(r&&r.message||r)+(r&&r.stack?'\\n'+r.stack:'')]);report({kind:'rejection',message:'Unhandled rejection: '+(r&&r.message||r),stack:r&&r.stack||''});});
   const oe=console.error;console.error=function(){try{const a=Array.from(arguments);const er=a.find(x=>x instanceof Error);report({kind:'console',message:a.map(x=>x instanceof Error?x.message:typeof x==='object'?(()=>{try{return JSON.stringify(x)}catch(_){return String(x)}})():String(x)).join(' ').slice(0,1000),stack:er&&er.stack||''})}catch(_){}return oe.apply(console,arguments)};
 })();<\/script>`;

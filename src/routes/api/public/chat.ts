@@ -323,8 +323,12 @@ export const Route = createFileRoute("/api/public/chat")({
           loadProjectBackend(projectId),
           supabaseAdmin.from("projects").select("agent_progress").eq("id", projectId).maybeSingle(),
         ]);
+        const progressModel: { name?: string; files: Set<string> } = { files: new Set() };
+        progressModel.name = `${pick.ref.model} (${pick.ref.provider})`;
         const saveProgress = (progress: Record<string, unknown>) =>
-          supabaseAdmin.from("projects").update({ agent_progress: progress as any }).eq("id", projectId);
+          supabaseAdmin.from("projects").update({
+            agent_progress: { ...progress, model: progressModel.name ?? null, filesChanged: [...progressModel.files].slice(0, 40) } as any,
+          }).eq("id", projectId);
         const projectBrief = {
           backend: projectBackend,
           progress: (progressRow?.agent_progress as any) ?? null,
@@ -434,6 +438,12 @@ export const Route = createFileRoute("/api/public/chat")({
               at: new Date().toISOString(),
             });
             await trace.flush();
+          },
+          onStepFinish: ({ toolCalls }) => {
+            for (const c of (toolCalls ?? []) as any[]) {
+              const path = c?.input?.path ?? c?.args?.path;
+              if (typeof path === "string") progressModel.files.add(path);
+            }
           },
           prepareStep: createPrepareStep(needsFileChange, trace),
           stopWhen: stepCountIs(50),
