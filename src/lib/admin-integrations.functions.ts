@@ -43,6 +43,15 @@ async function probe(service: string, v: Record<string, string>): Promise<{ ok: 
         });
       case "e2b":
         return await call("https://api.e2b.dev/sandboxes", { "X-API-Key": v.apiKey });
+      case "cloudflare_pages": {
+        if (!v.accountId) return { ok: false, message: "Enter the Account ID too" };
+        const r = await call(
+          `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(v.accountId.trim())}/pages/projects`,
+          { Authorization: `Bearer ${v.apiToken.trim().replace(/^Bearer\s+/i, "")}` },
+        );
+        if (!r.ok && /40[13]/.test(r.message)) r.message += " — check the Account ID and that the token has Cloudflare Pages: Edit permission";
+        return r.ok ? { ok: true, message: "Connected to Cloudflare Pages" } : r;
+      }
       case "neon":
         return await call("https://console.neon.tech/api/v2/users/me", { Authorization: `Bearer ${v.apiKey}` });
     }

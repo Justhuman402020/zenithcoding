@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { deployToCloudflarePages } from "@/lib/cloudflare-pages.functions";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -306,6 +307,9 @@ function ProjectEditor() {
   const [slugDraft, setSlugDraft] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [cfPagesUrl, setCfPagesUrl] = useState<string | null>(null);
+  const [cfDeploying, setCfDeploying] = useState(false);
+  const cfDeployFn = useStopServerFn(deployToCloudflarePages);
   const [buildDialogOpen, setBuildDialogOpen] = useState(false);
   const [pendingPublishSlug, setPendingPublishSlug] = useState<string | null>(null);
 
@@ -421,7 +425,7 @@ function ProjectEditor() {
   useEffect(() => {
     (async () => {
       const [{ data: proj }, { data: fileData }, { data: msgs }, { data: sess }] = await Promise.all([
-        supabase.from("projects").select("name,published,slug").eq("id", projectId).maybeSingle(),
+        supabase.from("projects").select("name,published,slug,cloudflare_pages_url").eq("id", projectId).maybeSingle(),
         supabase.from("files").select("id,path,content").eq("project_id", projectId).order("path"),
         supabase.from("chat_messages").select("id,role,content,created_at").eq("project_id", projectId).order("created_at"),
         supabase.auth.getSession(),
@@ -433,6 +437,7 @@ function ProjectEditor() {
       }
       setProjectName(proj.name);
       setPublished(!!(proj as any).published);
+      setCfPagesUrl((proj as any).cloudflare_pages_url ?? null);
       const existingSlug = (proj as any).slug ?? "";
       setSlug(existingSlug);
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
@@ -1275,6 +1280,19 @@ function ProjectEditor() {
       toast.error(e?.message || "Publish failed");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleCfDeploy() {
+    setCfDeploying(true);
+    try {
+      const r = await cfDeployFn({ data: { projectId } });
+      setCfPagesUrl(r.url);
+      toast.success(`Live on Cloudflare: ${r.url}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Cloudflare deploy failed");
+    } finally {
+      setCfDeploying(false);
     }
   }
 
@@ -2344,6 +2362,19 @@ function ProjectEditor() {
                 </div>
               </div>
             )}
+
+            <div className="space-y-1.5 border-t border-border pt-4">
+              <Label>Cloudflare Pages link</Label>
+              {cfPagesUrl && (
+                <a href={cfPagesUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 truncate text-xs text-primary hover:underline">
+                  {cfPagesUrl} <ExternalLink className="h-3 w-3 shrink-0" />
+                </a>
+              )}
+              <Button type="button" size="sm" variant="outline" disabled={cfDeploying} onClick={handleCfDeploy}>
+                {cfDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : cfPagesUrl ? "Redeploy to Cloudflare" : "Deploy to Cloudflare Pages"}
+              </Button>
+              <p className="text-xs text-muted-foreground">Puts your site on its own free .pages.dev address. First time can take a minute to appear.</p>
+            </div>
 
             <div className="border-t border-border pt-4">
               <DomainsPanel projectId={projectId} />

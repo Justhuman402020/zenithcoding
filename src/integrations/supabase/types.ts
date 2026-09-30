@@ -700,6 +700,8 @@ export type Database = {
       projects: {
         Row: {
           agent_progress: Json | null
+          cloudflare_pages_project: string | null
+          cloudflare_pages_url: string | null
           created_at: string
           description: string | null
           id: string
@@ -715,6 +717,8 @@ export type Database = {
         }
         Insert: {
           agent_progress?: Json | null
+          cloudflare_pages_project?: string | null
+          cloudflare_pages_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -730,6 +734,8 @@ export type Database = {
         }
         Update: {
           agent_progress?: Json | null
+          cloudflare_pages_project?: string | null
+          cloudflare_pages_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
