@@ -200,10 +200,13 @@ export const Route = createFileRoute("/api/public/chat")({
         // work it always leads, even over a per-editor pick.
         const backendIntent = /\b(sign ?up|sign ?in|log ?in|login|register|registration|auth|admin|dashboard|database|supabase|users?|account|save|data)\b/i.test(lastUserText);
         const planPreference = planMode && !adminRef ? pickPlanPreference(availableProviders, hasImages) : null;
-        const preferred: ModelRef | null = backendIntent && adminRef ? adminRef : (requestedRef ?? adminRef ?? planPreference);
+        // A model picked by hand always leads; it is only replaced when it stops working.
+        const preferred: ModelRef | null = requestedRef ?? (backendIntent && adminRef ? adminRef : (adminRef ?? planPreference));
         const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
         // Providers the admin added by pasting a key join the backup chain too.
-        const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id]);
+        const { isCloudflareBaseUrl } = await import("@/lib/cloudflare-pool.server");
+        // Cloudflare keys only ever run Qwen 3.8 27B through the pool below.
+        const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id] && !isCloudflareBaseUrl(p.baseURL));
         if (extraProviders.length) {
           const { listProviderModels } = await import("@/lib/model-discovery.server");
           for (const provider of extraProviders) {
@@ -239,15 +242,19 @@ export const Route = createFileRoute("/api/public/chat")({
         let chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
         // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
         // unless the user picked a model by hand in the editor.
-        if (!requestedRef) {
+        {
           const { loadCloudflarePool, CLOUDFLARE_CODING_MODEL } = await import("@/lib/cloudflare-pool.server");
           const pool = (await loadCloudflarePool()).filter((k) => k.remaining > 0 && providerKeys[k.id]);
           if (pool.length) {
             const poolRefs = pool.map((k) => ({ provider: k.id, model: CLOUDFLARE_CODING_MODEL }));
             const poolIds = new Set(pool.map((k) => k.id));
-            chain = autoFallback && editorAuto
-              ? [...poolRefs, ...chain.filter((r) => !poolIds.has(r.provider))]
-              : poolRefs;
+            const rest = chain.filter((r) => !poolIds.has(r.provider));
+            if (requestedRef && !poolIds.has(requestedRef.provider)) {
+              // Manual pick stays first; if it stops, the pool (key #1 → #21) takes over.
+              chain = autoFallback && editorAuto ? [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)] : [rest[0] ?? requestedRef];
+            } else {
+              chain = autoFallback && editorAuto ? [...poolRefs, ...rest] : poolRefs;
+            }
           }
         }
 
