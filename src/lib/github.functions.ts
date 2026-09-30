@@ -21,7 +21,9 @@ export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .inputValidator((input: { origin?: string } | undefined) => input ?? {})
   .handler(async ({ context, data: input }) => {
     const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
-    if (!clientId) throw new Error("GitHub OAuth not configured");
+    if (!clientId) {
+      throw new Error("GitHub sign-in isn't set up on this site yet. Paste a GitHub Personal Access Token instead.");
+    }
     const { data, error } = await context.supabase
       .from("github_oauth_states" as any)
       .insert({ user_id: context.userId })
@@ -57,10 +59,7 @@ export const getGithubStatus = createServerFn({ method: "GET" })
         "X-GitHub-Api-Version": "2022-11-28",
       },
     });
-    if (me.status === 401 || me.status === 403) {
-      await context.supabase.from("github_tokens" as any).delete().eq("user_id", context.userId);
-      return { connected: false, login: null, scope: null };
-    }
+    // Never delete the saved token here — a failed check may be temporary.
     const profile = me.ok ? await me.json().catch(() => null) : null;
     const login = typeof profile?.login === "string" ? profile.login : null;
     if (login) {
@@ -70,6 +69,41 @@ export const getGithubStatus = createServerFn({ method: "GET" })
         .eq("user_id", context.userId);
     }
     return { connected: true, login, scope: row.scope ?? null };
+  });
+
+export const connectGithubWithToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { token: string }) =>
+    z.object({ token: z.string().trim().min(10).max(500) }).parse(input),
+  )
+  .handler(async ({ context, data }) => {
+    const token = data.token.replace(/^bearer\s+/i, "").replace(/\s+/g, "");
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    const me = await fetch("https://api.github.com/user", { headers });
+    if (me.status === 401) throw new Error("GitHub says this token is wrong or expired. Make a new one and paste it again.");
+    if (!me.ok) {
+      const body = await me.text().catch(() => "");
+      throw new Error(`GitHub didn't accept the token (${me.status}): ${body.slice(0, 200) || me.statusText}`);
+    }
+    const profile = (await me.json()) as any;
+    const scope = me.headers.get("x-oauth-scopes") ?? "";
+    const reposRes = await fetch("https://api.github.com/user/repos?per_page=1", { headers });
+    if (!reposRes.ok) {
+      throw new Error("The token works but can't read your repos. For a classic token, tick the \"repo\" box; for a fine-grained token, allow Contents: Read and write.");
+    }
+    const { error } = await context.supabase.from("github_tokens" as any).upsert({
+      user_id: context.userId,
+      access_token: token,
+      github_login: profile?.login ?? null,
+      scope: scope || "pat",
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return { connected: true, login: (profile?.login as string) ?? null };
   });
 
 export const disconnectGithub = createServerFn({ method: "POST" })
@@ -145,7 +179,7 @@ export const listGithubRepos = createServerFn({ method: "GET" })
     all.sort((a, b) => new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime());
 
     const scope = String((tok as any)?.scope ?? "");
-    if (all.length === 0 && tok && !scope.split(/[,\s]+/).includes("repo")) {
+    if (all.length === 0 && tok && scope !== "pat" && !scope.split(/[,\s]+/).includes("repo")) {
       throw new Error("GitHub is connected without private repo access. Disconnect and connect again so Forge can request repo access.");
     }
 
