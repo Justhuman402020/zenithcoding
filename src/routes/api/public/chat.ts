@@ -285,7 +285,6 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
-        progressModel.name = `${pick.ref.model} (${pick.ref.provider})`;
         const store = createSupabaseFileStore(supabase, projectId, userId);
         const { createIntegrationTools } = await import("@/lib/integration-tools.server");
         const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
@@ -325,6 +324,7 @@ export const Route = createFileRoute("/api/public/chat")({
           supabaseAdmin.from("projects").select("agent_progress").eq("id", projectId).maybeSingle(),
         ]);
         const progressModel: { name?: string; files: Set<string> } = { files: new Set() };
+        progressModel.name = `${pick.ref.model} (${pick.ref.provider})`;
         const saveProgress = (progress: Record<string, unknown>) =>
           supabaseAdmin.from("projects").update({
             agent_progress: { ...progress, model: progressModel.name ?? null, filesChanged: [...progressModel.files].slice(0, 40) } as any,
