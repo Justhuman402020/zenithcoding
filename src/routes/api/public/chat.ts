@@ -515,7 +515,12 @@ export const Route = createFileRoute("/api/public/chat")({
                   return n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
                 },
               ],
-              maxOutputTokens: isGh ? 4_000 : maxOutputTokensFor(current.ref),
+              // Alibaba Model Studio only accepts reply lengths between 10 and 2048.
+              maxOutputTokens: isGh
+                ? 4_000
+                : /aliyuncs\.com|dashscope/i.test(current.baseURL)
+                  ? 2_048
+                  : maxOutputTokensFor(current.ref),
               onFinish: async ({ finishReason, usage }) => {
                 finished = true;
                 finalReason = finishReason;
