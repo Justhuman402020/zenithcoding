@@ -241,8 +241,9 @@ export const Route = createFileRoute("/api/public/chat")({
         }
         let chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
         // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
-        // unless the user picked a model by hand in the editor.
-        {
+        // unless the user picked a model by hand in the editor. With Auto off the
+        // manually picked model is used exactly as chosen — never rerouted to Qwen.
+        if (editorAuto) {
           const { loadCloudflarePool, CLOUDFLARE_CODING_MODEL } = await import("@/lib/cloudflare-pool.server");
           const pool = (await loadCloudflarePool()).filter((k) => k.remaining > 0 && providerKeys[k.id]);
           if (pool.length) {
@@ -251,11 +252,14 @@ export const Route = createFileRoute("/api/public/chat")({
             const rest = chain.filter((r) => !poolIds.has(r.provider));
             if (requestedRef && !poolIds.has(requestedRef.provider)) {
               // Manual pick stays first; if it stops, the pool (key #1 → #21) takes over.
-              chain = autoFallback && editorAuto ? [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)] : [rest[0] ?? requestedRef];
+              chain = autoFallback ? [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)] : [rest[0] ?? requestedRef];
             } else {
-              chain = autoFallback && editorAuto ? [...poolRefs, ...rest] : poolRefs;
+              chain = autoFallback ? [...poolRefs, ...rest] : poolRefs;
             }
           }
+        } else if (requestedRef) {
+          // Auto off + a manual pick: lock to that one model, no Qwen, no fallback.
+          chain = [requestedRef];
         }
 
 
