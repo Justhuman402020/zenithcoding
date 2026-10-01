@@ -272,9 +272,19 @@ export const Route = createFileRoute("/api/public/chat")({
           trace.log("model.unavailable", { status: "error", message: pick.error });
           // With Auto off there is no fallback by design — say plainly that the
           // chosen model or its key is the problem instead of a generic message.
+          const raw = String(pick.error ?? "");
+          const reason = /not available on the Workers Free plan/i.test(raw)
+            ? " Cloudflare only offers this model on its paid Workers plan."
+            : /max_tokens/i.test(raw)
+              ? " The provider rejected the reply length."
+              : /401|403|unauthori|invalid api key/i.test(raw)
+                ? " The provider key was rejected."
+                : /429|rate limit|quota/i.test(raw)
+                  ? " The provider's limit has been reached for now."
+                  : "";
           const message =
             !editorAuto && requestedRef
-              ? `The model you picked (${requestedRef.model}) or its provider key is unavailable right now. Turn Auto-switch on to let Forge use another model, or pick a different one.`
+              ? `The model you picked (${requestedRef.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
               : pick.error;
           return fail(
             pick.status,
