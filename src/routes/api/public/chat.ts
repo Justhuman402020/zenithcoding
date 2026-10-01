@@ -551,12 +551,6 @@ export const Route = createFileRoute("/api/public/chat")({
             setProgress(`${progressText} · switching to the next key`);
             if (writer) writer.write({ type: "message-metadata", messageMetadata: { model: "switching to the next key…" } });
             const next = await pickAvailableModel(remaining, providerKeys, providerRegistry, gateway);
-            for (const r of remaining) {
-              if (!next.ok || (r.provider === next.ref.provider && r.model === next.ref.model)) {
-                tried.add(`${r.provider}:${r.model}`);
-                if (next.ok) break;
-              } else tried.add(`${r.provider}:${r.model}`); // probed and skipped
-            }
             if (!next.ok) {
               lastError = next.error;
               break;
