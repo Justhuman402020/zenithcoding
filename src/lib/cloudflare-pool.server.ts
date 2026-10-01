@@ -26,13 +26,43 @@ export type PoolKey = {
   used: number;
   remaining: number;
   status: "active" | "waiting" | "exhausted";
+  /** "cloudflare" = real count read from Cloudflare; "estimate" = Forge's own count. */
+  source: "cloudflare" | "estimate";
 };
+
+const realCache = new Map<string, { at: number; neurons: number | null }>();
+
+/** Reads today's real Neurons used for one account from Cloudflare's analytics API. */
+export async function fetchRealNeurons(accountId: string, token: string): Promise<number | null> {
+  const cacheKey = accountId + ":" + token.slice(-6);
+  const hit = realCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < 60_000) return hit.neurons;
+  let neurons: number | null = null;
+  try {
+    const query = `query($a:String!,$d:Date!){viewer{accounts(filter:{accountTag:$a}){aiInferenceAdaptiveGroups(filter:{date_geq:$d},limit:10000){sum{totalNeurons}}}}}`;
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token.replace(/^Bearer\s+/i, "").trim()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables: { a: accountId, d: utcDay() } }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const j: any = await res.json().catch(() => null);
+    const groups = j?.data?.viewer?.accounts?.[0]?.aiInferenceAdaptiveGroups;
+    if (res.ok && Array.isArray(groups) && !j?.errors?.length) {
+      neurons = Math.round(groups.reduce((t: number, g: any) => t + Number(g?.sum?.totalNeurons ?? 0), 0));
+    }
+  } catch {
+    neurons = null;
+  }
+  realCache.set(cacheKey, { at: Date.now(), neurons });
+  return neurons;
+}
 
 export async function loadCloudflarePool(): Promise<PoolKey[]> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: rows } = await supabaseAdmin
     .from("custom_ai_providers")
-    .select("id, label, base_url, created_at, pool_position" as any)
+    .select("id, label, base_url, created_at, pool_position, key_encrypted" as any)
     .order("created_at", { ascending: true });
   const cf = ((rows ?? []) as any[])
     .filter((r) => isCloudflareBaseUrl(r.base_url))
@@ -43,17 +73,32 @@ export async function loadCloudflarePool(): Promise<PoolKey[]> {
     .select("provider_id, neurons_used, exhausted")
     .eq("day", utcDay());
   const byId = new Map(((usage ?? []) as any[]).map((u) => [u.provider_id, u]));
+  const { decryptSecret } = await import("./secrets-crypto.server");
+  const real = await Promise.all(
+    cf.map(async (r) => {
+      const acct = /accounts\/([^/]+)\//i.exec(r.base_url)?.[1];
+      if (!acct || !r.key_encrypted) return null;
+      try {
+        return await fetchRealNeurons(acct, await decryptSecret(r.key_encrypted));
+      } catch {
+        return null;
+      }
+    }),
+  );
   let activeSet = false;
   return cf.map((r, i) => {
     const u = byId.get(r.id);
-    const used = Number(u?.neurons_used ?? 0);
+    const realUsed = real[i];
+    const source: PoolKey["source"] = realUsed == null ? "estimate" : "cloudflare";
+    const used = realUsed ?? Number(u?.neurons_used ?? 0);
+    // A 429 from Cloudflare is the truth even if analytics lag behind.
     const remaining = u?.exhausted ? 0 : Math.max(0, NEURONS_PER_KEY - used);
     let status: PoolKey["status"] = remaining <= 0 ? "exhausted" : "waiting";
     if (status === "waiting" && !activeSet) {
       status = "active";
       activeSet = true;
     }
-    return { id: r.id, label: r.label, position: i + 1, used, remaining, status };
+    return { id: r.id, label: r.label, position: i + 1, used, remaining, status, source };
   });
 }
 

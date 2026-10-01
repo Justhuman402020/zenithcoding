@@ -110,6 +110,12 @@ export function CloudflarePoolPanel() {
               <span className="tabular-nums text-xs text-muted-foreground w-36 text-right">
                 {k.used.toLocaleString()} used · {k.remaining.toLocaleString()} left
               </span>
+              <span
+                className="text-[10px] text-muted-foreground"
+                title={(k as any).source === "cloudflare" ? "Real count read from Cloudflare" : "Cloudflare didn't share the count for this key (needs Account Analytics: Read). Showing Forge's estimate."}
+              >
+                {(k as any).source === "cloudflare" ? "live" : "est."}
+              </span>
               <Button size="icon" variant="ghost" disabled={!!busy || i === 0} onClick={() => act(k.id, () => move({ data: { id: k.id, direction: "up" } }))} title="Move up">
                 <ArrowUp className="h-4 w-4" />
               </Button>
