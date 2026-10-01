@@ -1459,7 +1459,7 @@ function ProjectEditor() {
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <header className="h-14 hairline-bottom-gold flex items-center px-3 gap-2 shrink-0 bg-card/30 backdrop-blur-sm">
+      <header className="min-h-14 hairline-bottom-gold grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-3 py-2 shrink-0 bg-card/30 backdrop-blur-sm sm:flex sm:flex-wrap sm:py-2">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>
             <button
@@ -1508,10 +1508,10 @@ function ProjectEditor() {
             </div>
           </SheetContent>
         </Sheet>
-        <div className="flex items-center gap-2 min-w-0 flex-1 justify-center">
+        <div className="flex min-w-0 items-center justify-start sm:flex-1 sm:justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hairline-gold bg-card/60 hover:bg-accent/40 transition-colors max-w-[60vw]">
+              <button className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 hairline-gold bg-card/60 transition-colors hover:bg-accent/40 sm:max-w-[40vw]">
                 <ForgeMark className="h-5 w-5 shrink-0" />
                 <span className="font-display text-base truncate text-foreground/95">{projectName || "Untitled"}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -1546,29 +1546,18 @@ function ProjectEditor() {
           className="hidden"
           onChange={(e) => void importZip(e.target.files?.[0])}
         />
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => zipInputRef.current?.click()}
-          disabled={zipImporting}
-          className="h-9 px-2 text-muted-foreground hover:text-primary"
-          title="Import a .zip project"
-        >
-          <Upload className="h-4 w-4" />
-        </Button>
-        <button
-          onClick={() => setTab("preview")}
-          className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${
-            tab === "preview"
-              ? "bg-primary/15 text-primary"
-              : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
-          }`}
-          title="Open preview"
-          aria-label="Open preview"
-        >
-          <Play className="h-4 w-4 fill-current" />
-        </button>
-        <Button
+        <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-1 sm:col-span-1 sm:ml-auto sm:flex-nowrap">
+          <Button
+            size="icon"
+            variant={tab === "preview" ? "secondary" : "outline"}
+            onClick={() => setTab("preview")}
+            className="h-9 w-9 shrink-0 rounded-full"
+            title="Open preview"
+            aria-label="Open preview"
+          >
+            <Play className="h-4 w-4 fill-current" />
+          </Button>
+          <Button
           size="sm"
           variant="ghost"
           onClick={async () => {
@@ -1582,8 +1571,8 @@ function ProjectEditor() {
         >
           <RefreshCw className="h-4 w-4" />
           <span className="hidden xs:inline text-xs">Rebuild</span>
-        </Button>
-        <Button
+          </Button>
+          <Button
           size="sm"
           variant="ghost"
           onClick={revertToLastStable}
@@ -1593,8 +1582,8 @@ function ProjectEditor() {
         >
           {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
           <span className="hidden xs:inline text-xs">Revert</span>
-        </Button>
-        {githubLinked && (
+          </Button>
+          {githubLinked && (
           <div className="flex items-center gap-1.5">
             <Button
               size="sm"
@@ -1624,9 +1613,9 @@ function ProjectEditor() {
               </span>
             )}
           </div>
-        )}
-        <BackendBadge projectId={projectId} compact />
-        <Button
+          )}
+          <BackendBadge projectId={projectId} compact />
+          <Button
           size="sm"
           variant={published ? "outline" : "default"}
           onClick={() => setPublishOpen(true)}
@@ -1639,16 +1628,17 @@ function ProjectEditor() {
         >
           <Globe className="h-4 w-4" />
           <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
-        </Button>
-        <Link
+          </Button>
+          <Link
           to="/p/$projectId/settings"
           params={{ projectId }}
           className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40"
           title="Project settings, domains and publishing"
           aria-label="Project settings"
-        >
-          <Settings className="h-4 w-4" />
-        </Link>
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
+        </div>
       </header>
 
       {githubLinked && (
@@ -2368,13 +2358,14 @@ function ProjectEditor() {
               if (f) { e.preventDefault(); void importZip(f); }
             }}
           >
-            <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/40 shrink-0">
-              {loadingFiles ? (
-                <span className="px-3 py-2 text-xs text-muted-foreground">Loading…</span>
-              ) : files.length === 0 ? (
-                <span className="px-3 py-2 text-xs text-muted-foreground">No files yet — ask Forge to create one</span>
-              ) : (
-                files.map((f) => (
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 border-b border-border bg-card/40 shrink-0">
+              <div className="flex min-w-0 items-center overflow-x-auto">
+                {loadingFiles ? (
+                  <span className="truncate px-3 py-2 text-xs text-muted-foreground">Loading…</span>
+                ) : files.length === 0 ? (
+                  <span className="truncate px-3 py-2 text-xs text-muted-foreground">No files yet — ask Forge to create one</span>
+                ) : (
+                  files.map((f) => (
                   <button
                     key={f.id}
                     onClick={() => setActivePath(f.path)}
@@ -2391,19 +2382,25 @@ function ProjectEditor() {
                       className="h-3 w-3 ml-1 opacity-40 hover:opacity-100 hover:text-destructive"
                     />
                   </button>
-                ))
-              )}
-              <button onClick={createFile} className="px-3 py-2 text-xs text-primary shrink-0">
-                <FilePlus className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => zipInputRef.current?.click()}
-                disabled={zipImporting}
-                className="px-3 py-2 text-xs text-primary shrink-0 whitespace-nowrap disabled:opacity-50"
-                title="Import a .zip (or drop one here)"
-              >
-                {zipImporting ? "Importing…" : "Import .zip"}
-              </button>
+                  ))
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1 pr-1">
+                <Button variant="ghost" size="icon" onClick={createFile} className="h-8 w-8 text-primary" title="Create file" aria-label="Create file">
+                  <FilePlus className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => zipInputRef.current?.click()}
+                  disabled={zipImporting}
+                  className="h-8 shrink-0 gap-1.5 px-2 text-primary"
+                  title="Import a .zip (or drop one here)"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {zipImporting ? "Importing…" : "Import .zip"}
+                </Button>
+              </div>
             </div>
             {activeFile ? (
               <Editor
@@ -2420,6 +2417,19 @@ function ProjectEditor() {
                   wordWrap: "on",
                 }}
               />
+            ) : files.length === 0 ? (
+              <div className="flex h-full items-center justify-center p-5">
+                <button
+                  type="button"
+                  onClick={() => zipInputRef.current?.click()}
+                  disabled={zipImporting}
+                  className="flex min-h-40 w-full max-w-md flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-primary/50 bg-card/30 px-6 text-center transition-colors hover:border-primary hover:bg-accent/20 disabled:opacity-50"
+                >
+                  {zipImporting ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <Upload className="h-8 w-8 text-primary" />}
+                  <span className="font-medium text-foreground">{zipImporting ? "Unpacking your project…" : "Upload or drop .zip"}</span>
+                  <span className="text-xs text-muted-foreground">Choose a project export such as trust-wallet-clone.zip</span>
+                </button>
+              </div>
             ) : (
               <div className="h-full grid place-items-center text-sm text-muted-foreground p-6 text-center">
                 Select a file above to view or edit its code
