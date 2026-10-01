@@ -2419,16 +2419,17 @@ function ProjectEditor() {
               />
             ) : files.length === 0 ? (
               <div className="flex h-full items-center justify-center p-5">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => zipInputRef.current?.click()}
                   disabled={zipImporting}
-                  className="flex min-h-40 w-full max-w-md flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-primary/50 bg-card/30 px-6 text-center transition-colors hover:border-primary hover:bg-accent/20 disabled:opacity-50"
+                  className="min-h-40 w-full max-w-md flex-col gap-3 whitespace-normal border-dashed border-primary/50 bg-card/30 px-6 text-center hover:border-primary hover:bg-accent/20"
                 >
                   {zipImporting ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <Upload className="h-8 w-8 text-primary" />}
                   <span className="font-medium text-foreground">{zipImporting ? "Unpacking your project…" : "Upload or drop .zip"}</span>
                   <span className="text-xs text-muted-foreground">Choose a project export such as trust-wallet-clone.zip</span>
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="h-full grid place-items-center text-sm text-muted-foreground p-6 text-center">
