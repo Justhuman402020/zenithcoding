@@ -558,6 +558,13 @@ export const Route = createFileRoute("/api/public/chat")({
           },
           onError: async ({ error }) => {
             stopHeartbeat();
+            const errText = error instanceof Error ? error.message : String(error);
+            // Daily Neuron quota / 429 on a Cloudflare key: retire it for today
+            // so the next attempt goes straight to the next key in line.
+            if (isCloudflare && /429|rate.?limit|quota|neuron|too many requests|daily/i.test(errText)) {
+              const { markExhausted } = await import("@/lib/cloudflare-pool.server");
+              await markExhausted(pick.ref.provider);
+            }
             await recordModelStatus(
               pick.ref,
               "unavailable",
