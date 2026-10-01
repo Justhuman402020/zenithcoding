@@ -117,14 +117,11 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
       detail: { stepNumber, toolCalls: toolResults.length, hasListed, hasRead, hasMutation },
     });
 
-    if (!needsFileChange) return undefined;
-    // Only ever force list_files. Forcing a SPECIFIC later tool (read_file /
-    // write_file) hard-fails the whole stream when the model legitimately
-    // wants a different one ("tool call validation failed"), which is what cut
-    // replies off with no answer. "required" keeps the agent using tools until
-    // a write lands, but lets it pick which one.
-    if (stepNumber === 0 || !hasListed) return { toolChoice: { type: "tool" as const, toolName: "list_files" as ForcedTool } };
-    if (!hasMutation && stepNumber < 12) return { toolChoice: "required" as const };
+    // Never force a tool choice. Forcing ("required" or a named tool) made
+    // Qwen 3.8 on Cloudflare lock up or stream empty output, leaving jobs
+    // hanging. The system prompt already tells the agent to use tools.
+    void needsFileChange;
+    void ({} as ForcedTool | undefined);
     return undefined;
   };
 }

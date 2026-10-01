@@ -400,9 +400,25 @@ export const Route = createFileRoute("/api/public/chat")({
               }
             }, 2_000)
           : undefined;
+        // Watchdog: if the model sends nothing for 35s (hung request or a
+        // stalled stream), abort so the job fails fast instead of the heartbeat
+        // keeping a dead job "running" for hours.
+        const STEP_TIMEOUT_MS = 35_000;
+        let timedOut = false;
+        let watchdog: ReturnType<typeof setTimeout> | undefined;
+        const kickWatchdog = () => {
+          if (watchdog) clearTimeout(watchdog);
+          watchdog = setTimeout(() => {
+            timedOut = true;
+            abortController.abort();
+          }, STEP_TIMEOUT_MS);
+        };
+        kickWatchdog();
         const stopHeartbeat = () => {
           if (heartbeat) clearInterval(heartbeat);
+          if (watchdog) clearTimeout(watchdog);
         };
+        const isCloudflare = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(pick.baseURL);
 
         // Shared work record: compaction drops old tool parts, so list the file
         // changes already made in this chat. A fallback model then continues
@@ -432,17 +448,35 @@ export const Route = createFileRoute("/api/public/chat")({
 
           tools,
           abortSignal: abortController.signal,
+          onChunk: () => kickWatchdog(),
           onAbort: async () => {
             stopHeartbeat();
+            const reason = timedOut
+              ? `Model ${pick.ref.model} sent nothing for 35 seconds — switching to the next key`
+              : "Stopped by the user";
+            if (timedOut) {
+              await recordModelStatus(pick.ref, isCloudflare ? "rate_limited" : "unavailable", null, reason);
+              trace.log("stream.timeout", { status: "error", message: reason, detail: { stepNo } });
+              if (jobId) {
+                await supabaseAdmin.from("chat_jobs").update({
+                  status: "failed",
+                  progress: `${progressText} · timed out`,
+                  error: reason,
+                  trace_id: trace.traceId,
+                  completed_at: new Date().toISOString(),
+                }).eq("id", jobId).in("status", ["queued", "running"]);
+              }
+            }
             await saveProgress({
               status: "unfinished",
               lastRequest: lastUserText.slice(0, 600),
-              error: "Stopped by the user",
+              error: reason,
               at: new Date().toISOString(),
             });
             await trace.flush();
           },
           onStepFinish: ({ toolCalls }) => {
+            kickWatchdog();
             stepNo += 1;
             let last = "";
             for (const c of (toolCalls ?? []) as any[]) {
@@ -524,6 +558,13 @@ export const Route = createFileRoute("/api/public/chat")({
           },
           onError: async ({ error }) => {
             stopHeartbeat();
+            const errText = error instanceof Error ? error.message : String(error);
+            // Daily Neuron quota / 429 on a Cloudflare key: retire it for today
+            // so the next attempt goes straight to the next key in line.
+            if (isCloudflare && /429|rate.?limit|quota|neuron|too many requests|daily/i.test(errText)) {
+              const { markExhausted } = await import("@/lib/cloudflare-pool.server");
+              await markExhausted(pick.ref.provider);
+            }
             await recordModelStatus(
               pick.ref,
               "unavailable",

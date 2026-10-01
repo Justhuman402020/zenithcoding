@@ -120,25 +120,12 @@ describe("Groq chat edit flow", () => {
     expect(buildFollowUpSuggestion("connect an api key", ["app.js"])).toContain("saved key");
   });
 
-  it("never forces a specific tool after list_files", () => {
-    // Forcing write_file while the model wanted read_file made Groq reject the
-    // continuation ("tool call validation failed") and the reply was cut off
-    // with no answer. Only list_files may be forced; later steps use required.
+  it("never forces a tool choice (Qwen on Cloudflare locks up when forced)", () => {
     const prepare = createPrepareStep(true);
-    const first = prepare({ steps: [], stepNumber: 0 });
-    expect(first).toEqual({ toolChoice: { type: "tool", toolName: "list_files" } });
-    const later = prepare({
-      steps: [
-        {
-          toolResults: [
-            { toolName: "list_files" },
-            { toolName: "read_file" },
-          ],
-        },
-      ],
-      stepNumber: 2,
-    });
-    expect(later).toEqual({ toolChoice: "required" });
+    expect(prepare({ steps: [], stepNumber: 0 })).toBeUndefined();
+    expect(
+      prepare({ steps: [{ toolResults: [{ toolName: "list_files" }, { toolName: "read_file" }] }], stepNumber: 2 }),
+    ).toBeUndefined();
   });
 
   it("keeps current screenshots but removes stale media and tool payloads", () => {

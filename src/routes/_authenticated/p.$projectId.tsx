@@ -778,8 +778,13 @@ function ProjectEditor() {
       void discardUnansweredMessage();
       toast.error(getChatErrorMessage(err), { id: "forge-chat-error" });
     },
-    onFinish: ({ isError }: { isError?: boolean }) => {
-      if (!isError) switchTriesRef.current = 0;
+    onFinish: ({ isError, isAbort }: { isError?: boolean; isAbort?: boolean }) => {
+      // Server watchdog aborted a hung model (35s silence): hand over to the
+      // next key with the same countdown used for errors.
+      if (isAbort && !userStoppedRef.current && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
+        switchTriesRef.current += 1;
+        setSwitchCountdown(0);
+      } else if (!isError && !isAbort) switchTriesRef.current = 0;
       pendingUserRowRef.current = null;
       // AI may have written files via tools
       refreshFiles();
