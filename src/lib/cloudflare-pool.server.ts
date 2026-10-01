@@ -3,7 +3,7 @@
 // and waterfall to #2, #3… when a key runs out or answers 429.
 
 export const NEURONS_PER_KEY = 10_000;
-export const MAX_POOL_KEYS = 21;
+export const MAX_POOL_KEYS = 100;
 export const CLOUDFLARE_CODING_MODEL = "@cf/qwen/qwen3.8-27b";
 const CF_RE = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i;
 
