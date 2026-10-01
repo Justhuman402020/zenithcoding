@@ -275,19 +275,23 @@ export const Route = createFileRoute("/api/public/chat")({
           const raw = String(pick.error ?? "");
           const reason = /not available on the Workers Free plan/i.test(raw)
             ? " Cloudflare only offers this model on its paid Workers plan."
-            : /max_tokens/i.test(raw)
-              ? " The provider rejected the reply length."
-              : /401|403|unauthori|invalid api key/i.test(raw)
-                ? " The provider key was rejected."
-                : /429|rate limit|quota/i.test(raw)
-                  ? " The provider's limit has been reached for now."
-                  : "";
-          const message =
-            !editorAuto && requestedRef
-              ? `The model you picked (${requestedRef.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
-              : pick.error;
+            : /insufficient_quota|free quota exhausted|free tier only/i.test(raw)
+              ? " This key's free allowance is used up. Add funds to that account, or turn off its \"use free tier only\" setting, then try again."
+              : /max_tokens/i.test(raw)
+                ? " The provider rejected the reply length."
+                : /401|403|unauthori|invalid api key/i.test(raw)
+                  ? " The provider key was rejected."
+                  : /429|rate limit|quota/i.test(raw)
+                    ? " The provider's limit has been reached for now."
+                    : "";
+          const locked = !editorAuto && !!requestedRef;
+          const message = locked
+            ? `The model you picked (${requestedRef!.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
+            : pick.error;
+          // A locked model being out of quota is an expected, explained outcome,
+          // not a server crash — answer with a 4xx so it isn't reported as one.
           return fail(
-            pick.status,
+            locked ? 424 : pick.status,
             JSON.stringify({ error: "model_unavailable", message }),
             "application/json",
           );
