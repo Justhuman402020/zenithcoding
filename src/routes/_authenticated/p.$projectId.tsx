@@ -64,6 +64,7 @@ import {
   Pause,
   ListPlus,
   Square,
+  Upload,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -546,6 +547,40 @@ function ProjectEditor() {
     if (error) return toast.error(error.message);
     await refreshFiles();
     setActivePath(path);
+  }
+
+  const zipInputRef = useRef<HTMLInputElement>(null);
+  const [zipImporting, setZipImporting] = useState(false);
+  async function importZip(file: File | undefined | null) {
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name)) return toast.error("Please choose a .zip file");
+    setZipImporting(true);
+    const t = toast.loading(`Unpacking ${file.name}…`);
+    try {
+      const { unpackZip } = await import("@/lib/zip-import");
+      const { files: unpacked, skipped } = await unpackZip(file);
+      if (!unpacked.length) throw new Error("No usable files found in that zip");
+      const { data: userRes } = await supabase.auth.getUser();
+      if (!userRes.user) throw new Error("Please sign in again");
+      const paths = unpacked.map((f) => f.path);
+      for (let i = 0; i < paths.length; i += 100) {
+        await supabase.from("files").delete().eq("project_id", projectId).in("path", paths.slice(i, i + 100));
+      }
+      const rows = unpacked.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content }));
+      for (let i = 0; i < rows.length; i += 50) {
+        const { error } = await supabase.from("files").insert(rows.slice(i, i + 50));
+        if (error) throw new Error(error.message);
+      }
+      await refreshFiles();
+      setActivePath(paths.find((p) => /(^|\/)index\.html$/i.test(p)) ?? paths[0]);
+      setPreviewKey((k) => k + 1);
+      toast.success(`Imported ${unpacked.length} files${skipped ? ` (${skipped} skipped)` : ""}`, { id: t });
+    } catch (e: any) {
+      toast.error(e?.message || "Could not import that zip", { id: t });
+    } finally {
+      setZipImporting(false);
+      if (zipInputRef.current) zipInputRef.current.value = "";
+    }
   }
 
   async function deleteFile(path: string) {
@@ -1504,6 +1539,23 @@ function ProjectEditor() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="hidden"
+          onChange={(e) => void importZip(e.target.files?.[0])}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => zipInputRef.current?.click()}
+          disabled={zipImporting}
+          className="h-9 px-2 text-muted-foreground hover:text-primary"
+          title="Import a .zip project"
+        >
+          <Upload className="h-4 w-4" />
+        </Button>
         <button
           onClick={() => setTab("preview")}
           className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${
@@ -2308,7 +2360,14 @@ function ProjectEditor() {
         )}
 
         {tab === "code" && (
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div
+            className="flex-1 min-h-0 flex flex-col"
+            onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+            onDrop={(e) => {
+              const f = Array.from(e.dataTransfer.files).find((x) => /\.zip$/i.test(x.name));
+              if (f) { e.preventDefault(); void importZip(f); }
+            }}
+          >
             <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/40 shrink-0">
               {loadingFiles ? (
                 <span className="px-3 py-2 text-xs text-muted-foreground">Loading…</span>
@@ -2336,6 +2395,14 @@ function ProjectEditor() {
               )}
               <button onClick={createFile} className="px-3 py-2 text-xs text-primary shrink-0">
                 <FilePlus className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => zipInputRef.current?.click()}
+                disabled={zipImporting}
+                className="px-3 py-2 text-xs text-primary shrink-0 whitespace-nowrap disabled:opacity-50"
+                title="Import a .zip (or drop one here)"
+              >
+                {zipImporting ? "Importing…" : "Import .zip"}
               </button>
             </div>
             {activeFile ? (
