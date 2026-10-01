@@ -270,9 +270,15 @@ export const Route = createFileRoute("/api/public/chat")({
         );
         if (!pick.ok) {
           trace.log("model.unavailable", { status: "error", message: pick.error });
+          // With Auto off there is no fallback by design — say plainly that the
+          // chosen model or its key is the problem instead of a generic message.
+          const message =
+            !editorAuto && requestedRef
+              ? `The model you picked (${requestedRef.model}) or its provider key is unavailable right now. Turn Auto-switch on to let Forge use another model, or pick a different one.`
+              : pick.error;
           return fail(
             pick.status,
-            JSON.stringify({ error: "model_unavailable", message: pick.error }),
+            JSON.stringify({ error: "model_unavailable", message }),
             "application/json",
           );
         }
