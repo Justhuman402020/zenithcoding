@@ -83,7 +83,7 @@ export function CloudflarePoolPanel() {
             <Zap className="h-4 w-4 text-primary" /> Cloudflare keys pool
           </h2>
           <p className="text-xs text-muted-foreground">
-            Up to {data?.maxKeys ?? 21} keys, 10,000 Neurons each per day. Forge codes with Qwen on key #1 and moves to
+            Unlimited keys (new ones join the end of the line), 10,000 Neurons each per day. Forge codes with Qwen on key #1 and moves to
             the next key when one runs out. Add keys with "Add a new key" → Cloudflare Workers AI.
           </p>
         </div>
