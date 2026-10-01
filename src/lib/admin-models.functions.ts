@@ -348,6 +348,7 @@ export const getCloudflarePool = createServerFn({ method: "GET" })
     const keys = await loadCloudflarePool();
     return {
       keys,
+      totalUsed: keys.reduce((s, k) => s + k.used, 0),
       totalRemaining: keys.reduce((s, k) => s + k.remaining, 0),
       totalLimit: keys.length * NEURONS_PER_KEY,
       maxKeys: MAX_POOL_KEYS,

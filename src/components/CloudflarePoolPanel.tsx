@@ -37,11 +37,12 @@ export function NeuronsBar({ className = "" }: { className?: string }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground ${className}`}
-      title="Cloudflare Neurons left today across all keys. Resets at 00:00 UTC (01:00 Lagos)."
+      title="Cloudflare Neurons used today across all keys, out of the daily total. Resets at 00:00 UTC (01:00 Lagos)."
     >
       <Zap className="h-3 w-3 text-primary" />
-      <span className="tabular-nums text-foreground">{data.totalRemaining.toLocaleString()}</span>/
+      <span className="tabular-nums text-foreground">{data.totalUsed.toLocaleString()}</span> used /
       <span className="tabular-nums">{data.totalLimit.toLocaleString()}</span> Neurons
+      <span className="tabular-nums text-foreground">· {data.totalRemaining.toLocaleString()} left</span>
       {active ? <span>· Key #{active.position}</span> : <span className="text-destructive">· all used</span>}
       <span className="tabular-nums">· resets {countdown}</span>
     </span>
@@ -88,9 +89,11 @@ export function CloudflarePoolPanel() {
         </div>
         <div className="text-right">
           <div className="text-lg font-bold tabular-nums">
-            {(data?.totalRemaining ?? 0).toLocaleString()} / {(data?.totalLimit ?? 0).toLocaleString()}
+            {(data?.totalUsed ?? 0).toLocaleString()} used
           </div>
-          <div className="text-[11px] text-muted-foreground tabular-nums">Neurons · resets in {countdown}</div>
+          <div className="text-[11px] text-muted-foreground tabular-nums">
+            {(data?.totalRemaining ?? 0).toLocaleString()} left of {(data?.totalLimit ?? 0).toLocaleString()} Neurons · resets in {countdown}
+          </div>
         </div>
       </div>
       {isLoading ? (
@@ -104,8 +107,8 @@ export function CloudflarePoolPanel() {
               <span className="w-8 font-mono text-muted-foreground">#{k.position}</span>
               <span className="flex-1 min-w-[8rem] truncate">{k.label}</span>
               <span className={`rounded-full px-2 py-0.5 text-[11px] capitalize ${TONE[k.status]}`}>{k.status}</span>
-              <span className="tabular-nums text-xs text-muted-foreground w-28 text-right">
-                {k.remaining.toLocaleString()} / 10,000
+              <span className="tabular-nums text-xs text-muted-foreground w-36 text-right">
+                {k.used.toLocaleString()} used · {k.remaining.toLocaleString()} left
               </span>
               <Button size="icon" variant="ghost" disabled={!!busy || i === 0} onClick={() => act(k.id, () => move({ data: { id: k.id, direction: "up" } }))} title="Move up">
                 <ArrowUp className="h-4 w-4" />
