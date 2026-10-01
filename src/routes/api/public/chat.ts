@@ -376,6 +376,9 @@ export const Route = createFileRoute("/api/public/chat")({
         // Stop button: the editor marks the job stopped; we notice within ~2s and abort.
         const abortController = new AbortController();
         let beats = 0;
+        let stepNo = 0;
+        let progressText = "AI is working";
+        const recentCalls: string[] = [];
         const heartbeat = jobId
           ? setInterval(async () => {
               beats += 1;
@@ -391,7 +394,7 @@ export const Route = createFileRoute("/api/public/chat")({
               if (beats % 2 === 0) {
                 void supabaseAdmin
                   .from("chat_jobs")
-                  .update({ progress: "AI is working", updated_at: new Date().toISOString() })
+                  .update({ progress: progressText, updated_at: new Date().toISOString() })
                   .eq("id", jobId)
                   .in("status", ["queued", "running"]);
               }
@@ -440,13 +443,35 @@ export const Route = createFileRoute("/api/public/chat")({
             await trace.flush();
           },
           onStepFinish: ({ toolCalls }) => {
+            stepNo += 1;
+            let last = "";
             for (const c of (toolCalls ?? []) as any[]) {
               const path = c?.input?.path ?? c?.args?.path;
               if (typeof path === "string") progressModel.files.add(path);
+              const name = String(c?.toolName ?? "tool");
+              last = `${name.replace(/_/g, " ")}${typeof path === "string" ? ` ${path}` : ""}`;
+              recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
+            }
+            if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
+            progressText = `Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed`;
+            if (jobId) {
+              void supabaseAdmin
+                .from("chat_jobs")
+                .update({ progress: progressText, updated_at: new Date().toISOString() })
+                .eq("id", jobId)
+                .in("status", ["queued", "running"]);
             }
           },
           prepareStep: createPrepareStep(needsFileChange, trace),
-          stopWhen: stepCountIs(50),
+          // Speed: stop early when the model repeats the same tool call 3 times
+          // in a row (a loop), instead of burning time up to the step cap.
+          stopWhen: [
+            stepCountIs(40),
+            () => {
+              const n = recentCalls.length;
+              return n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
+            },
+          ],
           maxOutputTokens: isGitHubModels ? 4_000 : maxOutputTokensFor(pick.ref),
           onFinish: async ({ finishReason, usage, text }) => {
             stopHeartbeat();
