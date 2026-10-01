@@ -398,15 +398,41 @@ function ProjectEditor() {
   }, [mode]);
 
   useEffect(() => {
-    const sync = () => setIsOnline(navigator.onLine);
-    sync();
+    let wasOnline = navigator.onLine;
+    const sync = () => {
+      const now = navigator.onLine;
+      setIsOnline(now);
+      if (now && !wasOnline) {
+        // Back online: tell the user right away where the agent is.
+        void supabase
+          .from("chat_jobs")
+          .select("status,progress,error,updated_at")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .then(({ data }) => {
+            const job = data?.[0];
+            if (job && isActiveChatJob(job)) {
+              toast.info(`Connected again · Forge kept working: ${job.progress ?? "AI is working"}`, { id: "forge-online" });
+            } else if (job?.status === "completed") {
+              toast.success("Connected again · Your task finished while you were away", { id: "forge-online" });
+            } else {
+              toast.success("Connected again", { id: "forge-online" });
+            }
+          });
+      } else if (!now && wasOnline) {
+        toast.warning("Offline · Forge keeps working on the server", { id: "forge-online" });
+      }
+      wasOnline = now;
+    };
+    setIsOnline(navigator.onLine);
     window.addEventListener("online", sync);
     window.addEventListener("offline", sync);
     return () => {
       window.removeEventListener("online", sync);
       window.removeEventListener("offline", sync);
     };
-  }, []);
+  }, [projectId]);
 
   // Which API keys are already saved for this project. Used so the secure paste
   // box never reappears for a key the user has already given us.
@@ -947,9 +973,12 @@ function ProjectEditor() {
     };
     void recover();
     const timer = window.setInterval(() => void recover(), 2500);
+    const onBack = () => void recover();
+    window.addEventListener("online", onBack);
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      window.removeEventListener("online", onBack);
     };
   }, [token, chatReady, projectId, setMessages, isStreaming]);
 
@@ -2045,7 +2074,7 @@ function ProjectEditor() {
               </div>
               {!isOnline && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  Offline — reconnect to send. Work already accepted by Forge will keep finishing.
+                  Offline — Forge keeps working on the server. You'll see where it is when you reconnect.
                 </div>
               )}
               {remoteWorking && !isStreaming && (
