@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { consumeStream, convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
+import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
 import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
@@ -138,7 +138,7 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .eq("user_id", userId)
           .in("status", ["queued", "running"])
-          .lt("updated_at", new Date(Date.now() - 600_000).toISOString());
+          .lt("updated_at", new Date(Date.now() - 180_000).toISOString());
 
         const { data: existingJob } = await supabase
           .from("chat_jobs")
@@ -371,24 +371,32 @@ export const Route = createFileRoute("/api/public/chat")({
         }
         if (outgoingMessages.length === 0) return fail(400, "Please type a message first.");
 
-        // Keep long builds visibly alive. If the worker crashes, this stops and
-        // the stale-job recovery above/client polling releases the next message.
-        // Stop button: the editor marks the job stopped; we notice within ~2s and abort.
-        const abortController = new AbortController();
-        let beats = 0;
+        // ---- Server-side agent loop ----------------------------------------
+        // The whole job (every step, every key hand-over) runs here on the
+        // server, independent of the browser. If a model hangs for 35s, or a
+        // Cloudflare key hits its daily Neuron/quota limit, or the stream
+        // breaks, the server switches to the next key itself and continues
+        // from the last finished step. The browser only watches.
+        const STEP_TIMEOUT_MS = 35_000;
+        const MAX_ATTEMPTS = 8;
+        const isCfUrl = (url: string) => /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(url);
+        const errText = (e: unknown) => (e instanceof Error ? e.message : String(e ?? ""));
+
+        let userStopped = false;
+        let currentAbort: AbortController | null = null;
         let stepNo = 0;
         let progressText = "AI is working";
         const recentCalls: string[] = [];
+        const replyTexts: string[] = [];
+
+        let beats = 0;
         const heartbeat = jobId
           ? setInterval(async () => {
               beats += 1;
-              const { data: jobRow } = await supabaseAdmin
-                .from("chat_jobs")
-                .select("status")
-                .eq("id", jobId)
-                .maybeSingle();
+              const { data: jobRow } = await supabaseAdmin.from("chat_jobs").select("status").eq("id", jobId).maybeSingle();
               if (jobRow && jobRow.status !== "queued" && jobRow.status !== "running") {
-                abortController.abort();
+                userStopped = true;
+                currentAbort?.abort();
                 return;
               }
               if (beats % 2 === 0) {
@@ -400,29 +408,21 @@ export const Route = createFileRoute("/api/public/chat")({
               }
             }, 2_000)
           : undefined;
-        // Watchdog: if the model sends nothing for 35s (hung request or a
-        // stalled stream), abort so the job fails fast instead of the heartbeat
-        // keeping a dead job "running" for hours.
-        const STEP_TIMEOUT_MS = 35_000;
-        let timedOut = false;
-        let watchdog: ReturnType<typeof setTimeout> | undefined;
-        const kickWatchdog = () => {
-          if (watchdog) clearTimeout(watchdog);
-          watchdog = setTimeout(() => {
-            timedOut = true;
-            abortController.abort();
-          }, STEP_TIMEOUT_MS);
-        };
-        kickWatchdog();
         const stopHeartbeat = () => {
           if (heartbeat) clearInterval(heartbeat);
-          if (watchdog) clearTimeout(watchdog);
         };
-        const isCloudflare = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(pick.baseURL);
+        const setProgress = (text: string) => {
+          progressText = text;
+          if (jobId) {
+            void supabaseAdmin
+              .from("chat_jobs")
+              .update({ progress: text, updated_at: new Date().toISOString() })
+              .eq("id", jobId)
+              .in("status", ["queued", "running"]);
+          }
+        };
 
-        // Shared work record: compaction drops old tool parts, so list the file
-        // changes already made in this chat. A fallback model then continues
-        // from the real state instead of starting blind.
+        // Shared work record so a fallback model never starts blind.
         const workLog: string[] = [];
         for (const message of body.messages as any[]) {
           if (message?.role !== "assistant") continue;
@@ -438,98 +438,139 @@ export const Route = createFileRoute("/api/public/chat")({
         const sharedContext = workLog.length
           ? `\n\nWork already done earlier in this chat (most recent last; previous models may have made these changes — read files before editing, do not redo finished work):\n${workLog.slice(-40).join("\n")}`
           : "";
+        const systemPrompt =
+          (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) + sharedContext;
+        const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
+        // Messages produced by finished steps of earlier (failed) attempts.
+        let carried: any[] = [];
 
-        const result = streamText({
-          model,
-          system:
-            (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-            sharedContext,
-          messages: await convertToModelMessages(outgoingMessages as UIMessage[]),
+        type Pick = { ref: ModelRef; apiKey: string; baseURL: string };
+        let current: Pick = pick;
+        const tried = new Set<string>([`${pick.ref.provider}:${pick.ref.model}`]);
 
-          tools,
-          abortSignal: abortController.signal,
-          onChunk: () => kickWatchdog(),
-          onAbort: async () => {
-            stopHeartbeat();
-            const reason = timedOut
-              ? `Model ${pick.ref.model} sent nothing for 35 seconds — switching to the next key`
-              : "Stopped by the user";
-            if (timedOut) {
-              await recordModelStatus(pick.ref, isCloudflare ? "rate_limited" : "unavailable", null, reason);
-              trace.log("stream.timeout", { status: "error", message: reason, detail: { stepNo } });
-              if (jobId) {
-                await supabaseAdmin.from("chat_jobs").update({
-                  status: "failed",
-                  progress: `${progressText} · timed out`,
-                  error: reason,
-                  trace_id: trace.traceId,
-                  completed_at: new Date().toISOString(),
-                }).eq("id", jobId).in("status", ["queued", "running"]);
-              }
-            }
-            await saveProgress({
-              status: "unfinished",
-              lastRequest: lastUserText.slice(0, 600),
-              error: reason,
-              at: new Date().toISOString(),
-            });
-            await trace.flush();
-          },
-          onStepFinish: ({ toolCalls }) => {
-            kickWatchdog();
-            stepNo += 1;
-            let last = "";
-            for (const c of (toolCalls ?? []) as any[]) {
-              const path = c?.input?.path ?? c?.args?.path;
-              if (typeof path === "string") progressModel.files.add(path);
-              const name = String(c?.toolName ?? "tool");
-              last = `${name.replace(/_/g, " ")}${typeof path === "string" ? ` ${path}` : ""}`;
-              recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
-            }
-            if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
-            progressText = `Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed`;
-            if (jobId) {
-              void supabaseAdmin
-                .from("chat_jobs")
-                .update({ progress: progressText, updated_at: new Date().toISOString() })
-                .eq("id", jobId)
-                .in("status", ["queued", "running"]);
-            }
-          },
-          prepareStep: createPrepareStep(needsFileChange, trace),
-          // Speed: stop early when the model repeats the same tool call 3 times
-          // in a row (a loop), instead of burning time up to the step cap.
-          stopWhen: [
-            stepCountIs(40),
-            () => {
-              const n = recentCalls.length;
-              return n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
-            },
-          ],
-          maxOutputTokens: isGitHubModels ? 4_000 : maxOutputTokensFor(pick.ref),
-          onFinish: async ({ finishReason, usage, text }) => {
-            stopHeartbeat();
-            {
-              const cfPool = await import("@/lib/cloudflare-pool.server");
-              if (cfPool.isCloudflareBaseUrl(pick.baseURL)) {
-                await cfPool.addNeurons(pick.ref.provider, cfPool.estimateNeurons(usage?.inputTokens, usage?.outputTokens));
-              }
-            }
-            trace.log("stream.finish", {
-              status: needsFileChange ? "ok" : "ok",
-              detail: {
-                finishReason,
-                inputTokens: usage?.inputTokens ?? null,
-                outputTokens: usage?.outputTokens ?? null,
-                replyChars: text?.length ?? 0,
+        const runJob = async (writer?: { merge: (s: ReadableStream<any>) => void; write: (c: any) => void }) => {
+          let finalReason: string | undefined;
+          let lastError: string | null = null;
+
+          for (let attempt = 0; attempt < MAX_ATTEMPTS && !userStopped; attempt++) {
+            const isGh = /models\.github\.ai/i.test(current.baseURL);
+            const isCf = isCfUrl(current.baseURL);
+            progressModel.name = `${current.ref.model} (${current.ref.provider})`;
+            const attemptAbort = new AbortController();
+            currentAbort = attemptAbort;
+            let timedOut = false;
+            let failure: string | null = null;
+            let finished = false;
+            let attemptSteps: any[] = [];
+            let watchdog: ReturnType<typeof setTimeout> | undefined;
+            const kick = () => {
+              if (watchdog) clearTimeout(watchdog);
+              watchdog = setTimeout(() => {
+                timedOut = true;
+                attemptAbort.abort();
+              }, STEP_TIMEOUT_MS);
+            };
+            kick();
+            const model = createGroqProvider(current.apiKey, current.baseURL)(current.ref.model);
+            trace.log("attempt.start", { detail: { attempt, provider: current.ref.provider, model: current.ref.model, carried: carried.length } });
+
+            const result = streamText({
+              model,
+              system: systemPrompt,
+              messages: [...baseMessages, ...carried],
+              tools,
+              abortSignal: attemptAbort.signal,
+              onChunk: () => kick(),
+              onStepFinish: (step: any) => {
+                kick();
+                stepNo += 1;
+                attemptSteps = step?.response?.messages ?? attemptSteps;
+                if (step?.text?.trim()) replyTexts.push(step.text.trim());
+                let last = "";
+                for (const c of (step?.toolCalls ?? []) as any[]) {
+                  const path = c?.input?.path ?? c?.args?.path;
+                  if (typeof path === "string") progressModel.files.add(path);
+                  const name = String(c?.toolName ?? "tool");
+                  last = `${name.replace(/_/g, " ")}${typeof path === "string" ? ` ${path}` : ""}`;
+                  recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
+                }
+                if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
+                setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed`);
+              },
+              prepareStep: createPrepareStep(needsFileChange, trace),
+              stopWhen: [
+                stepCountIs(40),
+                () => {
+                  const n = recentCalls.length;
+                  return n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
+                },
+              ],
+              maxOutputTokens: isGh ? 4_000 : maxOutputTokensFor(current.ref),
+              onFinish: async ({ finishReason, usage }) => {
+                finished = true;
+                finalReason = finishReason;
+                if (isCf) {
+                  const cfPool = await import("@/lib/cloudflare-pool.server");
+                  await cfPool.addNeurons(current.ref.provider, cfPool.estimateNeurons(usage?.inputTokens, usage?.outputTokens));
+                }
+                trace.log("stream.finish", { detail: { finishReason, inputTokens: usage?.inputTokens ?? null, outputTokens: usage?.outputTokens ?? null } });
+              },
+              onError: ({ error }) => {
+                failure = errText(error) || "Stream failed";
+              },
+              onAbort: () => {
+                if (timedOut) failure = `${current.ref.model} sent nothing for 35 seconds`;
               },
             });
-            // Hitting the length cap is not a failure: the editor sees this
-            // marker and asks the model to carry on automatically, so a long
-            // job never stops half way waiting to be told "continue".
-            const truncated = finishReason === "length";
+
+            if (writer) {
+              writer.merge(result.toUIMessageStream({ sendStart: attempt === 0, sendFinish: false, sendReasoning: true }));
+            }
+            // Drain the stream on the server no matter what the browser does.
+            await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });
+            if (watchdog) clearTimeout(watchdog);
+
+            const success = finished && !failure && !timedOut;
+            // An empty stream with no output counts as a failure too.
+            if (success && (stepNo > 0 || replyTexts.length)) break;
+            if (userStopped) break;
+            lastError = failure ?? (timedOut ? "Timed out" : "The model returned nothing");
+
+            // Keep the finished steps so the next key continues where this stopped.
+            if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+            await recordModelStatus(current.ref, isCf || /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
+            if (isCf && /429|rate.?limit|quota|neuron|too many requests|daily|exhaust/i.test(lastError)) {
+              const { markExhausted } = await import("@/lib/cloudflare-pool.server");
+              await markExhausted(current.ref.provider);
+            }
+            trace.log("attempt.failover", { status: "error", message: lastError, detail: { attempt, provider: current.ref.provider } });
+
+            if (!(autoFallback && editorAuto)) break;
+            const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
+            if (!remaining.length) break;
+            setProgress(`${progressText} · switching to the next key`);
+            if (writer) writer.write({ type: "message-metadata", messageMetadata: { model: "switching to the next key…" } });
+            const next = await pickAvailableModel(remaining, providerKeys, providerRegistry, gateway);
+            if (!next.ok) {
+              lastError = next.error;
+              break;
+            }
+            current = next;
+            tried.add(`${next.ref.provider}:${next.ref.model}`);
+            if (writer) {
+              writer.write({ type: "message-metadata", messageMetadata: { model: `${next.ref.model.split("/").pop()} · ${next.ref.provider}` } });
+            }
+            lastError = null;
+            finalReason = undefined;
+          }
+
+          stopHeartbeat();
+          currentAbort = null;
+          const succeeded = !userStopped && !lastError && finalReason !== undefined;
+          const truncated = finalReason === "length";
+          if (succeeded) {
             const finalText =
-              (text?.trim() || (truncated ? "" : "The build finished and all completed file changes were saved.")) +
+              (replyTexts.join("\n\n").trim() || (truncated ? "" : "The build finished and all completed file changes were saved.")) +
               (truncated ? "\n\n[[FORGE_CONTINUE]]" : "");
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
@@ -541,79 +582,54 @@ export const Route = createFileRoute("/api/public/chat")({
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
             }
-            await supabaseAdmin.from("chat_messages").insert({
-              project_id: projectId,
-              user_id: userId,
-              role: "assistant",
-              content: finalText,
-            });
+            await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText });
             await saveProgress({
               status: truncated ? "unfinished" : "finished",
               lastRequest: lastUserText.slice(0, 600),
-              lastReply: (text ?? "").slice(-800),
+              lastReply: finalText.slice(-800),
               error: null,
               at: new Date().toISOString(),
             });
-            await trace.flush();
-          },
-          onError: async ({ error }) => {
-            stopHeartbeat();
-            const errText = error instanceof Error ? error.message : String(error);
-            // Daily Neuron quota / 429 on a Cloudflare key: retire it for today
-            // so the next attempt goes straight to the next key in line.
-            if (isCloudflare && /429|rate.?limit|quota|neuron|too many requests|daily/i.test(errText)) {
-              const { markExhausted } = await import("@/lib/cloudflare-pool.server");
-              await markExhausted(pick.ref.provider);
-            }
-            await recordModelStatus(
-              pick.ref,
-              "unavailable",
-              null,
-              error instanceof Error ? error.message : String(error),
-            );
-            trace.log("stream.error", {
-              status: "error",
-              message: error instanceof Error ? error.message : String(error),
-            });
+          } else {
+            const reason = userStopped ? "Stopped by you" : lastError || "The AI build stopped";
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
                 status: "failed",
-                progress: "Stopped with an error",
-                error: error instanceof Error ? error.message : String(error),
+                progress: userStopped ? "Stopped" : `${progressText} · stopped`,
+                error: reason,
                 trace_id: trace.traceId,
                 completed_at: new Date().toISOString(),
-              }).eq("id", jobId);
+              }).eq("id", jobId).in("status", ["queued", "running"]);
             }
             await saveProgress({
-              status: "failed",
+              status: userStopped ? "unfinished" : "failed",
               lastRequest: lastUserText.slice(0, 600),
-              error: (error instanceof Error ? error.message : String(error)).slice(0, 600),
+              error: reason.slice(0, 600),
               at: new Date().toISOString(),
             });
-            await trace.flush();
+            if (!userStopped && writer) writer.write({ type: "error", errorText: reason });
+          }
+          if (writer) writer.write({ type: "finish" });
+          await trace.flush();
+        };
+
+        const stream = createUIMessageStream({
+          originalMessages: body.messages,
+          execute: async ({ writer }) => {
+            writer.write({
+              type: "message-metadata",
+              messageMetadata: { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}` },
+            });
+            await runJob(writer as any);
           },
+          onError: (error) => errText(error) || "The AI build failed before it could write files.",
         });
 
-        return result.toUIMessageStreamResponse({
-          originalMessages: body.messages,
-          sendReasoning: true,
-          // Tells the editor exactly which model is writing this reply (live badge).
-          messageMetadata: ({ part }) =>
-            part.type === "start" ? { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}` } : undefined,
+        return createUIMessageStreamResponse({
+          stream,
           headers: { ...traceHeaders, "x-forge-model-used": `${pick.ref.provider}:${pick.ref.model}`, ...(jobId ? { "x-forge-job-id": jobId } : {}) },
-          // Keep consuming the model/tool stream after the browser connection
-          // disappears so accepted file writes and the final reply still land.
-          consumeSseStream: ({ stream }) => consumeStream({ stream }),
-          onError: (error) => {
-            const message = error instanceof Error ? error.message : String(error ?? "");
-            if (/request too large|tokens per minute|TPM/i.test(message)) {
-              return "This request was too large for Groq's free limit. Forge shortened the chat context; please send the instruction once more.";
-            }
-            if (/429|rate.?limit|too many requests/i.test(message)) {
-              return "Groq hit its rate limit mid-build. Wait about a minute and send the message again — Forge will automatically try the next model.";
-            }
-            return message || "The AI build failed before it could write files.";
-          },
+          // Keep the whole job running on the server after the browser disconnects.
+          consumeSseStream: ({ stream: s }) => consumeStream({ stream: s }),
         });
       },
     },
