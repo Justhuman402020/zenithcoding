@@ -76,7 +76,8 @@ import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
-import { Github } from "lucide-react";
+import { Github, Image as ImageIcon } from "lucide-react";
+import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
 import { useServerFn as useStopServerFn } from "@tanstack/react-start";
@@ -117,7 +118,7 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 
 type ProjectFile = { id: string; path: string; content: string };
 
-type TabKey = "chat" | "preview" | "code" | "history";
+type TabKey = "chat" | "preview" | "code" | "assets" | "history";
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
@@ -1668,6 +1669,7 @@ function ProjectEditor() {
           { k: "chat", label: "Chat", icon: MessageSquare },
           { k: "preview", label: "Preview", icon: Eye },
           { k: "code", label: "Code", icon: Code2 },
+          { k: "assets", label: "Assets", icon: ImageIcon },
           { k: "history", label: "History", icon: HistoryIcon },
         ] as const).map(({ k, label, icon: Icon }) => (
           <button
@@ -2379,6 +2381,7 @@ function ProjectEditor() {
           />
         )}
 
+        {tab === "assets" && <AssetsPanel projectId={projectId} />}
         {tab === "history" && (
           <HistoryPanel
             projectId={projectId}

@@ -503,6 +503,50 @@ export type Database = {
         }
         Relationships: []
       }
+      project_assets: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          handle: string
+          id: string
+          project_id: string
+          size: number | null
+          storage_path: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          handle: string
+          id?: string
+          project_id: string
+          size?: number | null
+          storage_path: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          handle?: string
+          id?: string
+          project_id?: string
+          size?: number | null
+          storage_path?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_domains: {
         Row: {
           created_at: string

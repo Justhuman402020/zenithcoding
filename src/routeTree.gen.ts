@@ -32,6 +32,7 @@ import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as ApiPublicAssetIdRouteImport } from './routes/api/public/asset.$id'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
 import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
 import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
@@ -156,6 +157,11 @@ const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
   path: '/api/public/github/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicAssetIdRoute = ApiPublicAssetIdRouteImport.update({
+  id: '/api/public/asset/$id',
+  path: '/api/public/asset/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedPProjectIdSettingsRoute =
   AuthenticatedPProjectIdSettingsRouteImport.update({
     id: '/settings',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | '/api/public/push-stream'
     | '/admin/'
     | '/p/$projectId/settings'
+    | '/api/public/asset/$id'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
@@ -316,6 +326,7 @@ export interface FileRouteTypes {
     | '/api/public/push-stream'
     | '/admin'
     | '/p/$projectId/settings'
+    | '/api/public/asset/$id'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
@@ -345,6 +356,7 @@ export interface FileRouteTypes {
     | '/api/public/push-stream'
     | '/_authenticated/admin/'
     | '/_authenticated/p/$projectId/settings'
+    | '/api/public/asset/$id'
     | '/api/public/github/callback'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
@@ -365,6 +377,7 @@ export interface RootRouteChildren {
   TransfersTokenRoute: typeof TransfersTokenRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
+  ApiPublicAssetIdRoute: typeof ApiPublicAssetIdRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
   ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
@@ -537,6 +550,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/asset/$id': {
+      id: '/api/public/asset/$id'
+      path: '/api/public/asset/$id'
+      fullPath: '/api/public/asset/$id'
+      preLoaderRoute: typeof ApiPublicAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/p/$projectId/settings': {
       id: '/_authenticated/p/$projectId/settings'
       path: '/settings'
@@ -620,6 +640,7 @@ const rootRouteChildren: RootRouteChildren = {
   TransfersTokenRoute: TransfersTokenRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
+  ApiPublicAssetIdRoute: ApiPublicAssetIdRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
   ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
