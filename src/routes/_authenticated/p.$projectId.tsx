@@ -6,7 +6,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
-import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
+import { buildFollowUpSuggestions, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
 import { cleanChatRows } from "@/lib/chat-history";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -335,7 +335,9 @@ function ProjectEditor() {
   const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
-  const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
+  const [nextBuildPrompts, setNextBuildPrompts] = useState<string[]>([]);
+  const stickToBottomRef = useRef(true);
+  const [showJumpDown, setShowJumpDown] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   // Auto-switch: when a model stops mid-work, count 0→10 then hand the job to
   // the next available model. Turning it off stops all automatic picking.
@@ -1074,7 +1076,7 @@ function ProjectEditor() {
     const user = messages.slice(0, assistantIndex).reverse().find((message) => message.role === "user");
     const prompt = user?.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ") ?? "";
     suggestedMessagesRef.current.add(assistant.id);
-    setNextBuildPrompt(buildFollowUpSuggestion(prompt, changedPaths));
+    setNextBuildPrompts(buildFollowUpSuggestions(prompt, changedPaths));
   }, [messages, isStreaming, initialMessages]);
 
 
@@ -1168,6 +1170,9 @@ function ProjectEditor() {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // Only follow new output while the user is at the bottom; reading earlier
+    // messages pauses auto-scroll until they scroll back or tap the arrow.
+    if (!stickToBottomRef.current) return;
     const frame = requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "auto" : "smooth" }));
     return () => cancelAnimationFrame(frame);
   }, [messages, isStreaming]);
@@ -1260,7 +1265,7 @@ function ProjectEditor() {
     const atts = attachments;
     setInput("");
     setAttachments([]);
-    setNextBuildPrompt(null);
+    setNextBuildPrompts([]);
 
     // Busy or paused: never drop the message and never interrupt the current
     // build — line it up and send it the moment Forge is free again.
@@ -1684,7 +1689,33 @@ function ProjectEditor() {
       <div className="flex-1 min-h-0 flex flex-col">
         {tab === "chat" && (
           <div className="flex-1 min-h-0 flex flex-col">
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            <div className="relative flex-1 min-h-0 flex flex-col">
+            {showJumpDown && (
+              <button
+                type="button"
+                aria-label="Jump to latest message"
+                onClick={() => {
+                  stickToBottomRef.current = true;
+                  setShowJumpDown(false);
+                  scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+                }}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground shadow-lg hover:bg-muted"
+              >
+                ↓ {isBusy ? "Latest progress" : "Jump to latest"}
+              </button>
+            )}
+            <div
+              ref={scrollRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+                if (stickToBottomRef.current !== atBottom) {
+                  stickToBottomRef.current = atBottom;
+                  setShowJumpDown(!atBottom);
+                }
+              }}
+              className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+            >
               {chatReady && messages.length === 0 && (
                 <div className="text-center py-12 space-y-3">
                   <ForgeMark className="h-14 w-14 mx-auto" glow />
@@ -2038,19 +2069,23 @@ function ProjectEditor() {
                   Continue where you left off{lastProgress.lastRequest ? ` — "${lastProgress.lastRequest.slice(0, 80)}"` : ""}
                 </button>
               ) : null}
-              {nextBuildPrompt && !isStreaming ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInput(nextBuildPrompt);
-                    setNextBuildPrompt(null);
-                    inputRef.current?.focus();
-                  }}
-                  className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left text-sm text-primary hover:bg-primary/10 transition-colors"
-                >
-                  <span className="block text-[10px] uppercase text-muted-foreground mb-1">Continue building</span>
-                  {nextBuildPrompt}
-                </button>
+              {nextBuildPrompts.length > 0 && !isBusy ? (
+                <div className="flex flex-wrap gap-2">
+                  {nextBuildPrompts.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => {
+                        setInput(chip);
+                        setNextBuildPrompts([]);
+                        inputRef.current?.focus();
+                      }}
+                      className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
               ) : null}
               {(() => {
                 const last = [...messages].reverse().find((message) => message.role === "assistant");
@@ -2087,6 +2122,7 @@ function ProjectEditor() {
                   </div>
                 );
               })()}
+            </div>
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {switchCountdown !== null ? (
