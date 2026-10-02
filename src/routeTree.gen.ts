@@ -12,12 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
@@ -52,11 +55,22 @@ const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
   path: '/forge-sdk.js',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -80,6 +94,11 @@ const ShareTokenRoute = ShareTokenRouteImport.update({
 const TransfersTokenRoute = TransfersTokenRouteImport.update({
   id: '/transfers/$token',
   path: '/transfers/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAccountBillingRoute =
@@ -190,11 +209,14 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
+  '/mcp': typeof McpRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
@@ -218,12 +240,15 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
+  '/mcp': typeof McpRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
@@ -249,12 +274,15 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
+  '/mcp': typeof McpRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
   '/_authenticated/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
@@ -281,11 +309,14 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/forge-sdk.js'
+    | '/mcp'
     | '/templates'
+    | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
+    | '/.lovable/oauth/consent'
     | '/account/billing'
     | '/admin/backend'
     | '/admin/domains'
@@ -309,12 +340,15 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/forge-sdk.js'
+    | '/mcp'
     | '/templates'
+    | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/'
+    | '/.lovable/oauth/consent'
     | '/account/billing'
     | '/admin/backend'
     | '/admin/domains'
@@ -339,12 +373,15 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/forge-sdk.js'
+    | '/mcp'
     | '/templates'
+    | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/_authenticated/'
+    | '/.lovable/oauth/consent'
     | '/_authenticated/account/billing'
     | '/_authenticated/admin/backend'
     | '/_authenticated/admin/domains'
@@ -370,11 +407,14 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
+  McpRoute: typeof McpRoute
   TemplatesRoute: typeof TemplatesRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   LiveProjectIdRoute: typeof LiveProjectIdRoute
   SSlugRoute: typeof SSlugRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicAssetIdRoute: typeof ApiPublicAssetIdRoute
@@ -410,11 +450,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgeSdkDotjsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/templates': {
       id: '/templates'
       path: '/templates'
       fullPath: '/templates'
       preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -450,6 +504,13 @@ declare module '@tanstack/react-router' {
       path: '/transfers/$token'
       fullPath: '/transfers/$token'
       preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/account/billing': {
@@ -633,11 +694,15 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
+  McpRoute: McpRoute,
   TemplatesRoute: TemplatesRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   LiveProjectIdRoute: LiveProjectIdRoute,
   SSlugRoute: SSlugRoute,
   ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicAssetIdRoute: ApiPublicAssetIdRoute,
