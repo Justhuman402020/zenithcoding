@@ -1265,7 +1265,7 @@ function ProjectEditor() {
     const atts = attachments;
     setInput("");
     setAttachments([]);
-    setNextBuildPrompt(null);
+    setNextBuildPrompts([]);
 
     // Busy or paused: never drop the message and never interrupt the current
     // build — line it up and send it the moment Forge is free again.
