@@ -462,8 +462,31 @@ export const Route = createFileRoute("/api/public/chat")({
         const sharedContext = workLog.length
           ? `\n\nWork already done earlier in this chat (most recent last; previous models may have made these changes — read files before editing, do not redo finished work):\n${workLog.slice(-40).join("\n")}`
           : "";
+        // Named asset library: the agent maps "@handle" to the exact URL.
+        const { data: assetRows } = await supabaseAdmin
+          .from("project_assets")
+          .select("handle, url, content_type")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+          .limit(60);
+        const assetContext = assetRows?.length
+          ? `\n\n## Named assets (use these EXACT URLs when the user mentions @name)\n${assetRows
+              .map((a) => `- @${a.handle} (${a.content_type?.startsWith("video/") ? "video" : "image"}): ${a.url}`)
+              .join("\n")}\nImages go in <img src>, videos in <video src controls playsinline>. Never invent or alter these URLs.`
+          : "";
+        // Website cloner: compact blueprint of a linked site.
+        const { detectCloneUrl, buildSiteBlueprint } = await import("@/lib/site-cloner.server");
+        const cloneUrl = detectCloneUrl(lastUserText);
+        const blueprint = cloneUrl ? await buildSiteBlueprint(cloneUrl) : null;
+        if (cloneUrl) trace.log("clone.blueprint", { detail: { url: cloneUrl, ok: Boolean(blueprint) } });
+        const cloneContext = blueprint
+          ? `\n\n## Design blueprint of the site to replicate\n${blueprint}\nBuild a responsive page matching this layout, colors, navigation and text. Write original code; use the listed image URLs where fitting.`
+          : cloneUrl
+            ? `\n\nThe user linked ${cloneUrl} to replicate, but it could not be fetched. Build your best matching page and say in one line that the site couldn't be read.`
+            : "";
         const systemPrompt =
-          (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) + sharedContext;
+          (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
+          sharedContext + assetContext + cloneContext;
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];
