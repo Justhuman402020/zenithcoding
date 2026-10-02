@@ -22,7 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { SecretRequestCard } from "@/components/SecretRequestCard";
+import { SecretRequestCard, hasWaitingSecretCard, openWaitingSecretCards } from "@/components/SecretRequestCard";
 import { listProjectSecrets } from "@/lib/project-secrets.functions";
 import {
   ArrowLeft,
@@ -813,30 +813,12 @@ function ProjectEditor() {
     return null;
   }, [messages]);
 
-  // Never-break engine: when the preview throws, automatically ask the agent to
-  // fix it. Each distinct error gets at most 2 automatic attempts, so a fix that
-  // doesn't work can never loop forever; after that the manual "Fix it" card stays.
+  // Preview errors are never fixed automatically; the user taps "Fix this error".
   const autoFixAttemptsRef = useRef<Map<string, number>>(new Map());
+  const [fixSending, setFixSending] = useState(false);
   useEffect(() => {
-    if (!previewError || isBusy || !isOnline) return;
-    const signature = previewError.split("\n")[0].slice(0, 200);
-    const attempts = autoFixAttemptsRef.current.get(signature) ?? 0;
-    if (attempts >= 2) return;
-    const timer = setTimeout(() => {
-      autoFixAttemptsRef.current.set(signature, attempts + 1);
-      const err = buildErrorReport(previewError);
-      setPreviewError(null);
-      setMode("build");
-      modeRef.current = "build";
-      requestKeyRef.current = crypto.randomUUID();
-      toast.info("Preview error found — fixing it automatically");
-      void sendMessage({
-        text: `Auto-fix (attempt ${attempts + 1}/2): the live preview crashed with this runtime error. Use the exact message, line number, code excerpt and stack below — do not guess. Open the file that contains that code, fix the root cause with a minimal change, and keep everything else as is:\n\n${err}`,
-      });
-    }, 2500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewError, isBusy, isOnline]);
+    if (!isBusy) setFixSending(false);
+  }, [isBusy]);
   const stopJobs = useStopServerFn(stopChatJobs);
   // Count 0 → 5, then continue the unfinished job on the next working model.
   useEffect(() => {
@@ -1246,6 +1228,11 @@ function ProjectEditor() {
     if (!navigator.onLine) {
       setIsOnline(false);
       toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
+      return;
+    }
+    if (/^\s*i\s+have\s+(it|the\s+key)(\s+(now|ready))?\W*$/i.test(text) && hasWaitingSecretCard()) {
+      openWaitingSecretCards();
+      setInput("");
       return;
     }
     const pasted = detectPastedApiKey(text);
@@ -1931,6 +1918,15 @@ function ProjectEditor() {
                               secretKey={out.key}
                               reason={out.reason}
                               whereToGet={out.where_to_get}
+                              onSaved={(key) => {
+                                setSavedSecretKeys((prev) =>
+                                  prev.includes(key.toUpperCase()) ? prev : [...prev, key.toUpperCase()],
+                                );
+                                if (!isBusy) {
+                                  requestKeyRef.current = crypto.randomUUID();
+                                  void sendMessage({ text: `${key} is saved now. Continue the task from exactly where you stopped — do not restart finished work.` });
+                                }
+                              }}
                             />
                           );
                         })}
@@ -2031,7 +2027,10 @@ function ProjectEditor() {
                       type="button"
                       size="sm"
                       className="flex-1 bg-gold-gradient text-primary-foreground"
+                      disabled={fixSending}
                       onClick={async () => {
+                        if (fixSending) return;
+                        setFixSending(true);
                         const err = buildErrorReport(previewError);
                         setPreviewError(null);
                         setMode("build");
@@ -2040,7 +2039,7 @@ function ProjectEditor() {
                         await sendMessage({ text: `Fix this error in the preview. Use the exact message, line number, code excerpt and stack below instead of guessing, then fix the root cause:\n\n${err}` });
                       }}
                     >
-                      Fix it
+                      {fixSending ? "Fixing…" : "🛠️ Fix this error"}
                     </Button>
                     <Button type="button" size="sm" variant="ghost" onClick={() => setPreviewError(null)}>
                       Dismiss

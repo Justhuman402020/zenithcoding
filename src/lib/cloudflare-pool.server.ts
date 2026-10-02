@@ -4,6 +4,8 @@
 
 export const NEURONS_PER_KEY = 10_000;
 export const MAX_POOL_KEYS = 100;
+/** Hand off to the next key at 9,000 so every key keeps a 1,000 Neuron reserve. */
+export const SOFT_CAP_NEURONS = 9_000;
 export const CLOUDFLARE_CODING_MODEL = "@cf/qwen/qwen3.8-27b";
 const CF_RE = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i;
 
@@ -93,7 +95,7 @@ export async function loadCloudflarePool(): Promise<PoolKey[]> {
     const used = realUsed ?? Number(u?.neurons_used ?? 0);
     // A 429 from Cloudflare is the truth even if analytics lag behind.
     const remaining = u?.exhausted ? 0 : Math.max(0, NEURONS_PER_KEY - used);
-    let status: PoolKey["status"] = remaining <= 0 ? "exhausted" : "waiting";
+    let status: PoolKey["status"] = remaining <= 0 || used >= SOFT_CAP_NEURONS ? "exhausted" : "waiting";
     if (status === "waiting" && !activeSet) {
       status = "active";
       activeSet = true;
