@@ -245,7 +245,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // manually picked model is used exactly as chosen — never rerouted to Qwen.
         if (editorAuto) {
           const { loadCloudflarePool, CLOUDFLARE_CODING_MODEL } = await import("@/lib/cloudflare-pool.server");
-          const pool = (await loadCloudflarePool()).filter((k) => k.remaining > 0 && providerKeys[k.id]);
+          const pool = (await loadCloudflarePool()).filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
           if (pool.length) {
             const poolRefs = pool.map((k) => ({ provider: k.id, model: CLOUDFLARE_CODING_MODEL }));
             const poolIds = new Set(pool.map((k) => k.id));
@@ -495,7 +495,17 @@ export const Route = createFileRoute("/api/public/chat")({
         let current: Pick = pick;
         const tried = new Set<string>([`${pick.ref.provider}:${pick.ref.model}`]);
 
-        const runJob = async (writer?: { merge: (s: ReadableStream<any>) => void; write: (c: any) => void }) => {
+        // Browser disconnects must never cost a key or switch models: writes to a
+        // closed stream are swallowed and the job keeps running here.
+        const safeWriter = (w?: { merge: (s: ReadableStream<any>) => void; write: (c: any) => void }) =>
+          w && {
+            merge: (st: ReadableStream<any>) => { try { w.merge(st); } catch { /* browser gone */ } },
+            write: (c: any) => { try { w.write(c); } catch { /* browser gone */ } },
+          };
+        const isClientDrop = (msg: string) => /client (closed|disconnect)|ResponseAborted|BodyStreamBuffer|socket hang up|premature close/i.test(msg);
+        let clientDropRetries = 0;
+        const runJob = async (rawWriter?: { merge: (s: ReadableStream<any>) => void; write: (c: any) => void }) => {
+          const writer = safeWriter(rawWriter);
           let finalReason: string | undefined;
           let lastError: string | null = null;
 
@@ -506,6 +516,19 @@ export const Route = createFileRoute("/api/public/chat")({
             const attemptAbort = new AbortController();
             currentAbort = attemptAbort;
             let timedOut = false;
+            let handoff = false;
+            let attemptNeurons = 0;
+            let baseNeurons = 0;
+            const cfPool = isCf ? await import("@/lib/cloudflare-pool.server") : null;
+            if (cfPool) {
+              const { data: u } = await supabaseAdmin
+                .from("cloudflare_neuron_usage" as any)
+                .select("neurons_used")
+                .eq("provider_id", current.ref.provider)
+                .eq("day", cfPool.utcDay())
+                .maybeSingle();
+              baseNeurons = Number((u as any)?.neurons_used ?? 0);
+            }
             let failure: string | null = null;
             let finished = false;
             let attemptSteps: any[] = [];
@@ -541,6 +564,14 @@ export const Route = createFileRoute("/api/public/chat")({
                   last = `${name.replace(/_/g, " ")}${typeof path === "string" ? ` ${path}` : ""}`;
                   recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
                 }
+                if (cfPool) {
+                  attemptNeurons += cfPool.estimateNeurons(step?.usage?.inputTokens, step?.usage?.outputTokens);
+                  // 9k soft cap: hand off early and keep a 1,000 Neuron reserve on this key.
+                  if (autoFallback && editorAuto && baseNeurons + attemptNeurons >= cfPool.SOFT_CAP_NEURONS) {
+                    handoff = true;
+                    attemptAbort.abort();
+                  }
+                }
                 if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
                 setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed`);
               },
@@ -561,10 +592,7 @@ export const Route = createFileRoute("/api/public/chat")({
               onFinish: async ({ finishReason, usage }) => {
                 finished = true;
                 finalReason = finishReason;
-                if (isCf) {
-                  const cfPool = await import("@/lib/cloudflare-pool.server");
-                  await cfPool.addNeurons(current.ref.provider, cfPool.estimateNeurons(usage?.inputTokens, usage?.outputTokens));
-                }
+                if (cfPool) await cfPool.addNeurons(current.ref.provider, cfPool.estimateNeurons(usage?.inputTokens, usage?.outputTokens));
                 trace.log("stream.finish", { detail: { finishReason, inputTokens: usage?.inputTokens ?? null, outputTokens: usage?.outputTokens ?? null } });
               },
               onError: ({ error }) => {
@@ -582,16 +610,35 @@ export const Route = createFileRoute("/api/public/chat")({
             await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });
             if (watchdog) clearTimeout(watchdog);
 
-            const success = finished && !failure && !timedOut;
+            if (handoff && cfPool) {
+              // Twin handoff: save usage, reserve the key, pass a compact note to the next key.
+              await cfPool.addNeurons(current.ref.provider, attemptNeurons);
+              await cfPool.markExhausted(current.ref.provider);
+              if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+              carried.push({
+                role: "user",
+                content: `Handoff note (previous key reached its 9,000 Neuron soft cap): ${stepNo} step(s) done; files changed: ${[...progressModel.files].slice(-20).join(", ") || "none"}; last action: ${progressText}. Continue the same task from here — do not redo finished work.`,
+              });
+              trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
+              failure = null;
+            }
+            const success = finished && !failure && !timedOut && !handoff;
             // An empty stream with no output counts as a failure too.
             if (success && (stepNo > 0 || replyTexts.length)) break;
             if (userStopped) break;
-            lastError = failure ?? (timedOut ? "Timed out" : "The model returned nothing");
+            lastError = handoff ? "Soft cap handoff" : failure ?? (timedOut ? "Timed out" : "The model returned nothing");
+            // A dropped browser connection is not the key's fault: retry the same key.
+            if (!handoff && !timedOut && failure && isClientDrop(failure) && clientDropRetries < 3) {
+              clientDropRetries += 1;
+              if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+              lastError = null;
+              continue;
+            }
 
             // Keep the finished steps so the next key continues where this stopped.
             if (attemptSteps.length) carried = [...carried, ...attemptSteps];
-            await recordModelStatus(current.ref, isCf || /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
-            if (isCf && /429|rate.?limit|quota|neuron|too many requests|daily|exhaust/i.test(lastError)) {
+            if (!handoff) await recordModelStatus(current.ref, isCf || /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
+            if (!handoff && isCf && /429|rate.?limit|quota|neuron|too many requests|daily|exhaust/i.test(lastError)) {
               const { markExhausted } = await import("@/lib/cloudflare-pool.server");
               await markExhausted(current.ref.provider);
             }
