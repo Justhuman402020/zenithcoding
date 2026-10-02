@@ -96,7 +96,8 @@ export default {
       const custom = await serveCustomDomain(request).catch(() => null);
       if (custom) return custom;
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      const { requestCtx } = await import("./lib/wait-until.server");
+      const response = await requestCtx.run(ctx as never, () => handler.fetch(request, env, ctx));
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

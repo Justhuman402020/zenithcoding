@@ -997,7 +997,7 @@ function ProjectEditor() {
       }
     };
     void recover();
-    const timer = window.setInterval(() => void recover(), 2500);
+    const timer = window.setInterval(() => void recover(), 1500);
     const onBack = () => void recover();
     window.addEventListener("online", onBack);
     return () => {

@@ -712,6 +712,7 @@ export const Route = createFileRoute("/api/public/chat")({
           await trace.flush();
         };
 
+        const { keepAlive } = await import("@/lib/wait-until.server");
         const stream = createUIMessageStream({
           originalMessages: body.messages,
           execute: async ({ writer }) => {
@@ -719,7 +720,12 @@ export const Route = createFileRoute("/api/public/chat")({
               type: "message-metadata",
               messageMetadata: { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}` },
             });
-            await runJob(writer as any);
+            // The job is detached from the browser response: a dropped or
+            // aborted connection never stops it, and the worker is kept alive
+            // until every step and file write has finished.
+            const job = runJob(writer as any);
+            keepAlive(job);
+            await job;
           },
           onError: (error) => errText(error) || "The AI build failed before it could write files.",
         });
