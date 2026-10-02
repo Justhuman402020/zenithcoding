@@ -2123,6 +2123,7 @@ function ProjectEditor() {
                 );
               })()}
             </div>
+            </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
               {switchCountdown !== null ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
