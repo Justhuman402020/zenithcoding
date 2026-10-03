@@ -634,12 +634,13 @@ export const Route = createFileRoute("/api/public/chat")({
 
             if (handoff && cfPool) {
               // Twin handoff: save usage, reserve the key, pass a compact note to the next key.
-              await cfPool.addNeurons(current.ref.provider, attemptNeurons);
+              // onFinish already recorded this attempt's Neurons when the step ended cleanly.
+              if (!finished) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
               await cfPool.markExhausted(current.ref.provider);
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
               carried.push({
                 role: "user",
-                content: `Handoff note (previous key reached its 9,000 Neuron soft cap): ${stepNo} step(s) done; files changed: ${[...progressModel.files].slice(-20).join(", ") || "none"}; last action: ${progressText}. Continue the same task from here — do not redo finished work.`,
+                content: `Handoff note (previous key reached its 9,000 Neuron soft cap after a completed step). Finished: ${stepNo} step(s). Files already written (trust them — do NOT re-read or rewrite): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Last completed action: ${progressText}. Next: do the next remaining step of the original request only.`,
               });
               trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
               failure = null;
