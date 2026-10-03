@@ -1,17 +1,21 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   addProviderKey,
+  getAiGateway,
   getModelBoard,
   removeProviderKey,
+  saveAiGateway,
   setActiveModel,
   setAutoFallback,
+  testAiGateway,
   testProviderConnection,
 } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
+import { CloudflarePoolPanel, NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -19,6 +23,7 @@ import {
   Loader2,
   ShieldAlert,
   CheckCircle2,
+  Globe,
   KeyRound,
   PlusCircle,
   Trash2,
@@ -40,7 +45,7 @@ export const Route = createFileRoute("/_authenticated/admin/models")({
   component: AdminModelsPage,
   errorComponent: ({ error }) => (
     <div className="p-8 text-sm text-destructive flex items-center gap-2">
-      <ShieldAlert className="h-4 w-4" /> {error.message}
+      <ShieldAlert className="h-4 w-4" /> {(error as Error).message}
     </div>
   ),
 });
@@ -64,16 +69,29 @@ function AdminModelsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const PROVIDER_PRESETS = [
+  const CF_BASE = (id: string) => `https://api.cloudflare.com/client/v4/accounts/${id}/ai/v1`;
+  const PROVIDER_PRESETS: Array<{ label: string; baseUrl: string; tokenLabel?: string }> = [
     { label: "Hugging Face", baseUrl: "https://router.huggingface.co/v1" },
+    { label: "GitHub Models", baseUrl: "https://models.github.ai/inference", tokenLabel: "GitHub access token" },
     { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
     { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
     { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
     { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
-    { label: "TokenLLM7.io", baseUrl: "https://api.tokenllm7.io/v1" },
+    { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
+    { label: "DeepInfra", baseUrl: "https://api.deepinfra.com/v1/openai" },
+    { label: "LLM7", baseUrl: "https://api.llm7.io/v1" },
+    {
+      label: "Alibaba Cloud Model Studio",
+      baseUrl: "https://ws-w68rj1chv3ty9eac.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      tokenLabel: "Alibaba Model Studio API key",
+    },
+    { label: "Cloudflare Workers AI", baseUrl: CF_BASE("ACCOUNT_ID"), tokenLabel: "Cloudflare API token" },
   ];
   const [form, setForm] = useState({ label: PROVIDER_PRESETS[0].label, baseUrl: PROVIDER_PRESETS[0].baseUrl, apiKey: "" });
+  const [cfAccount, setCfAccount] = useState("");
   const selectedProvider = PROVIDER_PRESETS.find((provider) => provider.label === form.label) ?? PROVIDER_PRESETS[0];
+  const isCloudflare = form.label === "Cloudflare Workers AI";
+  const keyTooShort = form.apiKey.trim().length < 8 || (isCloudflare && cfAccount.trim().length < 16);
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
@@ -82,6 +100,55 @@ function AdminModelsPage() {
   const testKey = useServerFn(testProviderConnection);
   const addKey = useServerFn(addProviderKey);
   const removeKey = useServerFn(removeProviderKey);
+  const loadGateway = useServerFn(getAiGateway);
+  const saveGateway = useServerFn(saveAiGateway);
+  const testGateway = useServerFn(testAiGateway);
+
+  const DEFAULT_GATEWAY_URL =
+    "https://gateway.ai.cloudflare.com/v1/d51370edd74081c6688d32ae7de5d8a7/code-haven";
+  const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY_URL);
+  const [gatewayEnabled, setGatewayEnabled] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState<"test" | "save" | null>(null);
+  const [gatewayResult, setGatewayResult] = useState<string | null>(null);
+
+  const gatewayQuery = useQuery({
+    queryKey: ["admin", "ai-gateway"],
+    queryFn: () => loadGateway({}),
+  });
+  const gatewayLoaded = useRef(false);
+  useEffect(() => {
+    if (gatewayLoaded.current || !gatewayQuery.data) return;
+    gatewayLoaded.current = true;
+    setGatewayUrl(gatewayQuery.data.url ?? DEFAULT_GATEWAY_URL);
+    setGatewayEnabled(gatewayQuery.data.enabled);
+  }, [gatewayQuery.data]);
+
+  async function onTestGateway() {
+    setGatewayBusy("test");
+    setGatewayResult(null);
+    try {
+      const res = await testGateway({ data: { url: gatewayUrl } });
+      setGatewayResult(res.ok ? `Reachable — it answered (status ${res.status})` : `Not reachable — ${res.error}`);
+    } catch (e) {
+      setGatewayResult(e instanceof Error ? e.message : "Could not test that address");
+    } finally {
+      setGatewayBusy(null);
+    }
+  }
+
+  async function onSaveGateway() {
+    setGatewayBusy("save");
+    try {
+      await saveGateway({ data: { url: gatewayUrl, enabled: gatewayEnabled } });
+      toast.success(gatewayUrl.trim() ? "Gateway saved" : "Gateway cleared");
+      gatewayQuery.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save the gateway");
+    } finally {
+      setGatewayBusy(null);
+    }
+  }
+
 
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
@@ -107,7 +174,7 @@ function AdminModelsPage() {
     try {
       const res = await addKey({ data: form });
       toast.success(`Saved — ${res.modelCount} models added`);
-      setForm({ label: selectedProvider.label, baseUrl: selectedProvider.baseUrl, apiKey: "" });
+      setForm({ label: selectedProvider.label, baseUrl: isCloudflare ? form.baseUrl : selectedProvider.baseUrl, apiKey: "" });
       setTestResult(null);
       refetch();
     } catch (e) {
@@ -167,6 +234,9 @@ function AdminModelsPage() {
         <ArrowLeft className="h-3 w-3" /> Back to admin
       </button>
 
+      <NeuronsBar />
+      <CloudflarePoolPanel />
+
       <div className="flex items-start gap-3">
         <Cpu className="h-6 w-6 text-primary mt-1" />
         <div className="flex-1">
@@ -198,6 +268,56 @@ function AdminModelsPage() {
       <div className="rounded-xl border p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" />
+            <div className="font-medium text-sm">AI Gateway &amp; Proxy URL</div>
+          </div>
+          <Button
+            variant={gatewayEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => setGatewayEnabled(!gatewayEnabled)}
+          >
+            {gatewayEnabled ? "Enabled" : "Disabled"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When enabled, requests to your providers (OpenRouter, Groq and the rest) go through this gateway address
+          first. Turn it off or clear the box to talk to each provider directly.
+        </p>
+        <Input
+          value={gatewayUrl}
+          onChange={(e) => setGatewayUrl(e.target.value)}
+          placeholder="https://gateway.ai.cloudflare.com/v1/…"
+          aria-label="AI Gateway URL"
+        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onTestGateway}
+            disabled={gatewayBusy !== null || gatewayUrl.trim().length < 8}
+          >
+            {gatewayBusy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test Gateway"}
+          </Button>
+          <Button size="sm" onClick={onSaveGateway} disabled={gatewayBusy !== null}>
+            {gatewayBusy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setGatewayUrl("");
+              setGatewayEnabled(false);
+            }}
+          >
+            Clear
+          </Button>
+          {gatewayResult ? <span className="text-xs text-muted-foreground">{gatewayResult}</span> : null}
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
             <PlusCircle className="h-4 w-4 text-primary" />
             <div className="font-medium text-sm">Connect a provider</div>
           </div>
@@ -219,14 +339,44 @@ function AdminModelsPage() {
           >
             {PROVIDER_PRESETS.map((preset) => <option key={preset.label}>{preset.label}</option>)}
           </select>
-          <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
-          <Input placeholder="Paste API key" type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+          {isCloudflare ? (
+            <Input
+              placeholder="Cloudflare Account ID"
+              value={cfAccount}
+              onChange={(e) => {
+                const id = e.target.value.trim();
+                setCfAccount(id);
+                setForm({ ...form, baseUrl: CF_BASE(id || "ACCOUNT_ID") });
+              }}
+              aria-label="Cloudflare Account ID"
+            />
+          ) : (
+            <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
+          )}
+          <Input
+            placeholder={selectedProvider.tokenLabel ?? "Paste API key"}
+            type="password"
+            value={form.apiKey}
+            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            aria-label={selectedProvider.tokenLabel ?? "API key"}
+          />
         </div>
+        {isCloudflare ? (
+          <p className="text-xs text-muted-foreground">
+            Paste your Account ID and an API token (the one starting with cfat_) that has the{" "}
+            <span className="font-medium">Workers AI Read</span> permission. Add as many Cloudflare accounts as you like.
+          </p>
+        ) : selectedProvider.tokenLabel ? (
+          <p className="text-xs text-muted-foreground">
+            GitHub uses a personal access token, not an API key. Create one at github.com/settings/personal-access-tokens
+            and give it the <span className="font-medium">Models: read</span> permission.
+          </p>
+        ) : null}
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || form.apiKey.trim().length < 8}>
+          <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || keyTooShort}>
             {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={busy !== null || form.apiKey.trim().length < 8}>
+          <Button size="sm" onClick={onSave} disabled={busy !== null || keyTooShort}>
             {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
           </Button>
           {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}

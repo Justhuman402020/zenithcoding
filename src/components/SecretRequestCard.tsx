@@ -14,6 +14,11 @@ type Props = {
   onSaved?: (key: string) => void;
 };
 
+/** Cards still waiting for the user to say "I have the key ready". */
+const waiting = new Set<string>();
+export const hasWaitingSecretCard = () => waiting.size > 0;
+export const openWaitingSecretCards = () => window.dispatchEvent(new Event("forge:secret-ready"));
+
 type TestState = { status: "idle" | "testing" | "ok" | "failed"; message?: string };
 
 /**
@@ -26,6 +31,18 @@ export function SecretRequestCard({ projectId, secretKey, reason, whereToGet, in
   const [saved, setSaved] = useState(false);
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const queryClient = useQueryClient();
+  const [ready, setReady] = useState(Boolean(initialValue));
+  useEffect(() => {
+    if (ready || saved) return;
+    const id = `${secretKey}-${Math.random()}`;
+    waiting.add(id);
+    const open = () => setReady(true);
+    window.addEventListener("forge:secret-ready", open);
+    return () => {
+      waiting.delete(id);
+      window.removeEventListener("forge:secret-ready", open);
+    };
+  }, [ready, saved, secretKey]);
 
   useEffect(() => {
     if (initialValue) setValue(initialValue);
@@ -105,6 +122,28 @@ export function SecretRequestCard({ projectId, secretKey, reason, whereToGet, in
     );
   }
 
+
+  if (!ready) {
+    return (
+      <div className="rounded-xl hairline-gold bg-card/60 p-3 space-y-2.5">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <KeyRound className="h-4 w-4 text-primary shrink-0" />
+          This needs your {secretKey}
+        </div>
+        {reason && <p className="text-xs text-muted-foreground leading-relaxed">{reason}</p>}
+        {whereToGet && (
+          <p className="text-xs text-muted-foreground/90 flex items-start gap-1.5">
+            <ExternalLink className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary/70" />
+            <span>How to get it: {whereToGet}</span>
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">When you have it, tap the button below or reply "I have it now".</p>
+        <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={() => setReady(true)}>
+          I have the key ready
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl hairline-gold bg-card/60 p-3 space-y-2.5">

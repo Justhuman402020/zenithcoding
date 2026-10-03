@@ -119,6 +119,38 @@ export type ModelPick =
   | { ok: true; ref: ModelRef; apiKey: string; baseURL: string }
   | { ok: false; error: string; status: number };
 
+export type AiGatewaySetting = { url: string | null; enabled: boolean };
+
+/** Reads the admin-configured AI Gateway / proxy setting. */
+export async function readAiGatewaySetting(): Promise<AiGatewaySetting> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("ai_gateway_settings")
+      .select("url, enabled")
+      .eq("id", "global")
+      .maybeSingle();
+    const url = (data?.url as string | null)?.trim() || null;
+    return { url, enabled: !!data?.enabled && !!url };
+  } catch {
+    return { url: null, enabled: false };
+  }
+}
+
+/**
+ * When a gateway is enabled, provider requests go through it instead of the
+ * provider's own address. Cloudflare AI Gateways are OpenAI-compatible and
+ * forward to the provider named in the path, e.g. `${gateway}/groq`.
+ */
+export function gatewayBaseURL(gateway: AiGatewaySetting, providerId: string, fallback: string): string {
+  if (!gateway.enabled || !gateway.url) return fallback;
+  const base = gateway.url.replace(/\/+$/, "");
+  // Custom providers point at their own server; only known hosted providers
+  // are routed through the gateway.
+  if (providerId.startsWith("custom-")) return fallback;
+  return `${base}/${providerId}`;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -156,6 +188,7 @@ export async function pickAvailableModel(
   chain: ModelRef[],
   keys: ProviderKeys,
   providers?: ProviderOption[],
+  gateway?: AiGatewaySetting,
 ): Promise<ModelPick> {
   let rateLimited = false;
   let lastError: string | null = null;
@@ -167,12 +200,12 @@ export async function pickAvailableModel(
     const apiKey = keys[ref.provider];
     if (!provider || !apiKey) continue;
 
-
+    const baseURL = gateway ? gatewayBaseURL(gateway, ref.provider, provider.baseURL) : provider.baseURL;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response;
       try {
-        res = await fetch(`${provider.baseURL}/chat/completions`, {
+        res = await fetch(`${baseURL}/chat/completions`, {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model: ref.model, messages: [{ role: "user", content: "ping" }], max_tokens: 1 }),
@@ -186,7 +219,7 @@ export async function pickAvailableModel(
       const quota = readQuotaHeaders(res.headers);
       if (res.ok) {
         await recordModelStatus(ref, "ok", quota, null, true);
-        return { ok: true, ref, apiKey, baseURL: provider.baseURL };
+        return { ok: true, ref, apiKey, baseURL };
       }
 
       const text = await res.text().catch(() => "");
@@ -195,6 +228,13 @@ export async function pickAvailableModel(
       if (res.status === 429) {
         rateLimited = true;
         await recordModelStatus(ref, "rate_limited", quota, lastError);
+        // Cloudflare pool: a 429 means this key's Neurons are gone — go straight to the next key.
+        if (/api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(provider.baseURL)) {
+          const { markExhausted } = await import("./cloudflare-pool.server");
+          await markExhausted(ref.provider);
+          exhaustedProviders.add(ref.provider);
+          break;
+        }
         const retryAfter = Number(res.headers.get("retry-after") ?? "0");
         if (attempt === 0 && retryAfter > 0 && retryAfter <= 8) {
           await sleep(retryAfter * 1000);

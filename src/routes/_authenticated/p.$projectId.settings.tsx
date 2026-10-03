@@ -18,7 +18,7 @@ import { ArrowLeft, Loader2, Copy, X, Globe, ExternalLink, CheckCircle2 } from "
 export const Route = createFileRoute("/_authenticated/p/$projectId/settings")({
   head: () => ({ meta: [{ title: "Project settings — Forge" }] }),
   component: SettingsPage,
-  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{error.message}</div>,
+  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-8">Not found</div>,
 });
 
@@ -251,6 +251,6 @@ function normalizeSlug(s: string): string {
 }
 
 function suggestSlug(name: string, projectId: string): string {
-  const base = normalizeSlug(name).slice(0, 32);
-  return base.length >= 3 ? base : `site-${projectId.slice(0, 6)}`;
+  const base = normalizeSlug(name).slice(0, 32) || "site";
+  return base.length >= 3 ? `${base}-${projectId.slice(0, 5)}`.slice(0, 40) : `site-${projectId.slice(0, 6)}`;
 }

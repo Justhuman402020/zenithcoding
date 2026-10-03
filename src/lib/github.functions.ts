@@ -4,13 +4,26 @@ import { getRequest } from "@tanstack/react-start/server";
 import { currentOrigin, encodeReturnOrigin, getCanonicalCallbackUrl } from "@/lib/github-shared";
 import { cleanGithubPathPart, isCloseGithubProjectName, readGithubBlobBatch, readGithubRepoFiles, readGithubRepoTree } from "@/lib/github-import.server";
 import { z } from "zod";
+import { githubFetch } from "@/lib/github-shared";
+// Every GitHub request in this file carries the required User-Agent.
+const fetch = githubFetch;
+
+/** Admins can use the Personal Access Token saved in Admin → Integrations instead of GitHub sign-in. */
+async function adminGithubPat(context: { supabase: any; userId: string }): Promise<string | undefined> {
+  const { data: isAdmin } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+  if (!isAdmin) return undefined;
+  const { getIntegrationKey } = await import("./integration-keys.server");
+  return (await getIntegrationKey("github", "token")) ?? undefined;
+}
 
 export const getGithubAuthUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { origin?: string } | undefined) => input ?? {})
   .handler(async ({ context, data: input }) => {
     const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
-    if (!clientId) throw new Error("GitHub OAuth not configured");
+    if (!clientId) {
+      throw new Error("GitHub sign-in isn't set up on this site yet. Paste a GitHub Personal Access Token instead.");
+    }
     const { data, error } = await context.supabase
       .from("github_oauth_states" as any)
       .insert({ user_id: context.userId })
@@ -22,7 +35,7 @@ export const getGithubAuthUrl = createServerFn({ method: "POST" })
     const url = new URL("https://github.com/login/oauth/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", getCanonicalCallbackUrl());
-    url.searchParams.set("scope", "repo read:user");
+    url.searchParams.set("scope", "repo read:user read:org");
     url.searchParams.set("state", stateParam);
     return { url: url.toString() };
   });
@@ -46,10 +59,7 @@ export const getGithubStatus = createServerFn({ method: "GET" })
         "X-GitHub-Api-Version": "2022-11-28",
       },
     });
-    if (me.status === 401 || me.status === 403) {
-      await context.supabase.from("github_tokens" as any).delete().eq("user_id", context.userId);
-      return { connected: false, login: null, scope: null };
-    }
+    // Never delete the saved token here — a failed check may be temporary.
     const profile = me.ok ? await me.json().catch(() => null) : null;
     const login = typeof profile?.login === "string" ? profile.login : null;
     if (login) {
@@ -59,6 +69,41 @@ export const getGithubStatus = createServerFn({ method: "GET" })
         .eq("user_id", context.userId);
     }
     return { connected: true, login, scope: row.scope ?? null };
+  });
+
+export const connectGithubWithToken = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { token: string }) =>
+    z.object({ token: z.string().trim().min(10).max(500) }).parse(input),
+  )
+  .handler(async ({ context, data }) => {
+    const token = data.token.replace(/^bearer\s+/i, "").replace(/\s+/g, "");
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+    const me = await fetch("https://api.github.com/user", { headers });
+    if (me.status === 401) throw new Error("GitHub says this token is wrong or expired. Make a new one and paste it again.");
+    if (!me.ok) {
+      const body = await me.text().catch(() => "");
+      throw new Error(`GitHub didn't accept the token (${me.status}): ${body.slice(0, 200) || me.statusText}`);
+    }
+    const profile = (await me.json()) as any;
+    const scope = me.headers.get("x-oauth-scopes") ?? "";
+    const reposRes = await fetch("https://api.github.com/user/repos?per_page=1", { headers });
+    if (!reposRes.ok) {
+      throw new Error("The token works but can't read your repos. For a classic token, tick the \"repo\" box; for a fine-grained token, allow Contents: Read and write.");
+    }
+    const { error } = await context.supabase.from("github_tokens" as any).upsert({
+      user_id: context.userId,
+      access_token: token,
+      github_login: profile?.login ?? null,
+      scope: scope || "pat",
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return { connected: true, login: (profile?.login as string) ?? null };
   });
 
 export const disconnectGithub = createServerFn({ method: "POST" })
@@ -76,8 +121,8 @@ export const listGithubRepos = createServerFn({ method: "GET" })
       .select("access_token, scope")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
     const headers = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -104,22 +149,37 @@ export const listGithubRepos = createServerFn({ method: "GET" })
 
     const all: any[] = [];
     const seen = new Set<string>();
-    const sources = [
-      "https://api.github.com/user/repos?sort=updated&affiliation=owner,collaborator,organization_member",
-      "https://api.github.com/user/repos?sort=updated&type=all",
-    ];
-    for (const source of sources) {
-      const batch = await fetchRepoPages(source);
+    const add = (batch: any[]) => {
       for (const repo of batch) {
         if (!repo?.full_name || seen.has(repo.full_name)) continue;
         seen.add(repo.full_name);
         all.push(repo);
       }
+    };
+    try {
+      add(await fetchRepoPages("https://api.github.com/user/repos?sort=updated&affiliation=owner,collaborator,organization_member&visibility=all"));
+    } catch (e: any) {
+      if (/GitHub error 401/.test(String(e?.message))) {
+        throw new Error("Your GitHub sign-in expired. Press Disconnect, then Connect GitHub again.");
+      }
+      throw e;
     }
+    // Also list each organization's repos directly — some orgs only show up this way.
+    try {
+      const orgRes = await fetch("https://api.github.com/user/orgs?per_page=100", { headers });
+      const orgs = orgRes.ok ? ((await orgRes.json()) as any[]) : [];
+      for (const org of orgs) {
+        if (!org?.login) continue;
+        try {
+          add(await fetchRepoPages(`https://api.github.com/orgs/${encodeURIComponent(org.login)}/repos?type=all&sort=updated`));
+        } catch {}
+      }
+    } catch {}
 
     all.sort((a, b) => new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime());
 
-    if (all.length === 0 && !String((tok as any).scope ?? "").split(/[,\s]+/).includes("repo")) {
+    const scope = String((tok as any)?.scope ?? "");
+    if (all.length === 0 && tok && scope !== "pat" && !scope.split(/[,\s]+/).includes("repo")) {
       throw new Error("GitHub is connected without private repo access. Disconnect and connect again so Forge can request repo access.");
     }
 
@@ -312,8 +372,8 @@ export const listProjectGithubBranches = createServerFn({ method: "GET" })
       .select("access_token")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
     const l = link as any;
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -373,8 +433,8 @@ export const pushProjectToGithub = createServerFn({ method: "POST" })
       .select("access_token")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
 
     const { data: filesRows, error: filesErr } = await context.supabase
       .from("files" as any)
@@ -489,8 +549,8 @@ export const mirrorAllGithubRepos = createServerFn({ method: "POST" })
       .select("access_token, scope")
       .eq("user_id", context.userId)
       .maybeSingle();
-    if (!tok) throw new Error("Connect GitHub first");
-    const token = (tok as any).access_token as string;
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first");
     const headers = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -752,4 +812,29 @@ export const fetchGithubBlobBatch = createServerFn({ method: "POST" })
       .upsert(rows, { onConflict: "project_id,path" });
     if (error) throw new Error(error.message);
     return { saved: rows.length };
+  });
+// ============= One-click export: create a new repo and link it =============
+export const exportProjectToGithub = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ projectId: z.string().uuid(), repoName: z.string().min(1).max(100), isPrivate: z.boolean().default(true) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: proj } = await context.supabase.from("projects").select("id").eq("id", data.projectId).eq("user_id", context.userId).maybeSingle();
+    if (!proj) throw new Error("Project not found");
+    const { data: tok } = await context.supabase.from("github_tokens" as any).select("access_token").eq("user_id", context.userId).maybeSingle();
+    const token = ((tok as any)?.access_token as string | undefined) || (await adminGithubPat(context));
+    if (!token) throw new Error("Connect GitHub first (or save a GitHub token in Admin → Integrations).");
+    const name = data.repoName.trim().replace(/[^\w.-]+/g, "-").slice(0, 100);
+    const res = await fetch("https://api.github.com/user/repos", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", "User-Agent": "forge" },
+      body: JSON.stringify({ name, private: data.isPrivate, auto_init: true }),
+    });
+    if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 240)}`);
+    const repo = (await res.json()) as any;
+    const { error } = await context.supabase.from("project_github_links" as any).upsert(
+      { project_id: data.projectId, user_id: context.userId, owner: repo.owner.login, repo: repo.name, default_branch: repo.default_branch || "main" },
+      { onConflict: "project_id" },
+    );
+    if (error) throw new Error(error.message);
+    return { owner: repo.owner.login as string, repo: repo.name as string, url: repo.html_url as string };
   });

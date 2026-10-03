@@ -44,7 +44,7 @@ function isVisualPart(part: UIMessage["parts"][number]) {
  * replaying one old screenshot through a long conversation eventually makes
  * every later request fail even when the new turn is text-only.
  */
-export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIMessage[] {
+export function compactChatMessages(messages: UIMessage[], maxMessages = 10): UIMessage[] {
   let latestUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === "user") {
@@ -66,8 +66,15 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 6): UIM
       if (part.type === "text") {
         const text = part.text.trim();
         if (!text) continue;
-        const limit = isLatestUser ? 4_000 : 1_200;
-        parts.push({ ...part, text: text.slice(-limit) });
+        // Generous windows: 8k was small enough that real instructions and
+        // earlier answers lost their middle and the agent "forgot" the task.
+        const limit = isLatestUser ? 32_000 : 12_000;
+        const head = Math.floor(limit / 2);
+        const compacted =
+          text.length <= limit
+            ? text
+            : `${text.slice(0, head)}\n\n[Older middle content omitted to fit the model context.]\n\n${text.slice(-(limit - head - 58))}`;
+        parts.push({ ...part, text: compacted });
         continue;
       }
       if (isLatestUser && isVisualPart(part)) parts.push(part);
@@ -110,20 +117,99 @@ export function createPrepareStep(needsFileChange: boolean, trace?: TraceLogger)
       detail: { stepNumber, toolCalls: toolResults.length, hasListed, hasRead, hasMutation },
     });
 
-    if (!needsFileChange) return undefined;
-    // Only ever force list_files. Forcing a SPECIFIC later tool (read_file /
-    // write_file) hard-fails the whole stream when the model legitimately
-    // wants a different one ("tool call validation failed"), which is what cut
-    // replies off with no answer. "required" keeps the agent using tools until
-    // a write lands, but lets it pick which one.
-    if (stepNumber === 0 || !hasListed) return { toolChoice: { type: "tool" as const, toolName: "list_files" as ForcedTool } };
-    if (!hasMutation && stepNumber < 12) return { toolChoice: "required" as const };
+    // Never force a tool choice. Forcing ("required" or a named tool) made
+    // Qwen 3.8 on Cloudflare lock up or stream empty output, leaving jobs
+    // hanging. The system prompt already tells the agent to use tools.
+    void needsFileChange;
+    void ({} as ForcedTool | undefined);
     return undefined;
   };
 }
 
-export function buildSystemPrompt(projectName: string) {
-  return `You are Forge, an autonomous AI coding agent working on the user's project "${projectName}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
+export type ProjectBrief = {
+  description?: string | null;
+  /** The very first thing the user asked for — the project's reason to exist. */
+  originalGoal?: string | null;
+  /** Every file path currently in the project. */
+  filePaths?: string[];
+  /** Connected backend (signup/login/data) for this project, if any. */
+  backend?: { url: string; anonKey: string; hasServiceKey: boolean } | null;
+  /** Where the previous agent stopped. */
+  progress?: { status?: string; lastRequest?: string; lastReply?: string; error?: string | null; at?: string; model?: string; filesChanged?: string[] } | null;
+};
+
+/**
+ * A short, always-present briefing so a fresh model (or a different provider
+ * picked by the fallback chain) starts the turn knowing what this project IS.
+ * Without it, a new agent reads one file and "fixes" the site into something
+ * unrelated to what the user is building.
+ */
+export function buildProjectContext(projectName: string, brief?: ProjectBrief) {
+  const lines = [`- Project name: ${projectName}`];
+  if (brief?.description?.trim()) lines.push(`- What it is: ${brief.description.trim().slice(0, 600)}`);
+  if (brief?.originalGoal?.trim())
+    lines.push(`- The user's original request that started this project: "${brief.originalGoal.trim().slice(0, 600)}"`);
+  const paths = brief?.filePaths ?? [];
+  if (paths.length) {
+    lines.push(`- Existing files (${paths.length}): ${paths.slice(0, 60).join(", ")}${paths.length > 60 ? ", …" : ""}`);
+  } else {
+    lines.push("- Existing files: none yet (this is a fresh project).");
+  }
+  const b = brief?.backend;
+  const backendBlock = b
+    ? `\n\n## Connected backend (use it for ALL signup, login, admin and saved data)
+This project is already connected to its own backend. NEVER ask the user for backend details or keys — they are saved.
+- Address: ${b.url}
+- Public key: ${b.anonKey}
+- In the site, load \`<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\` and create the client with \`supabase.createClient(window.FORGE_SUPABASE.url, window.FORGE_SUPABASE.anonKey)\` (window.FORGE_SUPABASE is injected on the live site; fall back to the literal address/key above in code).
+- Use \`client.auth.signUp / signInWithPassword / signOut / getUser\` for registration and login, and \`client.from('<table>')\` for data. Admin areas check a role stored in a separate roles table.
+- Do NOT use Forge.auth / Forge.db when this backend is connected.`
+    : "";
+  const p = brief?.progress;
+  const progressBlock = p && (p.lastRequest || p.error)
+    ? `\n\n## Where the last session stopped
+- Status: ${p.status ?? "unknown"}${p.at ? ` (${p.at})` : ""}
+${p.model ? `- Agent/model that was working: ${p.model}\n` : ""}- Last request: ${(p.lastRequest ?? "").slice(0, 400)}
+${p.filesChanged?.length ? `- Files it already changed: ${p.filesChanged.slice(0, 30).join(", ")}\n` : ""}${p.lastReply ? `- Last reply summary: ${p.lastReply.slice(0, 500)}\n` : ""}${p.error ? `- It failed with: ${p.error.slice(0, 400)}\n` : ""}If the user says "continue", "finish" or "fix it", pick up exactly from here instead of starting over. This may have been a different agent/model — trust its saved work, check those files, and only do what's left.`
+    : "";
+  return `## What this project is (read this before doing anything)
+${lines.join("\n")}${backendBlock}${progressBlock}
+
+This briefing is the source of truth for the project's purpose. Every change must serve it.
+- Never replace, reset, or "start over" an existing project with a generic template, demo page, or unrelated content — extend what is already there.
+- Keep the existing stack, styling, page structure, and content unless the user explicitly asks you to change them.
+- If a request seems to contradict the project's purpose, make the smallest change that satisfies it and say in one line what you kept intact.
+- If files already exist, read the relevant ones before writing and preserve everything you are not deliberately changing.`;
+}
+
+/**
+ * "Plan" mode: think first, ask the user what is unclear, and propose a plan.
+ * No files are written in this mode — the user approves, then Build mode runs.
+ */
+export function buildPlanSystemPrompt(projectName: string, brief?: ProjectBrief) {
+  return `${buildProjectContext(projectName, brief)}
+
+You are Forge in PLAN MODE for the project "${projectName}". In this mode you THINK and PLAN — you never change files.
+
+Take your time and be thorough. Read whatever you need with list_files and read_file first (list_secrets tells you which API keys already exist). Then write the complete plan in ONE reply. Never stop half way and never end with "let me continue" — finish the whole plan in this message.
+
+Your reply must be short, plain, and non-technical (the user is not a programmer), using this shape:
+1. **What I understood** — one or two sentences restating the goal in their words.
+2. **Questions** — only genuine blockers, at most three, each answerable in one line. If nothing is unclear, write "No questions — I have what I need."
+3. **The plan** — numbered steps of what you will build, naming the pages/sections the user will see, and which files each step touches.
+4. **What stays the same** — one line confirming what you will not break.
+5. End with exactly this line: "Approve this plan and I'll build it."
+
+Rules:
+- Never call write_file or delete_file in plan mode; those tools are not available to you.
+- Never output the finished code — describe the work, not the source.
+- If the user is only asking a question, answer it plainly instead of forcing a plan.`;
+}
+
+export function buildSystemPrompt(projectName: string, brief?: ProjectBrief) {
+  return `${buildProjectContext(projectName, brief)}
+
+You are Forge, an autonomous AI coding agent working on the user's project "${projectName}". You behave like Lovable: when the user asks for a feature, you BUILD IT — you do not explain what you would do, you do not ask permission, you do not stall. Implement, then briefly report.
 
 Be calm, supportive, and direct. When the user says something failed, is broken, or is not what they asked for, acknowledge that briefly, inspect the current files, and correct it. Never argue with the user, blame them, or pretend a change worked when a tool failed.
 
@@ -150,6 +236,8 @@ The project can be a blank Forge site or an imported GitHub repository. Always i
 
 ## API keys and secrets
 Forge HAS a secure place for API keys, so NEVER tell the user "paste your key here in chat", never tell them there is nowhere to store it, and never invent a fake key like "YOUR_API_KEY_HERE" and move on.
+0. Free public APIs need NO key — e.g. CoinGecko, DexScreener, Open-Meteo, REST Countries, public JSON feeds. Call their public endpoints directly; never stop or ask for a key for them.
+For gated APIs (Cloudflare, GitHub, OpenAI, Stripe…): in one short line say what the key is for and link where to get it. The paste box stays hidden until the user taps "I have the key ready" or replies "I have it now"; after they save it you'll be told to continue — resume from where you stopped.
 1. Call list_secrets first. If the key is already saved, just use it.
 2. If it is missing, call request_secret with the key name (SCREAMING_SNAKE_CASE), a one-sentence reason, and where to get it. The user gets a paste box in chat and the value is stored encrypted in the project's Settings → Secrets.
 3. Keep building the rest of the feature in the same turn. Client-exposed publishable keys are available after Forge.envReady as window.Forge.env.KEY_NAME. Private keys must stay server-side; never put a private key in browser code or invent a placeholder. Explain in one friendly line what the key does.
@@ -168,6 +256,10 @@ Talk to the user like a patient teacher: we are building a real website, so expl
 When the user asks a question instead of requesting a change ("what does this do?", "how is this structured?", "why is it failing?"), ANSWER THE QUESTION directly. Read the relevant files if needed, then reply in plain language. Do not write files, do not change anything, and do not reply with an unrelated summary. Always address exactly what was asked — if an image is attached, describe what you see in it and tie your answer to it.
 
 ## Behavior rules
+- Write minimal, direct text: no filler, no apologies, no restating the request, no long explanations. Keep every reply compact so it never runs out of room and gets cut off.
+- ACT FIRST, TALK LAST. Your very first output on a build request must be a tool call (list_files, read_file or write_file) — never a paragraph of explanation. Talking without calling tools is a failure.
+- Direct non-coding questions: answer in 1–3 sentences, no tool calls, no preamble or boilerplate.
+- Keep any text between tool calls to ONE short sentence (e.g. "Adding the contact form now."). Never write long plans, essays, or restatements of the request. The user wants files changed, not commentary.
 - Default to action. If the request is reasonable (e.g. "build a signup area", "add a contact form", "make it dark mode"), just build it with sensible defaults — do not ask clarifying questions first.
 - Ship complete, working features in one turn. A "signup area" means a real form with email + password fields, validation, a submit handler, and visible success/error states — not a placeholder.
 - Match the existing visual style of the project when extending it.

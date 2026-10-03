@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   getProjectGithubLink,
+  exportProjectToGithub,
   listProjectGithubBranches,
 } from "@/lib/github.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,6 +62,29 @@ export function GithubPushDialog({
 }) {
   const getLink = useServerFn(getProjectGithubLink);
   const listBranches = useServerFn(listProjectGithubBranches);
+  const exportRepo = useServerFn(exportProjectToGithub);
+  const [newRepoName, setNewRepoName] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportRepo({ data: { projectId, repoName: newRepoName || `forge-${projectId.slice(0, 8)}`, isPrivate: true } });
+      const l = (await getLink({ data: { projectId } })) as LinkInfo | null;
+      setLink(l);
+      if (l) {
+        const res = await listBranches({ data: { projectId } });
+        setBranches(res.branches);
+        setBranch(l.default_branch || res.branches[0]?.name || "main");
+        setFromBranch(l.default_branch || "main");
+      }
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Could not create the repository");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const [loading, setLoading] = useState(false);
   const [link, setLink] = useState<LinkInfo | null>(null);
@@ -297,10 +321,21 @@ export function GithubPushDialog({
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : !link ? (
-          <p className="py-4 text-sm text-muted-foreground">
-            Import a repository from the home page to enable push. Forge keeps a link
-            between each imported project and its GitHub repository.
-          </p>
+          <div className="py-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              This project isn't on GitHub yet. Create a new private repository for it in one tap, then push.
+            </p>
+            <input
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder={`forge-${projectId.slice(0, 8)}`}
+              value={newRepoName}
+              onChange={(e) => setNewRepoName(e.target.value)}
+            />
+            {exportError && <p className="text-xs text-destructive break-all">{exportError}</p>}
+            <Button type="button" onClick={handleExport} disabled={exporting} className="gap-1.5">
+              {exporting && <Loader2 className="h-4 w-4 animate-spin" />} Create GitHub repo
+            </Button>
+          </div>
         ) : (
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">

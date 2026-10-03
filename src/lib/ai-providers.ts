@@ -192,6 +192,40 @@ export function modelSupportsVision(ref: ModelRef) {
   return guessModelMeta(ref.provider, ref.model).vision;
 }
 
+/**
+ * How many output tokens to ask for. 8k was cutting long replies in half; give
+ * every model the biggest safe window it advertises, and keep small/lite models
+ * at a value they won't reject (the agent auto-continues if it still runs out).
+ */
+export function maxOutputTokensFor(ref: ModelRef) {
+  const id = `${ref.model}`.toLowerCase();
+  if (/(8b|lite|nano|mini|small|tiny|1b|3b|7b)/.test(id)) return 16_384;
+  if (/(gemini|qwen|coder|480b|120b|deepseek|llama-3\.3|mistral|codestral|gpt-oss)/.test(id)) return 32_768;
+  return 24_576;
+}
+
+/**
+ * Models used for "Plan" mode: they think longer and write a real plan instead
+ * of rushing into edits. OpenRouter's strong reasoning models come first.
+ */
+export const PLAN_MODEL_PREFERENCES: ModelRef[] = [
+  { provider: "openrouter", model: "deepseek/deepseek-chat-v3.1:free" },
+  { provider: "openrouter", model: "qwen/qwen3-coder:free" },
+  { provider: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" },
+  { provider: "groq", model: "openai/gpt-oss-120b" },
+  { provider: "google", model: "gemini-2.5-flash" },
+  { provider: "cerebras", model: "gpt-oss-120b" },
+];
+
+/** First planning model whose provider has a working API key. */
+export function pickPlanPreference(availableProviders: string[], vision = false): ModelRef | null {
+  return (
+    PLAN_MODEL_PREFERENCES.find(
+      (ref) => availableProviders.includes(ref.provider) && (!vision || modelSupportsVision(ref)),
+    ) ?? null
+  );
+}
+
 export function readStoredModelRef(): ModelRef | null {
   if (typeof window === "undefined") return null;
   return parseModelKey(window.localStorage.getItem(MODEL_STORAGE_KEY));
