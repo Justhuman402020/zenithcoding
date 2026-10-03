@@ -124,6 +124,27 @@ export const Route = createFileRoute("/api/public/chat")({
           detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
 
+        // Casual guard: greetings/acks get an instant one-line reply with no model,
+        // no tools and no file tree — zero Neurons spent.
+        const casual = lastUserText.trim().toLowerCase().replace(/[!.?,\s]+$/g, "");
+        if (/^(hi+|hello+|hey+|yo|sup|hiya|howdy|good (morning|afternoon|evening)|gm|ok(ay)?|k|cool|nice|great|thanks?|thank you|thx|ty|alright|got it|sounds good|perfect|awesome|lol)( (there|forge|bro|man|again))?$/.test(casual)) {
+          const thanks = /thank|thx|ty/.test(casual);
+          const ack = /^(ok|okay|k|cool|nice|great|alright|got it|sounds good|perfect|awesome|lol)/.test(casual);
+          const text = thanks ? "Anytime — what's next?" : ack ? "Got it. What should we build next?" : "Ready when you are. What are we building next?";
+          trace.log("request.casual", { detail: { prompt: casual } });
+          const id = crypto.randomUUID();
+          return createUIMessageStreamResponse({
+            stream: createUIMessageStream({
+              execute: ({ writer }) => {
+                writer.write({ type: "text-start", id });
+                writer.write({ type: "text-delta", id, delta: text });
+                writer.write({ type: "text-end", id });
+              },
+            }),
+          });
+        }
+
+
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         // Recover jobs whose request died before its completion handler ran.
         // Healthy jobs refresh updated_at every 15 seconds below.
@@ -566,10 +587,10 @@ export const Route = createFileRoute("/api/public/chat")({
                 }
                 if (cfPool) {
                   attemptNeurons += cfPool.estimateNeurons(step?.usage?.inputTokens, step?.usage?.outputTokens);
-                  // 9k soft cap: hand off early and keep a 1,000 Neuron reserve on this key.
+                  // 9k soft cap: let this step finish cleanly, then stop and route
+                  // the very next step to the next key (1,000 Neuron reserve kept).
                   if (autoFallback && editorAuto && baseNeurons + attemptNeurons >= cfPool.SOFT_CAP_NEURONS) {
                     handoff = true;
-                    attemptAbort.abort();
                   }
                 }
                 if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
@@ -578,6 +599,7 @@ export const Route = createFileRoute("/api/public/chat")({
               prepareStep: createPrepareStep(needsFileChange, trace),
               stopWhen: [
                 stepCountIs(40),
+                () => handoff,
                 () => {
                   const n = recentCalls.length;
                   return n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
