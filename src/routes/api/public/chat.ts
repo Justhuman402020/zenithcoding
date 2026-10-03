@@ -126,6 +126,25 @@ export const Route = createFileRoute("/api/public/chat")({
           });
         }
 
+        // Ensure the user has a welcome balance, then debit one credit per message.
+        // Admins build for free — their jobs must never be blocked by credits.
+        // Casual replies above already returned, so they never reach this debit.
+        await ensureWelcomeGrant(userId);
+        const unlimited = await hasUnlimitedCredits(userId);
+        if (unlimited) {
+          trace.log("credits.debit", { detail: { unlimited: true } });
+        } else {
+          const debitResult = await debit(userId, 1, `chat:${projectId}`);
+          if (!debitResult.ok) {
+            trace.log("credits.debit", { status: "error", message: "out of credits" });
+            return fail(
+              402,
+              JSON.stringify({ error: "out_of_credits", message: "You're out of credits. Ask Samsung admin to add more credits." }),
+              "application/json",
+            );
+          }
+          trace.log("credits.debit", { detail: { balance: debitResult.balance } });
+        }
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         // Recover jobs whose request died before its completion handler ran.
