@@ -34,16 +34,20 @@ export function NeuronsBar({ className = "" }: { className?: string }) {
   const countdown = useCountdown(data?.resetAt);
   if (!data || data.keys.length === 0) return null;
   const active = data.keys.find((k) => k.status === "active");
+  const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(n));
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground ${className}`}
-      title="Cloudflare Neurons used today across all keys, out of the daily total. Resets at 00:00 UTC (01:00 Lagos)."
+      title={`Today: ${data.totalUsed.toLocaleString()} of ${data.totalLimit.toLocaleString()} Neurons used across all keys (${(data.keys.length * 9000).toLocaleString()} usable at the 9k cap). Resets to 0 at 00:00 UTC (01:00 Lagos).`}
     >
       <Zap className="h-3 w-3 text-primary" />
-      <span className="tabular-nums text-foreground">{data.totalUsed.toLocaleString()}</span> used /
-      <span className="tabular-nums">{data.totalLimit.toLocaleString()}</span> Neurons
-      <span className="tabular-nums text-foreground">· {data.totalRemaining.toLocaleString()} left</span>
-      {active ? <span>· Key #{active.position}</span> : <span className="text-destructive">· all used</span>}
+      {active ? (
+        <span className="tabular-nums text-foreground">
+          Key #{active.position} of {data.keys.length} · {k(Math.min(active.used, 9000))}/9k Neurons
+        </span>
+      ) : (
+        <span className="text-destructive">All {data.keys.length} keys at 9k</span>
+      )}
       <span className="tabular-nums">· resets {countdown}</span>
     </span>
   );
