@@ -365,9 +365,10 @@ export const Route = createFileRoute("/api/public/chat")({
             .maybeSingle(),
         ]);
         const { loadProjectBackend } = await import("@/lib/project-backend.server");
-        const [projectBackend, { data: progressRow }] = await Promise.all([
+        const [projectBackend, { data: progressRow }, { data: brainRow }] = await Promise.all([
           loadProjectBackend(projectId),
           supabaseAdmin.from("projects").select("agent_progress").eq("id", projectId).maybeSingle(),
+          supabaseAdmin.from("project_brain_notes").select("content").eq("project_id", projectId).maybeSingle(),
         ]);
         const progressModel: { name?: string; files: Set<string> } = { files: new Set() };
         progressModel.name = `${pick.ref.model} (${pick.ref.provider})`;
@@ -381,6 +382,7 @@ export const Route = createFileRoute("/api/public/chat")({
           description: proj.description,
           originalGoal: firstUserMessage?.content ?? null,
           filePaths: (briefFiles ?? []).map((file) => file.path),
+          userNotes: brainRow?.content ?? null,
         };
         trace.log("project.brief", {
           detail: { files: projectBrief.filePaths.length, hasGoal: Boolean(projectBrief.originalGoal) },
