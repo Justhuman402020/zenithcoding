@@ -42,3 +42,6 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 
 ### Vite config note
 `vite.config.ts` uses `@lovable.dev/vite-tanstack-config`'s `defineConfig`, which bundles all Vite plugins (tanstackStart, viteReact, tailwindcss, etc.). Do NOT add those plugins manually. Additional Vite config goes under the `vite:` key.
+
+- Route image attachments through a dedicated vision-planner pass, persist its brief per project, then let the selected coding model edit files from that brief; this keeps image interpretation separate from code execution.
+- Store the global Cloudflare coding model in the database so every pool key follows one admin-selected working free-tier model.
