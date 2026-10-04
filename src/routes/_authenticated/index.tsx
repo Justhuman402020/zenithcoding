@@ -194,6 +194,7 @@ function Dashboard() {
   const [ghConnecting, setGhConnecting] = useState(false);
   const [ghRepoError, setGhRepoError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const homeZipRef = useRef<HTMLInputElement>(null);
 
   const startGhAuth = useServerFn(getGithubAuthUrl);
   const fetchGhStatus = useServerFn(getGithubStatus);
@@ -543,6 +544,37 @@ function Dashboard() {
     navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: openingPrompt } as any });
   }
 
+  async function importHomeZip(file: File | undefined) {
+    if (!file) return;
+    setCreating(true);
+    const notice = toast.loading(`Opening ${file.name}…`);
+    try {
+      const { unpackZip } = await import("@/lib/zip-import");
+      const unpacked = await unpackZip(file);
+      if (!unpacked.files.length) throw new Error("No usable project files were found");
+      const { data: userRes } = await supabase.auth.getUser();
+      if (!userRes.user) throw new Error("Please sign in again");
+      const name = file.name.replace(/\.zip$/i, "").replace(/[-_]+/g, " ").slice(0, 60) || "Imported project";
+      const explanation = `Imported from ${file.name}. ${unpacked.files.length} files including ${unpacked.files.slice(0, 8).map((item) => item.path).join(", ")}.`;
+      const { data: project, error } = await supabase.from("projects").insert({ name, description: explanation, user_id: userRes.user.id }).select().single();
+      if (error) throw error;
+      const rows = unpacked.files.map((item) => ({ project_id: project.id, user_id: userRes.user!.id, path: item.path, content: item.content }));
+      for (let index = 0; index < rows.length; index += 50) {
+        const { error: filesError } = await supabase.from("files").insert(rows.slice(index, index + 50));
+        if (filesError) throw filesError;
+      }
+      await supabase.from("project_brain_notes").upsert({ project_id: project.id, user_id: userRes.user.id, content: `Site explanation: ${explanation}`, updated_at: new Date().toISOString() });
+      await applyBackend({ data: { projectId: project.id } }).catch(() => {});
+      toast.success(`Imported ${unpacked.files.length} files`, { id: notice });
+      navigate({ to: "/p/$projectId", params: { projectId: project.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import that ZIP", { id: notice });
+    } finally {
+      setCreating(false);
+      if (homeZipRef.current) homeZipRef.current.value = "";
+    }
+  }
+
   async function deleteProject(id: string) {
     if (!confirm("Delete this project and all its files?")) return;
     const { error } = await supabase.from("projects").delete().eq("id", id);
@@ -759,6 +791,7 @@ function Dashboard() {
       )}
 
       <section className="flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12 relative">
+        <input ref={homeZipRef} type="file" accept=".zip,application/zip" className="hidden" onChange={(event) => void importHomeZip(event.target.files?.[0])} />
         <div className="hidden md:flex items-center gap-3 mb-8">
           <ForgeMark className="h-12 w-12" glow />
           <span className="font-display text-3xl text-gold">Code Haven</span>
@@ -795,7 +828,7 @@ function Dashboard() {
                 >
                   <Plus className="h-4 w-4" /> Blank
                 </button>
-                <button type="button" onClick={() => setGhOpen(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40" title="Open ZIP and repository imports">
+                <button type="button" onClick={() => homeZipRef.current?.click()} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40" title="Upload a project ZIP">
                   <PackageOpen className="h-4 w-4" /> ZIP
                 </button>
                 <button

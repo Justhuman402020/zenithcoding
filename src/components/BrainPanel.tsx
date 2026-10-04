@@ -20,17 +20,20 @@ export function BrainPanel({ projectId }: { projectId: string }) {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState("");
   const [presets, setPresets] = useState<{ label: string; value: string }[]>([]);
+  const [visualBriefs, setVisualBriefs] = useState<Array<{ id: string; source_name: string | null; vision_model: string; brief: string; created_at: string }>>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const [{ data: n }, { data: secrets }, { data: assets }] = await Promise.all([
+      const [{ data: n }, { data: secrets }, { data: assets }, { data: briefs }] = await Promise.all([
         supabase.from("project_brain_notes").select("content").eq("project_id", projectId).maybeSingle(),
         supabase.from("project_secrets").select("key").eq("project_id", projectId),
         supabase.from("project_assets").select("handle").eq("project_id", projectId),
+        supabase.from("project_visual_briefs").select("id,source_name,vision_model,brief,created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(10),
       ]);
       setNotes(n?.content ?? "");
       setSaved(n?.content ?? "");
+      setVisualBriefs(briefs ?? []);
       const auto = typeof window !== "undefined" ? localStorage.getItem("forge:auto-switch") : null;
       const mode = typeof window !== "undefined" ? localStorage.getItem("forge:chat-mode") : null;
       setPresets([
@@ -52,17 +55,22 @@ export function BrainPanel({ projectId }: { projectId: string }) {
     setSaving(false);
     if (error) return toast.error(error.message);
     setSaved(notes);
-    toast.success("Saved — Forge will follow these on every message");
+    toast.success("Saved — Code Haven will follow these on every message");
   }
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-foreground">Your rules</h2>
-        <p className="text-xs text-muted-foreground">Write anything Forge should always remember for this project, one per line.</p>
+        <p className="text-xs text-muted-foreground">Write anything Code Haven should always remember for this project, one per line.</p>
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={6} placeholder="e.g. Always use gold and black colours. Never remove the login page." />
         <Button size="sm" onClick={save} disabled={saving || notes === saved}>{saving ? "Saving…" : "Save rules"}</Button>
       </section>
+      {visualBriefs.length > 0 ? <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-foreground">Saved image plans</h2>
+        <p className="text-xs text-muted-foreground">Image readers save their layout and styling notes here before the coding model builds.</p>
+        <div className="space-y-2">{visualBriefs.map((item) => <details key={item.id} className="rounded-md border bg-card/40 px-3 py-2 text-xs"><summary className="cursor-pointer font-medium">{item.source_name || "Attached image"} · {item.vision_model}</summary><p className="mt-2 whitespace-pre-wrap text-muted-foreground">{item.brief}</p></details>)}</div>
+      </section> : null}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-foreground">Saved presets</h2>
         <ul className="space-y-1 text-xs">
@@ -72,7 +80,7 @@ export function BrainPanel({ projectId }: { projectId: string }) {
         </ul>
       </section>
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-foreground">Built-in rules Forge always follows</h2>
+        <h2 className="text-sm font-semibold text-foreground">Built-in rules Code Haven always follows</h2>
         <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
           {BUILT_IN_RULES.map((r) => <li key={r}>{r}</li>)}
         </ul>
