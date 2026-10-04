@@ -33,12 +33,13 @@ export async function listProviderModels(
   providerId: string,
   apiKey: string,
   option?: ProviderOption,
+  refresh = false,
 ): Promise<DiscoveredModel[]> {
   const provider = option ?? findProvider(providerId);
   if (!provider) return [];
 
   const cached = cache.get(providerId);
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
+  if (!refresh && cached && Date.now() - cached.at < TTL_MS) return cached.models;
 
 
   const curated = new Map(provider.models.map((m) => [m.id, m]));
@@ -64,6 +65,10 @@ export async function listProviderModels(
   });
   cache.set(providerId, { at: Date.now(), models });
   return models;
+}
+
+export function clearModelDiscoveryCache() {
+  cache.clear();
 }
 
 /** OpenRouter exposes real credit usage for a key; others do not. */

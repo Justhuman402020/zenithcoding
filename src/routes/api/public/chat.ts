@@ -266,10 +266,11 @@ export const Route = createFileRoute("/api/public/chat")({
         // unless the user picked a model by hand in the editor. With Auto off the
         // manually picked model is used exactly as chosen — never rerouted to Qwen.
         if (editorAuto) {
-          const { loadCloudflarePool, CLOUDFLARE_CODING_MODEL } = await import("@/lib/cloudflare-pool.server");
+          const { loadCloudflarePool, readCloudflareCodingModel } = await import("@/lib/cloudflare-pool.server");
           const pool = (await loadCloudflarePool()).filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
           if (pool.length) {
-            const poolRefs = pool.map((k) => ({ provider: k.id, model: CLOUDFLARE_CODING_MODEL }));
+            const codingModel = await readCloudflareCodingModel();
+            const poolRefs = pool.map((k) => ({ provider: k.id, model: codingModel }));
             const poolIds = new Set(pool.map((k) => k.id));
             const rest = chain.filter((r) => !poolIds.has(r.provider));
             if (requestedRef && !poolIds.has(requestedRef.provider)) {
@@ -287,6 +288,41 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
         const gateway = await readAiGatewaySetting();
+        let visualBrief = "";
+        if (hasImages) {
+          const selectedVision = parseModelKey(request.headers.get("x-forge-vision-model"));
+          const { data: poolSettings } = await supabaseAdmin
+            .from("ai_pool_settings")
+            .select("vision_provider,vision_model")
+            .eq("id", "global")
+            .maybeSingle();
+          const visionPreference = selectedVision ?? (poolSettings?.vision_provider && poolSettings?.vision_model
+            ? { provider: poolSettings.vision_provider, model: poolSettings.vision_model }
+            : null);
+          const { planAttachedImages } = await import("@/lib/vision-planner.server");
+          setProgress("Reading the image · visual planner");
+          const visualPlan = await planAttachedImages({
+            messages: compactMessages,
+            providers: providerRegistry,
+            keys: providerKeys,
+            preferred: visionPreference,
+            gateway,
+            onSwitch: async (seconds, failed) => {
+              setProgress(`${failed.model} could not read the image · switching in ${seconds}s`);
+            },
+          });
+          if (!visualPlan) return fail(424, JSON.stringify({ error: "vision_unavailable", message: "No working image model could read this image. Refresh the first lightning menu or add a vision-capable key." }), "application/json");
+          visualBrief = visualPlan.brief;
+          await supabaseAdmin.from("project_visual_briefs").insert({
+            project_id: projectId,
+            user_id: userId,
+            source_name: "Attached image",
+            vision_provider: visualPlan.ref.provider,
+            vision_model: visualPlan.ref.model,
+            brief: visualPlan.brief,
+          });
+          trace.log("vision.plan", { detail: { provider: visualPlan.ref.provider, model: visualPlan.ref.model, failed: visualPlan.failed.length } });
+        }
         const pick = await trace.time("model.pick", () =>
           pickAvailableModel(chain, providerKeys, providerRegistry, gateway),
         );
@@ -382,7 +418,7 @@ export const Route = createFileRoute("/api/public/chat")({
           description: proj.description,
           originalGoal: firstUserMessage?.content ?? null,
           filePaths: (briefFiles ?? []).map((file) => file.path),
-          userNotes: brainRow?.content ?? null,
+          userNotes: `${brainRow?.content ?? ""}${visualBrief ? `\n\nLatest visual brief:\n${visualBrief}` : ""}`,
         };
         trace.log("project.brief", {
           detail: { files: projectBrief.filePaths.length, hasGoal: Boolean(projectBrief.originalGoal) },
@@ -394,7 +430,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // request, so send a much shorter history there or it silently rejects.
         const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);
         const turnMessages = isGitHubModels ? compactChatMessages(body.messages, 3) : compactMessages;
-        const strippedMessages = visionOk
+        const strippedMessages = visualBrief || visionOk
           ? turnMessages
           : turnMessages.map((message) => ({
               ...message,
@@ -531,9 +567,10 @@ export const Route = createFileRoute("/api/public/chat")({
           : cloneUrl
             ? `\n\nThe user linked ${cloneUrl} to replicate, but it could not be fetched. Build your best matching page and say in one line that the site couldn't be read.`
             : "";
+        const visualContext = visualBrief ? `\n\n## Visual planner brief\n${visualBrief}\nThis brief was created by the image reader. You are the coding boss: use it as the source of truth and edit the files now. Do not spend tokens re-describing the image.` : "";
         const systemPrompt =
           (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-          sharedContext + assetContext + cloneContext;
+          sharedContext + assetContext + cloneContext + visualContext;
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];

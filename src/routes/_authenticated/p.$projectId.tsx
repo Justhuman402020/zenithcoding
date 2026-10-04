@@ -80,6 +80,7 @@ import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react
 import { BrainPanel } from "@/components/BrainPanel";
 import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
+import { ChatModelControls, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
 import { useServerFn as useStopServerFn } from "@tanstack/react-start";
 import {
@@ -110,7 +111,7 @@ type PreviewErrorCtx = {
 };
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
-  head: () => ({ meta: [{ title: "Forge — editor" }] }),
+  head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
     typeof search.prompt === "string" ? { prompt: search.prompt } : {},
 
@@ -799,6 +800,8 @@ function ProjectEditor() {
           const headers: Record<string, string> = { "x-project-id": projectId };
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
+          const visionRef = window.localStorage.getItem(VISION_MODEL_STORAGE_KEY);
+          if (visionRef) headers["x-forge-vision-model"] = visionRef;
           headers["x-forge-mode"] = modeRef.current;
           headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
@@ -2294,6 +2297,7 @@ function ProjectEditor() {
                   </span>
                 ) : null}
                 <NeuronsBar />
+                <ChatModelControls />
                 {activeModel ? (
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
