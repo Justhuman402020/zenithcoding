@@ -1759,7 +1759,7 @@ function ProjectEditor() {
                       className={
                         m.role === "user"
                           ? "rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] bg-primary text-primary-foreground text-sm whitespace-pre-wrap"
-                          : "max-w-full text-sm space-y-2 w-full"
+                          : "max-w-full text-sm flex flex-col gap-2 w-full"
                       }
                     >
                       {showStatusPill && (
@@ -1804,7 +1804,20 @@ function ProjectEditor() {
                           }
                         });
                         if (entries.length === 0) return null;
+                        const actKey = `${m.id}:activity`;
+                        const actOpen = isLastStreaming || !!openThinking[actKey];
                         return (
+                          <div className="order-last space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => setOpenThinking((cur) => ({ ...cur, [actKey]: !actOpen }))}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            <ListTree className="h-3 w-3 text-primary" />
+                            Activity ({entries.filter((e) => e.kind === "tool").length} steps)
+                            {actOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          </button>
+                          {actOpen && (
                           <div className="relative pl-5 space-y-2 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-border/70">
                             {entries.map((entry) => {
                               if (entry.kind === "thought") {
@@ -1899,6 +1912,8 @@ function ProjectEditor() {
                                 </div>
                               );
                             })}
+                          </div>
+                          )}
                           </div>
                         );
                       })()}
