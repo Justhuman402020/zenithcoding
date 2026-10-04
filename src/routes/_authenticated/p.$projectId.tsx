@@ -2181,6 +2181,17 @@ function ProjectEditor() {
                   </div>
                 </div>
               ) : null}
+              {fixBackup && !isBusy ? (
+                <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${previewError ? "border-destructive/50 bg-destructive/10" : "border-border bg-card/60"}`}>
+                  <span className="flex-1 text-muted-foreground">
+                    {previewError ? "The fix didn't work. Your files from before the fix are saved." : "A copy of your files from before the fix is saved."}
+                  </span>
+                  <Button type="button" size="sm" variant={previewError ? "default" : "outline"} onClick={undoFix}>
+                    <Undo2 className="h-3.5 w-3.5 mr-1" /> Undo this fix
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setFixBackup(null)}>Keep</Button>
+                </div>
+              ) : null}
               {lastProgress && lastProgress.status !== "finished" && !isBusy && messages.length > 0 ? (
                 <button
                   type="button"
