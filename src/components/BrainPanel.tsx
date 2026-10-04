@@ -10,8 +10,8 @@ const BUILT_IN_RULES = [
   "Never reset the project to a generic template; extend what is already there.",
   "Free public services (CoinGecko, DexScreener, Open-Meteo) need no key.",
   "For services that need a key: explain where to get it, and open the paste box only when you say “I have it now”.",
-  "@names from the Assets tab must be placed with their exact web address — and Forge checks the files afterwards.",
-  "Each Cloudflare key stops at 9,000 Neurons and hands the next step to the next key, keeping the same Forge voice.",
+  "@names from the Assets tab must be placed with their exact web address — and Code Haven checks the files afterwards.",
+  "Each Cloudflare key stops at 9,000 Neurons and hands the next step to the next key, keeping the same Code Haven voice.",
   "Fixes change only what is needed; a copy of your files is saved before every fix so you can undo it.",
   "Auto-switch off = only the model you picked is used.",
 ];

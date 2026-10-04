@@ -153,7 +153,7 @@ function AdminUsersPage() {
                 <ShieldCheck className="h-3 w-3" /> admin
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">Manage every account on Forge.</p>
+            <p className="text-xs text-muted-foreground">Manage every account on Code Haven.</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => navigate({ to: "/" })} className="gap-1.5">
             <ArrowLeft className="h-4 w-4" /> Dashboard

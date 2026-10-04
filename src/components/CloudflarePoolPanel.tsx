@@ -87,7 +87,7 @@ export function CloudflarePoolPanel() {
             <Zap className="h-4 w-4 text-primary" /> Cloudflare keys pool
           </h2>
           <p className="text-xs text-muted-foreground">
-            Unlimited keys (new ones join the end of the line), 10,000 Neurons each per day. Forge codes with Qwen on key #1 and moves to
+            Unlimited keys (new ones join the end of the line), 10,000 Neurons each per day. Code Haven codes with the selected model on key #1 and moves to
             the next key when one runs out. Add keys with "Add a new key" → Cloudflare Workers AI.
           </p>
         </div>
@@ -116,7 +116,7 @@ export function CloudflarePoolPanel() {
               </span>
               <span
                 className="text-[10px] text-muted-foreground"
-                title={(k as any).source === "cloudflare" ? "Real count read from Cloudflare" : "Cloudflare didn't share the count for this key (needs Account Analytics: Read). Showing Forge's estimate."}
+                title={(k as any).source === "cloudflare" ? "Real count read from Cloudflare" : "Cloudflare didn't share the count for this key (needs Account Analytics: Read). Showing Code Haven's estimate."}
               >
                 {(k as any).source === "cloudflare" ? "live" : "est."}
               </span>

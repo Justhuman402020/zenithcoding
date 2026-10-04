@@ -93,7 +93,7 @@ export function GithubPushDialog({
   const [createBranch, setCreateBranch] = useState(false);
   const [newBranch, setNewBranch] = useState("");
   const [fromBranch, setFromBranch] = useState("");
-  const [message, setMessage] = useState("Update from Forge");
+  const [message, setMessage] = useState("Update from Code Haven");
   const [pushing, setPushing] = useState(false);
   const [lastResult, setLastResult] = useState<{ url: string; branch: string; sha: string } | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);

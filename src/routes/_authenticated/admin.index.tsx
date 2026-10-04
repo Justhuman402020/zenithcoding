@@ -90,7 +90,7 @@ function AdminPage() {
             <Lock className="h-8 w-8 mx-auto text-muted-foreground" />
             <h2 className="font-display text-xl">Samsung admin only</h2>
             <p className="text-sm text-muted-foreground">
-              Sign in with <span className="text-foreground">justsamsung99@gmail.com</span> to manage Forge users.
+              Sign in with <span className="text-foreground">justsamsung99@gmail.com</span> to manage Code Haven users.
             </p>
             <Button variant="outline" onClick={() => navigate({ to: "/" })} className="w-full gap-1.5">
               <ArrowLeft className="h-4 w-4" /> Back to dashboard
