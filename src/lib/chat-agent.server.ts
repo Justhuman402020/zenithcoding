@@ -136,6 +136,8 @@ export type ProjectBrief = {
   backend?: { url: string; anonKey: string; hasServiceKey: boolean } | null;
   /** Where the previous agent stopped. */
   progress?: { status?: string; lastRequest?: string; lastReply?: string; error?: string | null; at?: string; model?: string; filesChanged?: string[] } | null;
+  /** The user's own rules from the Brain tab. */
+  userNotes?: string | null;
 };
 
 /**
@@ -172,8 +174,10 @@ This project is already connected to its own backend. NEVER ask the user for bac
 ${p.model ? `- Agent/model that was working: ${p.model}\n` : ""}- Last request: ${(p.lastRequest ?? "").slice(0, 400)}
 ${p.filesChanged?.length ? `- Files it already changed: ${p.filesChanged.slice(0, 30).join(", ")}\n` : ""}${p.lastReply ? `- Last reply summary: ${p.lastReply.slice(0, 500)}\n` : ""}${p.error ? `- It failed with: ${p.error.slice(0, 400)}\n` : ""}If the user says "continue", "finish" or "fix it", pick up exactly from here instead of starting over. This may have been a different agent/model — trust its saved work, check those files, and only do what's left.`
     : "";
+  const notes = brief?.userNotes?.trim();
+  const notesBlock = notes ? `\n\n## The user's own rules (always follow these)\n${notes.slice(0, 3000)}` : "";
   return `## What this project is (read this before doing anything)
-${lines.join("\n")}${backendBlock}${progressBlock}
+${lines.join("\n")}${backendBlock}${progressBlock}${notesBlock}
 
 This briefing is the source of truth for the project's purpose. Every change must serve it.
 - Never replace, reset, or "start over" an existing project with a generic template, demo page, or unrelated content — extend what is already there.

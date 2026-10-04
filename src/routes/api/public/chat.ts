@@ -365,9 +365,10 @@ export const Route = createFileRoute("/api/public/chat")({
             .maybeSingle(),
         ]);
         const { loadProjectBackend } = await import("@/lib/project-backend.server");
-        const [projectBackend, { data: progressRow }] = await Promise.all([
+        const [projectBackend, { data: progressRow }, { data: brainRow }] = await Promise.all([
           loadProjectBackend(projectId),
           supabaseAdmin.from("projects").select("agent_progress").eq("id", projectId).maybeSingle(),
+          supabaseAdmin.from("project_brain_notes").select("content").eq("project_id", projectId).maybeSingle(),
         ]);
         const progressModel: { name?: string; files: Set<string> } = { files: new Set() };
         progressModel.name = `${pick.ref.model} (${pick.ref.provider})`;
@@ -381,6 +382,7 @@ export const Route = createFileRoute("/api/public/chat")({
           description: proj.description,
           originalGoal: firstUserMessage?.content ?? null,
           filePaths: (briefFiles ?? []).map((file) => file.path),
+          userNotes: brainRow?.content ?? null,
         };
         trace.log("project.brief", {
           detail: { files: projectBrief.filePaths.length, hasGoal: Boolean(projectBrief.originalGoal) },
@@ -491,11 +493,34 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .order("created_at", { ascending: false })
           .limit(60);
-        const assetContext = assetRows?.length
-          ? `\n\n## Named assets (use these EXACT URLs when the user mentions @name)\n${assetRows
-              .map((a) => `- @${a.handle} (${a.content_type?.startsWith("video/") ? "video" : "image"}): ${a.url}`)
-              .join("\n")}\nImages go in <img src>, videos in <video src controls playsinline>. Never invent or alter these URLs.`
-          : "";
+        const mentionedHandles = Array.from(lastUserText.matchAll(/@([A-Za-z0-9_\-.]+)/g)).map((m) => m[1]!.toLowerCase().replace(/[.]+$/, ""));
+        const requiredAssets = (assetRows ?? []).filter((a) => mentionedHandles.includes(a.handle.toLowerCase()));
+        const missingHandles = mentionedHandles.filter((h) => !(assetRows ?? []).some((a) => a.handle.toLowerCase() === h) && !h.includes("."));
+        const assetContext =
+          (assetRows?.length
+            ? `\n\n## Named assets (use these EXACT URLs when the user mentions @name)\n${assetRows
+                .map((a) => `- @${a.handle} (${a.content_type?.startsWith("video/") ? "video" : "image"}): ${a.url}`)
+                .join("\n")}\nImages go in <img src>, videos in <video src controls playsinline>. Never invent or alter these URLs.`
+            : "") +
+          (requiredAssets.length
+            ? `\n\n## REQUIRED in this turn\nThe user referenced these assets. You MUST write_file so the code literally contains each exact URL below where they asked. Saying it was used without writing the file is a failure.\n${requiredAssets.map((a) => `- @${a.handle} → ${a.url}`).join("\n")}`
+            : "") +
+          (missingHandles.length && assetRows
+            ? `\n\nThese @names are NOT in the asset library: ${missingHandles.map((h) => `@${h}`).join(", ")}. Tell the user plainly instead of inserting a random image.`
+            : "");
+        let assetRetryDone = false;
+        const findUnusedAssets = async () => {
+          const missing: typeof requiredAssets = [];
+          for (const a of requiredAssets) {
+            const { count } = await supabaseAdmin
+              .from("files")
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId)
+              .ilike("content", `%${a.url.replace(/[%_]/g, "\\$&")}%`);
+            if (!count) missing.push(a);
+          }
+          return missing;
+        };
         // Website cloner: compact blueprint of a linked site.
         const { detectCloneUrl, buildSiteBlueprint } = await import("@/lib/site-cloner.server");
         const cloneUrl = detectCloneUrl(lastUserText);
@@ -593,11 +618,23 @@ export const Route = createFileRoute("/api/public/chat")({
                   if (autoFallback && editorAuto && baseNeurons + attemptNeurons >= cfPool.SOFT_CAP_NEURONS) {
                     handoff = true;
                   }
+                  writer?.write({
+                    type: "message-metadata",
+                    messageMetadata: { neurons: { key: current.ref.provider, start: Math.round(baseNeurons), used: Math.round(attemptNeurons), cap: cfPool.SOFT_CAP_NEURONS } },
+                  });
                 }
                 if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
-                setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed`);
+                const neuronNote = cfPool ? ` · ${(Math.round(baseNeurons + attemptNeurons) / 1000).toFixed(1)}k/9k Neurons` : "";
+                setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed${neuronNote}`);
               },
-              prepareStep: createPrepareStep(needsFileChange, trace),
+              prepareStep: (opts: any) => {
+                createPrepareStep(needsFileChange, trace)(opts);
+                if (!cfPool) return undefined;
+                const total = Math.round(baseNeurons + attemptNeurons);
+                return {
+                  system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.`,
+                };
+              },
               stopWhen: [
                 stepCountIs(40),
                 () => handoff,
@@ -641,12 +678,28 @@ export const Route = createFileRoute("/api/public/chat")({
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
               carried.push({
                 role: "user",
-                content: `Handoff note (previous key reached its 9,000 Neuron soft cap after a completed step). Finished: ${stepNo} step(s). Files already written (trust them — do NOT re-read or rewrite): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Last completed action: ${progressText}. Next: do the next remaining step of the original request only.`,
+                content: `Handoff note (previous key reached its 9,000 Neuron soft cap after a completed step). You are still Forge — same voice, same plan, same task; the user should not notice a switch. Finished: ${stepNo} step(s). Files already written (trust them — do NOT re-read or rewrite): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Last completed action: ${progressText}. Next: do the next remaining step of the original request only.`,
               });
               trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
               failure = null;
             }
             const success = finished && !failure && !timedOut && !handoff;
+            if (success && requiredAssets.length && !assetRetryDone && !userStopped) {
+              const unused = await findUnusedAssets();
+              if (unused.length) {
+                assetRetryDone = true;
+                if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+                carried.push({
+                  role: "user",
+                  content: `Check failed: no project file contains these asset URLs yet: ${unused.map((a) => `@${a.handle} → ${a.url}`).join("; ")}. read_file the page, then write_file it with each exact URL placed where I asked. Do not claim it is done until written.`,
+                });
+                trace.log("asset.recheck", { detail: { missing: unused.map((a) => a.handle) } });
+                finished = false;
+                finalReason = undefined;
+                attempt -= 1;
+                continue;
+              }
+            }
             // An empty stream with no output counts as a failure too.
             if (success && (stepNo > 0 || replyTexts.length)) break;
             if (userStopped) break;

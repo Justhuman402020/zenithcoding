@@ -547,6 +547,35 @@ export type Database = {
           },
         ]
       }
+      project_brain_notes: {
+        Row: {
+          content: string
+          project_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          project_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          project_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_brain_notes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_domains: {
         Row: {
           created_at: string
@@ -590,6 +619,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_domains_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_drafts: {
+        Row: {
+          device_id: string
+          project_id: string
+          text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          device_id?: string
+          project_id: string
+          text?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          device_id?: string
+          project_id?: string
+          text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_drafts_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
