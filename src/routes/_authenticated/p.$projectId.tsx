@@ -403,38 +403,47 @@ function ProjectEditor() {
 
   useEffect(() => {
     let wasOnline = navigator.onLine;
+    let hiddenAt = 0;
+    const report = () =>
+      void supabase
+        .from("chat_jobs")
+        .select("status,progress,error,updated_at")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          const job = data?.[0];
+          if (job && isActiveChatJob(job)) {
+            toast.info(`Connected again · Forge kept working: ${job.progress ?? "AI is working"}`, { id: "forge-online" });
+          } else if (job?.status === "completed" && hiddenAt && new Date(job.updated_at).getTime() > hiddenAt) {
+            toast.success("Connected again · Your task finished while you were away", { id: "forge-online" });
+          } else if (job?.status === "completed" || !hiddenAt) {
+            toast.success("Connected again", { id: "forge-online" });
+          }
+          hiddenAt = 0;
+        });
     const sync = () => {
       const now = navigator.onLine;
       setIsOnline(now);
-      if (now && !wasOnline) {
-        // Back online: tell the user right away where the agent is.
-        void supabase
-          .from("chat_jobs")
-          .select("status,progress,error,updated_at")
-          .eq("project_id", projectId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .then(({ data }) => {
-            const job = data?.[0];
-            if (job && isActiveChatJob(job)) {
-              toast.info(`Connected again · Forge kept working: ${job.progress ?? "AI is working"}`, { id: "forge-online" });
-            } else if (job?.status === "completed") {
-              toast.success("Connected again · Your task finished while you were away", { id: "forge-online" });
-            } else {
-              toast.success("Connected again", { id: "forge-online" });
-            }
-          });
-      } else if (!now && wasOnline) {
+      if (now && !wasOnline) report();
+      else if (!now && wasOnline) {
+        hiddenAt = Date.now();
         toast.warning("Offline · Forge keeps working on the server", { id: "forge-online" });
       }
       wasOnline = now;
     };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > 5000 && navigator.onLine) report();
+    };
     setIsOnline(navigator.onLine);
     window.addEventListener("online", sync);
     window.addEventListener("offline", sync);
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       window.removeEventListener("online", sync);
       window.removeEventListener("offline", sync);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [projectId]);
 
@@ -999,11 +1008,14 @@ function ProjectEditor() {
     void recover();
     const timer = window.setInterval(() => void recover(), 1500);
     const onBack = () => void recover();
+    const onVisible = () => { if (document.visibilityState === "visible") void recover(); };
     window.addEventListener("online", onBack);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;
       window.clearInterval(timer);
       window.removeEventListener("online", onBack);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [token, chatReady, projectId, setMessages, isStreaming]);
 
