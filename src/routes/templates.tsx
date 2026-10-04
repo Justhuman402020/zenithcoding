@@ -11,9 +11,9 @@ import { Loader2, Sparkles, ArrowLeft, LayoutGrid, Star, Search, ExternalLink } 
 export const Route = createFileRoute("/templates")({
   head: () => ({
     meta: [
-      { title: "Template Gallery — Forge" },
+      { title: "Template Gallery — Code Haven" },
       { name: "description", content: "Browse hundreds of live GitHub templates and remix any of them into an editable project." },
-      { property: "og:title", content: "Template Gallery — Forge" },
+      { property: "og:title", content: "Template Gallery — Code Haven" },
       { property: "og:description", content: "Browse live GitHub templates and remix them in one click." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

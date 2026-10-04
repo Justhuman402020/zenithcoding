@@ -8,7 +8,7 @@ import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu, Globe, Database, Key
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
-  head: () => ({ meta: [{ title: "Forge — Admin" }] }),
+  head: () => ({ meta: [{ title: "Code Haven — Admin" }, { name: "description", content: "Manage Code Haven users, models, domains, and integrations." }, { property: "og:title", content: "Code Haven Admin" }, { property: "og:description", content: "Manage Code Haven users, models, domains, and integrations." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: AdminPage,
 });
 
@@ -40,7 +40,7 @@ function AdminPage() {
         <div className="flex items-center gap-3">
           <ForgeMark className="h-8 w-8" glow />
           <div>
-            <h1 className="font-display text-xl">Forge Admin</h1>
+            <h1 className="font-display text-xl">Code Haven Admin</h1>
             <p className="text-xs text-muted-foreground">Your personal control key</p>
           </div>
         </div>

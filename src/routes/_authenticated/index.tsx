@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen } from "lucide-react";
 
 import { X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -119,6 +119,14 @@ function AdminBadge() {
     </Link>
   );
 }
+
+const STARTERS = [
+  "SaaS landing page", "Online store", "Creator portfolio", "Restaurant booking",
+  "Analytics dashboard", "Real-estate listings", "Event ticket page", "AI chat tool",
+  "Fitness coach site", "Travel planner", "News magazine", "Course platform",
+  "Crypto tracker", "Music artist page", "Beauty salon booking", "Law firm site",
+  "Job board", "Community directory", "Invoice generator", "Link-in-bio page",
+];
 
 function parseGithubRepoInput(raw: string) {
   let value = raw.trim();
@@ -506,7 +514,7 @@ function Dashboard() {
 
   }
 
-  async function createFromPrompt(e: React.FormEvent) {
+  async function createFromPrompt(e: React.FormEvent, mode: "plan" | "build" = "build") {
     e.preventDefault();
     const text = prompt.trim();
     if (!text || creating) return;
@@ -529,7 +537,10 @@ function Dashboard() {
     await applyBackend({ data: { projectId: data.id } }).catch(() => {});
     setPrompt("");
 
-    navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: text } as any });
+    const openingPrompt = mode === "plan"
+      ? `PLAN ONLY. Create a complete build plan for this request with a checklist and estimated Neuron cost. Wait for my approval before changing files.\n\n${text}`
+      : text;
+    navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: openingPrompt } as any });
   }
 
   async function deleteProject(id: string) {
@@ -679,7 +690,7 @@ function Dashboard() {
             <SheetHeader className="px-4 pt-4 pb-2">
               <SheetTitle className="flex items-center gap-2.5 text-base font-display">
                 <ForgeMark className="h-7 w-7" glow />
-                <span className="text-gold text-xl">Forge</span>
+                <span className="text-gold text-xl">Code Haven</span>
               </SheetTitle>
             </SheetHeader>
             <nav className="px-2 py-2 space-y-0.5">
@@ -712,7 +723,7 @@ function Dashboard() {
         </Sheet>
         <div className="flex items-center gap-2 md:hidden">
           <ForgeMark className="h-6 w-6" />
-          <span className="font-display text-lg text-gold">Forge</span>
+          <span className="font-display text-lg text-gold">Code Haven</span>
         </div>
         <div className="flex items-center gap-1">
           <AdminBadge />
@@ -750,13 +761,13 @@ function Dashboard() {
       <section className="flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12 relative">
         <div className="hidden md:flex items-center gap-3 mb-8">
           <ForgeMark className="h-12 w-12" glow />
-          <span className="font-display text-3xl text-gold">Forge</span>
+          <span className="font-display text-3xl text-gold">Code Haven</span>
         </div>
         <p className="text-[10px] font-mono uppercase tracking-[0.32em] text-primary/60 mb-3">
-          Pure Gold · Private Atelier
+          Plan · Build · Publish
         </p>
         <h1 className="font-display text-4xl sm:text-6xl leading-[1.02] text-center mb-8 max-w-3xl">
-          What will you <em className="text-gold not-italic">forge</em> today?
+          What will you <em className="text-gold not-italic">build</em> today?
         </h1>
         <form onSubmit={createFromPrompt} className="w-full max-w-2xl">
           <div className="rounded-2xl hairline-gold bg-card/70 backdrop-blur-sm p-3 shadow-candlelight">
@@ -769,14 +780,23 @@ function Dashboard() {
               rows={2}
               className="resize-none border-0 bg-transparent focus-visible:ring-0 text-base min-h-[64px] p-2 placeholder:text-muted-foreground/70"
             />
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" disabled={!prompt.trim() || creating} onClick={(event) => void createFromPrompt(event as any, "plan")} title="Plan the work and estimate Neurons before building">
+                  <ListChecks className="h-4 w-4" /> Plan
+                </Button>
+                <Button type="submit" size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" disabled={!prompt.trim() || creating} title="Start building immediately">
+                  <Hammer className="h-4 w-4" /> Build
+                </Button>
                 <button
                   type="button"
                   onClick={() => setOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
                 >
                   <Plus className="h-4 w-4" /> Blank
+                </button>
+                <button type="button" onClick={() => setGhOpen(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40" title="Open ZIP and repository imports">
+                  <PackageOpen className="h-4 w-4" /> ZIP
                 </button>
                 <button
                   type="button"
@@ -813,12 +833,7 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 mt-5 justify-center">
-            {[
-              "An editorial portfolio in gold and noir",
-              "A landing page for a luxury watch brand",
-              "A reservation page for a private restaurant",
-              "A boutique law firm site",
-            ].map((s) => (
+            {STARTERS.map((s) => (
               <button
                 key={s}
                 type="button"

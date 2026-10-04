@@ -17,7 +17,7 @@ import {
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin/users")({
-  head: () => ({ meta: [{ title: "Forge — Admin users" }] }),
+  head: () => ({ meta: [{ title: "Users — Code Haven Admin" }, { name: "description", content: "Manage Code Haven user accounts and projects." }, { property: "og:title", content: "Users — Code Haven Admin" }, { property: "og:description", content: "Manage Code Haven user accounts and projects." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: AdminUsersPage,
 });
 
