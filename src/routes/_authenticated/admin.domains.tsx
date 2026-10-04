@@ -21,8 +21,8 @@ export const Route = createFileRoute("/_authenticated/admin/domains")({
   component: AdminDomains,
   head: () => ({
     meta: [
-      { title: "Domains & live links — Forge admin" },
-      { name: "description", content: "Publish Forge projects and connect custom domains." },
+      { title: "Domains & live links — Code Haven admin" },
+      { name: "description", content: "Publish Code Haven projects and connect custom domains." },
     ],
   }),
 });
