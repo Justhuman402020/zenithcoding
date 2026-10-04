@@ -76,7 +76,8 @@ import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
 import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
-import { Github, Image as ImageIcon } from "lucide-react";
+import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react";
+import { BrainPanel } from "@/components/BrainPanel";
 import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
@@ -118,7 +119,12 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 
 type ProjectFile = { id: string; path: string; content: string };
 
-type TabKey = "chat" | "preview" | "code" | "assets" | "history";
+type TabKey = "chat" | "preview" | "code" | "assets" | "history" | "brain";
+
+function fmtElapsed(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
@@ -595,6 +601,36 @@ function ProjectEditor() {
     }
   }
 
+  async function exportZip() {
+    const { zipSync, strToU8 } = await import("fflate");
+    const { data } = await supabase.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const tree: Record<string, Uint8Array> = {};
+    for (const f of (data ?? []) as { path: string; content: string }[]) {
+      const m = /^data:[^;]+;base64,(.*)$/s.exec(f.content);
+      tree[f.path.replace(/^\/+/, "")] = m ? Uint8Array.from(atob(m[1]!), (c) => c.charCodeAt(0)) : strToU8(f.content);
+    }
+    const blob = new Blob([zipSync(tree) as BlobPart], { type: "application/zip" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(projectName || "project").replace(/[^a-z0-9-_]+/gi, "-")}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast.success(`Saved ${Object.keys(tree).length} files as a .zip`);
+  }
+
+  async function clearAllCode() {
+    if (!confirm("Delete ALL code in this project? A copy is saved in History first so you can restore it.")) return;
+    const { data } = await supabase.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const { data: u } = await supabase.auth.getUser();
+    if (u.user && data?.length) await supabase.from("project_snapshots").insert({ project_id: projectId, user_id: u.user.id, label: "Before clearing all code", files: data as any });
+    const { error } = await supabase.from("files").delete().eq("project_id", projectId);
+    if (error) return toast.error(error.message);
+    setActivePath(null);
+    await refreshFiles();
+    setPreviewKey((k) => k + 1);
+    toast.success("All code cleared — drop a new .zip to start fresh");
+  }
+
   async function deleteFile(path: string) {
     if (!confirm(`Delete ${path}?`)) return;
     await supabase.from("files").delete().eq("project_id", projectId).eq("path", path);
@@ -812,6 +848,75 @@ function ProjectEditor() {
   const isStreaming = status === "submitted" || status === "streaming";
   // Busy = this device is streaming, or another device/earlier run is working.
   const isBusy = isStreaming || !!remoteWorking;
+
+  // Job timer: starts when work begins, ticks every second while busy.
+  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    if (!isBusy) { setJobStartedAt(null); return; }
+    setJobStartedAt((cur) => cur ?? Date.now());
+    setNowTick(Date.now());
+    const t = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [isBusy]);
+  const liveNeurons = useMemo(() => {
+    if (!isStreaming) return null;
+    const last = messages[messages.length - 1] as { role: string; metadata?: { neurons?: { start: number; used: number; cap: number } } } | undefined;
+    return last?.role === "assistant" ? last.metadata?.neurons ?? null : null;
+  }, [messages, isStreaming]);
+
+  // Safe fixes: a copy of every file is saved before a fix runs.
+  const [fixBackup, setFixBackup] = useState<{ files: { path: string; content: string }[]; at: number } | null>(null);
+  async function takeFixSnapshot() {
+    const { data } = await supabase.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const snap = (data ?? []) as { path: string; content: string }[];
+    setFixBackup({ files: snap, at: Date.now() });
+    const { data: u } = await supabase.auth.getUser();
+    if (u.user) await supabase.from("project_snapshots").insert({ project_id: projectId, user_id: u.user.id, label: "Before fix", files: snap as any });
+  }
+  async function undoFix() {
+    if (!fixBackup) return;
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const t = toast.loading("Restoring your files from before the fix…");
+    await supabase.from("files").delete().eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const rows = fixBackup.files.map((f) => ({ project_id: projectId, user_id: u.user!.id, path: f.path, content: f.content }));
+    for (let i = 0; i < rows.length; i += 50) await supabase.from("files").insert(rows.slice(i, i + 50));
+    setFixBackup(null);
+    setPreviewError(null);
+    await refreshFiles();
+    setPreviewKey((k) => k + 1);
+    toast.success("Fix undone — your files are back", { id: t });
+  }
+
+  // Live typing across devices: the message box mirrors through the database.
+  const deviceIdRef = useRef<string>("");
+  const remoteDraftRef = useRef(false);
+  useEffect(() => {
+    let id = sessionStorage.getItem("forge:device-id");
+    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem("forge:device-id", id); }
+    deviceIdRef.current = id;
+    const ch = supabase
+      .channel(`draft-${projectId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_drafts", filter: `project_id=eq.${projectId}` }, (payload: any) => {
+        const row = payload.new;
+        if (!row || row.device_id === deviceIdRef.current) return;
+        remoteDraftRef.current = true;
+        setInput(row.text ?? "");
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [projectId]);
+  useEffect(() => {
+    if (remoteDraftRef.current) { remoteDraftRef.current = false; return; }
+    if (!deviceIdRef.current) return;
+    const t = window.setTimeout(async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      await supabase.from("project_drafts").upsert({ project_id: projectId, user_id: u.user.id, text: input, device_id: deviceIdRef.current, updated_at: new Date().toISOString() });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [input, projectId]);
   // Live badge: the model named on the newest assistant reply. Each fallback
   // hand-off starts a new reply, so the badge follows whichever model took over.
   const activeModel = useMemo(() => {
@@ -1670,6 +1775,7 @@ function ProjectEditor() {
           { k: "code", label: "Code", icon: Code2 },
           { k: "assets", label: "Assets", icon: ImageIcon },
           { k: "history", label: "History", icon: HistoryIcon },
+          { k: "brain", label: "Brain", icon: Brain },
         ] as const).map(({ k, label, icon: Icon }) => (
           <button
             key={k}
@@ -2060,10 +2166,11 @@ function ProjectEditor() {
                         setFixSending(true);
                         const err = buildErrorReport(previewError);
                         setPreviewError(null);
+                        await takeFixSnapshot();
                         setMode("build");
                         modeRef.current = "build";
                         requestKeyRef.current = crypto.randomUUID();
-                        await sendMessage({ text: `Fix this error in the preview. Use the exact message, line number, code excerpt and stack below instead of guessing, then fix the root cause:\n\n${err}` });
+                        await sendMessage({ text: `Fix this error in the preview. Use the exact message, line number, code excerpt and stack below instead of guessing, then fix the root cause. Change only what is needed — do not rewrite or remove unrelated code:\n\n${err}` });
                       }}
                     >
                       {fixSending ? "Fixing…" : "🛠️ Fix this error"}
@@ -2164,6 +2271,17 @@ function ProjectEditor() {
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center justify-end gap-2">
+                {isBusy && jobStartedAt ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5 text-[11px] text-primary tabular-nums" title="Time this job has been running">
+                    <Timer className="h-3 w-3" />
+                    {fmtElapsed(nowTick - jobStartedAt)}
+                  </span>
+                ) : null}
+                {liveNeurons ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground tabular-nums" title="Neurons on the key doing this job">
+                    ⚡ start {(liveNeurons.start / 1000).toFixed(1)}k · used {(liveNeurons.used / 1000).toFixed(1)}k · left {(Math.max(0, liveNeurons.cap - liveNeurons.start - liveNeurons.used) / 1000).toFixed(1)}k of {liveNeurons.cap / 1000}k
+                  </span>
+                ) : null}
                 <NeuronsBar />
                 {activeModel ? (
                   <span
@@ -2408,6 +2526,7 @@ function ProjectEditor() {
         )}
 
         {tab === "assets" && <AssetsPanel projectId={projectId} />}
+        {tab === "brain" && <BrainPanel projectId={projectId} />}
         {tab === "history" && (
           <HistoryPanel
             projectId={projectId}
@@ -2469,6 +2588,12 @@ function ProjectEditor() {
                 >
                   <Upload className="h-3.5 w-3.5" />
                   {zipImporting ? "Importing…" : "Import .zip"}
+                </Button>
+                <Button variant="ghost" size="icon" onClick={exportZip} disabled={files.length === 0} className="h-8 w-8 text-primary" title="Download all code as .zip" aria-label="Download all code as .zip">
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={clearAllCode} disabled={files.length === 0} className="h-8 w-8 text-destructive" title="Delete all code" aria-label="Delete all code">
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
