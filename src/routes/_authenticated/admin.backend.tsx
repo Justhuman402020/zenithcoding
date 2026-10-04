@@ -16,10 +16,10 @@ import {
 export const Route = createFileRoute("/_authenticated/admin/backend")({
   head: () => ({
     meta: [
-      { title: "Forge — Backend connection" },
-      { name: "description", content: "Save the backend account every new Forge project uses for signup and data." },
-      { property: "og:title", content: "Forge — Backend connection" },
-      { property: "og:description", content: "Save the backend account every new Forge project uses." },
+      { title: "Code Haven — Backend connection" },
+      { name: "description", content: "Save the backend account every new Code Haven project uses for signup and data." },
+      { property: "og:title", content: "Code Haven — Backend connection" },
+      { property: "og:description", content: "Save the backend account every new Code Haven project uses." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

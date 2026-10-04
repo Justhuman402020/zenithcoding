@@ -9,7 +9,7 @@ import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  head: () => ({ meta: [{ title: "Sign in — Forge" }] }),
+  head: () => ({ meta: [{ title: "Sign in — Code Haven" }, { name: "description", content: "Sign in to plan, build, preview, and publish websites with Code Haven." }, { property: "og:title", content: "Sign in — Code Haven" }, { property: "og:description", content: "Your AI coding workspace for planning, building, and publishing websites." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: AuthPage,
 });
 
@@ -59,14 +59,14 @@ function AuthPage() {
       <aside className="hidden md:flex relative flex-col justify-between p-10 lg:p-14 border-r border-border/60">
         <div className="flex items-center gap-3">
           <ForgeMark className="h-10 w-10" glow />
-          <span className="font-display text-2xl text-gold">Forge</span>
+          <span className="font-display text-2xl text-gold">Code Haven</span>
         </div>
         <div className="space-y-6 max-w-md">
           <h1 className="font-display text-5xl lg:text-6xl leading-[1.02]">
             A private <em className="text-gold not-italic">atelier</em> for building&nbsp;web.
           </h1>
           <p className="text-base text-muted-foreground leading-relaxed">
-            Forge is a quiet, premium AI coding workspace. Chat to build, watch it ship, publish to your own domain — all in pure gold and noir.
+            Code Haven is your AI coding workspace. Plan a site, build from chat or images, preview every change, and publish to your own domain.
           </p>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary" /> Build sites by conversation</li>
@@ -85,7 +85,7 @@ function AuthPage() {
           {/* Mobile brand header */}
           <div className="md:hidden flex items-center gap-3 justify-center mb-10">
             <ForgeMark className="h-9 w-9" glow />
-            <span className="font-display text-2xl text-gold">Forge</span>
+            <span className="font-display text-2xl text-gold">Code Haven</span>
           </div>
 
           <div className="rounded-2xl border hairline-gold bg-card/70 backdrop-blur-sm p-7 shadow-candlelight">
@@ -117,7 +117,7 @@ function AuthPage() {
               </Button>
             </form>
             <div className="mt-6 text-center text-sm text-muted-foreground">
-              {mode === "signin" ? "New to Forge?" : "Already have an account?"}{" "}
+              {mode === "signin" ? "New to Code Haven?" : "Already have an account?"}{" "}
               <button
                 type="button"
                 className="text-primary hover:text-primary-glow underline-offset-4 hover:underline"

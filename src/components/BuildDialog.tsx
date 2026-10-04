@@ -75,7 +75,7 @@ export function BuildDialog({ open, onOpenChange, files, onDone, title = "Build 
             {title}
           </DialogTitle>
           <DialogDescription>
-            Forge builds your source in your browser (no server compute) before shipping it.
+            Code Haven builds your source in your browser (no server compute) before shipping it.
           </DialogDescription>
         </DialogHeader>
 

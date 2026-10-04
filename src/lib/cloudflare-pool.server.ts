@@ -10,6 +10,16 @@ export const CLOUDFLARE_CODING_MODEL = "@cf/qwen/qwen3.8-27b";
 const CF_RE = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i;
 
 export const isCloudflareBaseUrl = (url: string) => CF_RE.test(url);
+
+export async function readCloudflareCodingModel() {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin.from("ai_pool_settings").select("coding_model").eq("id", "global").maybeSingle();
+    return data?.coding_model || CLOUDFLARE_CODING_MODEL;
+  } catch {
+    return CLOUDFLARE_CODING_MODEL;
+  }
+}
 export const utcDay = () => new Date().toISOString().slice(0, 10);
 export function nextResetAt() {
   const d = new Date();

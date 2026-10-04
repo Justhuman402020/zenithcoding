@@ -110,6 +110,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_pool_settings: {
+        Row: {
+          coding_model: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+          vision_model: string | null
+          vision_provider: string | null
+        }
+        Insert: {
+          coding_model?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vision_model?: string | null
+          vision_provider?: string | null
+        }
+        Update: {
+          coding_model?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vision_model?: string | null
+          vision_provider?: string | null
+        }
+        Relationships: []
+      }
       chat_jobs: {
         Row: {
           assistant_reply: string | null
@@ -822,6 +849,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_transfers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_visual_briefs: {
+        Row: {
+          brief: string
+          created_at: string
+          id: string
+          project_id: string
+          source_name: string | null
+          user_id: string
+          vision_model: string
+          vision_provider: string
+        }
+        Insert: {
+          brief: string
+          created_at?: string
+          id?: string
+          project_id: string
+          source_name?: string | null
+          user_id: string
+          vision_model: string
+          vision_provider: string
+        }
+        Update: {
+          brief?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          source_name?: string | null
+          user_id?: string
+          vision_model?: string
+          vision_provider?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_visual_briefs_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"

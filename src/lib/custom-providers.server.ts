@@ -93,11 +93,11 @@ export async function listModelIds(
     const cf = /api\.cloudflare\.com\/client\/v4\/accounts\/([^/]+)\/ai/i.exec(baseURL);
     if (cf) {
       const res = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${cf[1]}/ai/models/search?task=Text%20Generation&per_page=200`,
+        `https://api.cloudflare.com/client/v4/accounts/${cf[1]}/ai/models/search?per_page=200`,
         { headers: { Authorization: `Bearer ${apiKey}` } },
       );
       const text = await res.text().catch(() => "");
-      let json: { success?: boolean; result?: Array<{ name?: string }>; errors?: Array<{ message?: string }> } | null = null;
+      let json: { success?: boolean; result?: Array<{ name?: string; task?: { name?: string } | string }>; errors?: Array<{ message?: string }> } | null = null;
       try {
         json = JSON.parse(text);
       } catch {
@@ -108,7 +108,13 @@ export async function listModelIds(
         const hint = res.status === 403 || res.status === 401 ? " (check the token has Workers AI Read permission and the Account ID is right)" : "";
         return { ok: false, error: `${res.status}: ${msg}${hint}`, models: [] };
       }
-      const models = (json.result ?? []).map((m) => m.name).filter((n): n is string => !!n);
+      const models = (json.result ?? [])
+        .filter((m) => {
+          const task = typeof m.task === "string" ? m.task : m.task?.name;
+          return !task || /text generation|text-to-text|image-text|vision|multimodal/i.test(task);
+        })
+        .map((m) => m.name)
+        .filter((n): n is string => !!n);
       if (!models.length) return { ok: false, error: "The token worked but no text models were returned.", models };
       return { ok: true, error: null, models };
     }

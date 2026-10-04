@@ -80,6 +80,7 @@ import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react
 import { BrainPanel } from "@/components/BrainPanel";
 import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
+import { ChatModelControls, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
 import { useServerFn as useStopServerFn } from "@tanstack/react-start";
 import {
@@ -110,7 +111,7 @@ type PreviewErrorCtx = {
 };
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
-  head: () => ({ meta: [{ title: "Forge — editor" }] }),
+  head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
     typeof search.prompt === "string" ? { prompt: search.prompt } : {},
 
@@ -365,7 +366,7 @@ function ProjectEditor() {
       autoSwitchRef.current = next;
       window.localStorage.setItem("forge:auto-switch", next ? "on" : "off");
       if (!next) setSwitchCountdown(null);
-      toast.success(next ? "Auto-switch on" : "Auto-switch off — Forge will only use the chosen model");
+      toast.success(next ? "Auto-switch on" : "Auto-switch off — Code Haven will only use the chosen model");
       return next;
     });
   }, []);
@@ -420,7 +421,7 @@ function ProjectEditor() {
         .then(({ data }) => {
           const job = data?.[0];
           if (job && isActiveChatJob(job)) {
-            toast.info(`Connected again · Forge kept working: ${job.progress ?? "AI is working"}`, { id: "forge-online" });
+            toast.info(`Connected again · Code Haven kept working: ${job.progress ?? "AI is working"}`, { id: "forge-online" });
           } else if (job?.status === "completed" && hiddenAt && new Date(job.updated_at).getTime() > hiddenAt) {
             toast.success("Connected again · Your task finished while you were away", { id: "forge-online" });
           } else if (job?.status === "completed" || !hiddenAt) {
@@ -434,7 +435,7 @@ function ProjectEditor() {
       if (now && !wasOnline) report();
       else if (!now && wasOnline) {
         hiddenAt = Date.now();
-        toast.warning("Offline · Forge keeps working on the server", { id: "forge-online" });
+        toast.warning("Offline · Code Haven keeps working on the server", { id: "forge-online" });
       }
       wasOnline = now;
     };
@@ -799,6 +800,8 @@ function ProjectEditor() {
           const headers: Record<string, string> = { "x-project-id": projectId };
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
+          const visionRef = window.localStorage.getItem(VISION_MODEL_STORAGE_KEY);
+          if (visionRef) headers["x-forge-vision-model"] = visionRef;
           headers["x-forge-mode"] = modeRef.current;
           headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
@@ -1283,7 +1286,7 @@ function ProjectEditor() {
   }, [chatReady, tab]);
 
   // Actually hands one message to the agent. Used both for an immediate send
-  // and for a message that waited in the queue while Forge was busy.
+  // and for a message that waited in the queue while Code Haven was busy.
   async function deliverMessage(text: string, atts: Attachment[]) {
     requestKeyRef.current = crypto.randomUUID();
     autoContinueRef.current = 0;
@@ -1587,7 +1590,7 @@ function ProjectEditor() {
           <SheetContent side="left" className="w-72 p-0 flex flex-col">
             <SheetHeader className="p-4 hairline-bottom-gold">
               <SheetTitle className="flex items-center gap-2 font-display text-gold">
-                <ForgeMark className="h-6 w-6" /> Forge
+                 <ForgeMark className="h-6 w-6" /> Code Haven
               </SheetTitle>
             </SheetHeader>
             <div className="p-2">
@@ -1826,7 +1829,7 @@ function ProjectEditor() {
               {chatReady && messages.length === 0 && (
                 <div className="text-center py-12 space-y-3">
                   <ForgeMark className="h-14 w-14 mx-auto" glow />
-                  <h2 className="font-display text-2xl">What will we forge?</h2>
+                  <h2 className="font-display text-2xl">What will we build?</h2>
                   <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                     Describe what you want and I'll build it. You'll see it take shape live in <em className="text-primary not-italic">Preview</em>.
                   </p>
@@ -2294,6 +2297,7 @@ function ProjectEditor() {
                   </span>
                 ) : null}
                 <NeuronsBar />
+                <ChatModelControls />
                 {activeModel ? (
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
@@ -2314,7 +2318,7 @@ function ProjectEditor() {
               </div>
               {!isOnline && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  Offline — Forge keeps working on the server. You'll see where it is when you reconnect.
+                  Offline — Code Haven keeps working on the server. You'll see where it is when you reconnect.
                 </div>
               )}
               {remoteWorking && !isStreaming && (
@@ -2488,7 +2492,7 @@ function ProjectEditor() {
                   }
                 }}
 
-                placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Forge to build…"}
+                placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Code Haven to build…"}
                 disabled={!token}
                 rows={1}
                 className="resize-none min-h-[44px] max-h-32 text-base"
@@ -2563,7 +2567,7 @@ function ProjectEditor() {
                 {loadingFiles ? (
                   <span className="truncate px-3 py-2 text-xs text-muted-foreground">Loading…</span>
                 ) : files.length === 0 ? (
-                  <span className="truncate px-3 py-2 text-xs text-muted-foreground">No files yet — ask Forge to create one</span>
+                  <span className="truncate px-3 py-2 text-xs text-muted-foreground">No files yet — ask Code Haven to create one</span>
                 ) : (
                   files.map((f) => (
                   <button

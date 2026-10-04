@@ -16,6 +16,7 @@ import {
 } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
 import { CloudflarePoolPanel, NeuronsBar } from "@/components/CloudflarePoolPanel";
+import { CloudflareModelSettings } from "@/components/CloudflareModelSettings";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -34,9 +35,9 @@ import {
 export const Route = createFileRoute("/_authenticated/admin/models")({
   head: () => ({
     meta: [
-      { title: "AI models — Forge Admin" },
-      { name: "description", content: "Switch the coding model Forge uses and watch free-tier limits per provider." },
-      { property: "og:title", content: "AI models — Forge Admin" },
+      { title: "AI models — Code Haven Admin" },
+      { name: "description", content: "Switch the coding and image models Code Haven uses and watch free-tier limits per provider." },
+      { property: "og:title", content: "AI models — Code Haven Admin" },
       { property: "og:description", content: "Switch coding models and watch free-tier limits per provider." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -236,6 +237,7 @@ function AdminModelsPage() {
 
       <NeuronsBar />
       <CloudflarePoolPanel />
+      <CloudflareModelSettings />
 
       <div className="flex items-start gap-3">
         <Cpu className="h-6 w-6 text-primary mt-1" />
