@@ -8,6 +8,13 @@
       "when": 1791152189661,
       "tag": "0000_brain_notes_and_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791155554796,
+      "tag": "0001_add_model_preferences_and_visual_briefs",
+      "breakpoints": true
     }
   ]
 }
