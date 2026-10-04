@@ -166,7 +166,7 @@ type Project = {
 
 export const Route = createFileRoute("/_authenticated/")({
 
-  head: () => ({ meta: [{ title: "Forge — your projects" }] }),
+  head: () => ({ meta: [{ title: "Your projects — Code Haven" }, { name: "description", content: "Create, import, plan, and manage your Code Haven projects." }, { property: "og:title", content: "Your projects — Code Haven" }, { property: "og:description", content: "Create, import, plan, and manage your Code Haven projects." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: Dashboard,
 });
 

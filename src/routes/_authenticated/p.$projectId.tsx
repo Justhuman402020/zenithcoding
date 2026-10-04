@@ -1590,7 +1590,7 @@ function ProjectEditor() {
           <SheetContent side="left" className="w-72 p-0 flex flex-col">
             <SheetHeader className="p-4 hairline-bottom-gold">
               <SheetTitle className="flex items-center gap-2 font-display text-gold">
-                <ForgeMark className="h-6 w-6" /> Forge
+                 <ForgeMark className="h-6 w-6" /> Code Haven
               </SheetTitle>
             </SheetHeader>
             <div className="p-2">

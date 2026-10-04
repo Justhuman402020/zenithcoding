@@ -300,16 +300,13 @@ export const Route = createFileRoute("/api/public/chat")({
             ? { provider: poolSettings.vision_provider, model: poolSettings.vision_model }
             : null);
           const { planAttachedImages } = await import("@/lib/vision-planner.server");
-          setProgress("Reading the image · visual planner");
           const visualPlan = await planAttachedImages({
             messages: compactMessages,
             providers: providerRegistry,
             keys: providerKeys,
             preferred: visionPreference,
             gateway,
-            onSwitch: async (seconds, failed) => {
-              setProgress(`${failed.model} could not read the image · switching in ${seconds}s`);
-            },
+            onSwitch: async () => {},
           });
           if (!visualPlan) return fail(424, JSON.stringify({ error: "vision_unavailable", message: "No working image model could read this image. Refresh the first lightning menu or add a vision-capable key." }), "application/json");
           visualBrief = visualPlan.brief;
@@ -430,7 +427,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // request, so send a much shorter history there or it silently rejects.
         const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);
         const turnMessages = isGitHubModels ? compactChatMessages(body.messages, 3) : compactMessages;
-        const strippedMessages = visualBrief || visionOk
+        const strippedMessages = visionOk && !visualBrief
           ? turnMessages
           : turnMessages.map((message) => ({
               ...message,
