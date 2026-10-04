@@ -618,11 +618,23 @@ export const Route = createFileRoute("/api/public/chat")({
                   if (autoFallback && editorAuto && baseNeurons + attemptNeurons >= cfPool.SOFT_CAP_NEURONS) {
                     handoff = true;
                   }
+                  writer?.write({
+                    type: "message-metadata",
+                    messageMetadata: { neurons: { key: current.ref.provider, start: Math.round(baseNeurons), used: Math.round(attemptNeurons), cap: cfPool.SOFT_CAP_NEURONS } },
+                  });
                 }
                 if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
-                setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed`);
+                const neuronNote = cfPool ? ` · ${(Math.round(baseNeurons + attemptNeurons) / 1000).toFixed(1)}k/9k Neurons` : "";
+                setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed${neuronNote}`);
               },
-              prepareStep: createPrepareStep(needsFileChange, trace),
+              prepareStep: (opts: any) => {
+                createPrepareStep(needsFileChange, trace)(opts);
+                if (!cfPool) return undefined;
+                const total = Math.round(baseNeurons + attemptNeurons);
+                return {
+                  system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.`,
+                };
+              },
               stopWhen: [
                 stepCountIs(40),
                 () => handoff,
@@ -666,12 +678,28 @@ export const Route = createFileRoute("/api/public/chat")({
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
               carried.push({
                 role: "user",
-                content: `Handoff note (previous key reached its 9,000 Neuron soft cap after a completed step). Finished: ${stepNo} step(s). Files already written (trust them — do NOT re-read or rewrite): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Last completed action: ${progressText}. Next: do the next remaining step of the original request only.`,
+                content: `Handoff note (previous key reached its 9,000 Neuron soft cap after a completed step). You are still Forge — same voice, same plan, same task; the user should not notice a switch. Finished: ${stepNo} step(s). Files already written (trust them — do NOT re-read or rewrite): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Last completed action: ${progressText}. Next: do the next remaining step of the original request only.`,
               });
               trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
               failure = null;
             }
             const success = finished && !failure && !timedOut && !handoff;
+            if (success && requiredAssets.length && !assetRetryDone && !userStopped) {
+              const unused = await findUnusedAssets();
+              if (unused.length) {
+                assetRetryDone = true;
+                if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+                carried.push({
+                  role: "user",
+                  content: `Check failed: no project file contains these asset URLs yet: ${unused.map((a) => `@${a.handle} → ${a.url}`).join("; ")}. read_file the page, then write_file it with each exact URL placed where I asked. Do not claim it is done until written.`,
+                });
+                trace.log("asset.recheck", { detail: { missing: unused.map((a) => a.handle) } });
+                finished = false;
+                finalReason = undefined;
+                attempt -= 1;
+                continue;
+              }
+            }
             // An empty stream with no output counts as a failure too.
             if (success && (stepNo > 0 || replyTexts.length)) break;
             if (userStopped) break;
