@@ -493,11 +493,34 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .order("created_at", { ascending: false })
           .limit(60);
-        const assetContext = assetRows?.length
-          ? `\n\n## Named assets (use these EXACT URLs when the user mentions @name)\n${assetRows
-              .map((a) => `- @${a.handle} (${a.content_type?.startsWith("video/") ? "video" : "image"}): ${a.url}`)
-              .join("\n")}\nImages go in <img src>, videos in <video src controls playsinline>. Never invent or alter these URLs.`
-          : "";
+        const mentionedHandles = Array.from(lastUserText.matchAll(/@([A-Za-z0-9_\-.]+)/g)).map((m) => m[1]!.toLowerCase().replace(/[.]+$/, ""));
+        const requiredAssets = (assetRows ?? []).filter((a) => mentionedHandles.includes(a.handle.toLowerCase()));
+        const missingHandles = mentionedHandles.filter((h) => !(assetRows ?? []).some((a) => a.handle.toLowerCase() === h) && !h.includes("."));
+        const assetContext =
+          (assetRows?.length
+            ? `\n\n## Named assets (use these EXACT URLs when the user mentions @name)\n${assetRows
+                .map((a) => `- @${a.handle} (${a.content_type?.startsWith("video/") ? "video" : "image"}): ${a.url}`)
+                .join("\n")}\nImages go in <img src>, videos in <video src controls playsinline>. Never invent or alter these URLs.`
+            : "") +
+          (requiredAssets.length
+            ? `\n\n## REQUIRED in this turn\nThe user referenced these assets. You MUST write_file so the code literally contains each exact URL below where they asked. Saying it was used without writing the file is a failure.\n${requiredAssets.map((a) => `- @${a.handle} → ${a.url}`).join("\n")}`
+            : "") +
+          (missingHandles.length && assetRows
+            ? `\n\nThese @names are NOT in the asset library: ${missingHandles.map((h) => `@${h}`).join(", ")}. Tell the user plainly instead of inserting a random image.`
+            : "");
+        let assetRetryDone = false;
+        const findUnusedAssets = async () => {
+          const missing: typeof requiredAssets = [];
+          for (const a of requiredAssets) {
+            const { count } = await supabaseAdmin
+              .from("files")
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", projectId)
+              .ilike("content", `%${a.url.replace(/[%_]/g, "\\$&")}%`);
+            if (!count) missing.push(a);
+          }
+          return missing;
+        };
         // Website cloner: compact blueprint of a linked site.
         const { detectCloneUrl, buildSiteBlueprint } = await import("@/lib/site-cloner.server");
         const cloneUrl = detectCloneUrl(lastUserText);
