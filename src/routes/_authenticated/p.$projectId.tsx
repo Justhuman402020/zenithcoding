@@ -74,6 +74,8 @@ import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
+import { SetupMatrix } from "@/components/SetupMatrix";
+import { getPreviewEnv } from "@/lib/project-secrets.functions";
 import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
 import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react";
@@ -82,7 +84,8 @@ import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
 import { ChatModelControls, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
-import { useServerFn as useStopServerFn } from "@tanstack/react-start";
+import { useServerFn as useStopServerFn, useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -644,18 +647,25 @@ function ProjectEditor() {
   const needsBuild = useMemo(() => isBuildable(files.map((f) => ({ path: f.path, content: f.content }))).buildable, [files]);
   const [autoBuild, setAutoBuild] = useState<{ files: BuildFile[] | null; status: "idle" | "building" | "error"; error?: string }>({ files: null, status: "idle" });
   const buildSeq = useRef(0);
+  const getPreviewEnvFn = useServerFn(getPreviewEnv);
+  const previewEnvQ = useQuery({
+    queryKey: ["preview-env", projectId],
+    queryFn: () => getPreviewEnvFn({ data: { projectId } }),
+    enabled: needsBuild,
+  });
+  const previewEnv = previewEnvQ.data?.env;
   useEffect(() => {
     if (!needsBuild) { setAutoBuild({ files: null, status: "idle" }); return; }
     const seq = ++buildSeq.current;
     setAutoBuild((b) => ({ ...b, status: "building" }));
     const t = setTimeout(async () => {
-      const res = await buildInBrowser(files.map((f) => ({ path: f.path, content: f.content })));
+      const res = await buildInBrowser(files.map((f) => ({ path: f.path, content: f.content })), undefined, { env: previewEnv ?? {} });
       if (seq !== buildSeq.current) return;
       if (res.ok) setAutoBuild({ files: res.files, status: "idle" });
       else setAutoBuild((b) => ({ files: b.files, status: "error", error: res.error }));
     }, 700);
     return () => clearTimeout(t);
-  }, [files, needsBuild]);
+  }, [files, needsBuild, previewEnv]);
 
   const previewDoc = useMemo(() => {
     if (needsBuild && !autoBuild.files) {
@@ -2524,6 +2534,9 @@ function ProjectEditor() {
           </div>
         )}
 
+        {tab === "preview" && (
+          <SetupMatrix projectId={projectId} files={files} />
+        )}
         {tab === "preview" && (
           <PreviewFrame
             srcDoc={previewDoc}
