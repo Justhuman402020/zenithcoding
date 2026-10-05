@@ -84,7 +84,8 @@ import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
 import { ChatModelControls, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
-import { useServerFn as useStopServerFn } from "@tanstack/react-start";
+import { useServerFn as useStopServerFn, useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
