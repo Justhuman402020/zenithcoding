@@ -33,9 +33,23 @@ export function detectFileChangeIntent(text: string) {
   return /\b(broken|failing|failed|not\s+working|doesn'?t\s+work|signup|sign\s*up|login|dark\s*mode)\b/i.test(trimmed);
 }
 
-function isVisualPart(part: UIMessage["parts"][number]) {
-  if (part.type !== "file") return false;
-  return typeof part.mediaType === "string" && part.mediaType.startsWith("image/");
+/** Image parts from AI SDK v4 (`type: "image"`) and file uploads (`type: "file"`, image/*). */
+export function isVisualPart(part: UIMessage["parts"][number]) {
+  const p = part as any;
+  if (p?.type === "image") return true;
+  if (p?.type !== "file") return false;
+  const mt = p.mediaType ?? p.mimeType;
+  return typeof mt === "string" && mt.startsWith("image/");
+}
+
+/** Converts legacy `type: "image"` parts into the v5 file shape the SDK can send. */
+export function normalizeImagePart(part: any) {
+  if (part?.type === "image") {
+    const url = part.image ?? part.url ?? part.data;
+    return { type: "file", mediaType: part.mediaType ?? part.mimeType ?? "image/png", url: typeof url === "string" ? url : String(url ?? "") };
+  }
+  if (part?.type === "file" && !part.mediaType && part.mimeType) return { ...part, mediaType: part.mimeType };
+  return part;
 }
 
 /**
