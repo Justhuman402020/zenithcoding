@@ -16,6 +16,7 @@ import {
   compactChatMessages,
   createPrepareStep,
   detectFileChangeIntent,
+  isVisualPart,
 } from "@/lib/chat-agent.server";
 
 import {
