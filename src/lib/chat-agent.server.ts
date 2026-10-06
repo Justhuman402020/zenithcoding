@@ -91,7 +91,7 @@ export function compactChatMessages(messages: UIMessage[], maxMessages = 10): UI
         parts.push({ ...part, text: compacted });
         continue;
       }
-      if (isLatestUser && isVisualPart(part)) parts.push(part);
+      if (isLatestUser && isVisualPart(part)) parts.push(normalizeImagePart(part) as typeof part);
     }
     return parts.length > 0 ? [{ ...message, parts } as UIMessage] : [];
   });

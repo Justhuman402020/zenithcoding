@@ -207,10 +207,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // Does the current turn carry images (screenshots, mockups, video frames)?
         const hasImages = compactMessages.some((message) =>
           (message.parts ?? []).some(
-            (part: any) =>
-              (part?.type === "file" || part?.type === "image") &&
-              typeof part?.mediaType === "string" &&
-              part.mediaType.startsWith("image/"),
+            (part: any) => isVisualPart(part),
           ),
         );
 
@@ -432,7 +429,7 @@ export const Route = createFileRoute("/api/public/chat")({
           : turnMessages.map((message) => ({
               ...message,
               parts: (message.parts ?? []).filter(
-                (part: any) => !(typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")),
+                (part: any) => !isVisualPart(part),
               ),
             }));
         // Empty turns (e.g. a reply that only "thought") make providers answer
@@ -565,9 +562,11 @@ export const Route = createFileRoute("/api/public/chat")({
             ? `\n\nThe user linked ${cloneUrl} to replicate, but it could not be fetched. Build your best matching page and say in one line that the site couldn't be read.`
             : "";
         const visualContext = visualBrief ? `\n\n## Visual planner brief\n${visualBrief}\nThis brief was created by the image reader. You are the coding boss: use it as the source of truth and edit the files now. Do not spend tokens re-describing the image.` : "";
+        const { vaultPromptSection } = await import("@/lib/admin-vault.server");
+        const adminVaultContext = await vaultPromptSection();
         const systemPrompt =
           (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-          sharedContext + assetContext + cloneContext + visualContext;
+          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext;
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];
