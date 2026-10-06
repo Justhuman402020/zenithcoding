@@ -24,6 +24,7 @@ import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
+import { Route as AuthenticatedAdminBrainRouteImport } from './routes/_authenticated/admin.brain'
 import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
 import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
 import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
@@ -118,6 +119,11 @@ const AuthenticatedAdminBackendRoute =
     path: '/admin/backend',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminBrainRoute = AuthenticatedAdminBrainRouteImport.update({
+  id: '/admin/brain',
+  path: '/admin/brain',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAdminDomainsRoute =
   AuthenticatedAdminDomainsRouteImport.update({
     id: '/admin/domains',
@@ -219,6 +225,7 @@ export interface FileRoutesByFullPath {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
+  '/admin/brain': typeof AuthenticatedAdminBrainRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
@@ -251,6 +258,7 @@ export interface FileRoutesByTo {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
+  '/admin/brain': typeof AuthenticatedAdminBrainRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
   '/_authenticated/admin/backend': typeof AuthenticatedAdminBackendRoute
+  '/_authenticated/admin/brain': typeof AuthenticatedAdminBrainRoute
   '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/_authenticated/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
@@ -319,6 +328,7 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/account/billing'
     | '/admin/backend'
+    | '/admin/brain'
     | '/admin/domains'
     | '/admin/integrations'
     | '/admin/models'
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/account/billing'
     | '/admin/backend'
+    | '/admin/brain'
     | '/admin/domains'
     | '/admin/integrations'
     | '/admin/models'
@@ -384,6 +395,7 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/_authenticated/account/billing'
     | '/_authenticated/admin/backend'
+    | '/_authenticated/admin/brain'
     | '/_authenticated/admin/domains'
     | '/_authenticated/admin/integrations'
     | '/_authenticated/admin/models'
@@ -534,6 +546,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminBackendRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/brain': {
+      id: '/_authenticated/admin/brain'
+      path: '/admin/brain'
+      fullPath: '/admin/brain'
+      preLoaderRoute: typeof AuthenticatedAdminBrainRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/domains': {
       id: '/_authenticated/admin/domains'
       path: '/admin/domains'
@@ -667,6 +686,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
   AuthenticatedAdminBackendRoute: typeof AuthenticatedAdminBackendRoute
+  AuthenticatedAdminBrainRoute: typeof AuthenticatedAdminBrainRoute
   AuthenticatedAdminDomainsRoute: typeof AuthenticatedAdminDomainsRoute
   AuthenticatedAdminIntegrationsRoute: typeof AuthenticatedAdminIntegrationsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
@@ -679,6 +699,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
   AuthenticatedAdminBackendRoute: AuthenticatedAdminBackendRoute,
+  AuthenticatedAdminBrainRoute: AuthenticatedAdminBrainRoute,
   AuthenticatedAdminDomainsRoute: AuthenticatedAdminDomainsRoute,
   AuthenticatedAdminIntegrationsRoute: AuthenticatedAdminIntegrationsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,

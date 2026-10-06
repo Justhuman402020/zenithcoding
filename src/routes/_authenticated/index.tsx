@@ -791,7 +791,7 @@ function Dashboard() {
       )}
 
       <section className="flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12 relative">
-        <input ref={homeZipRef} type="file" accept=".zip,application/zip" className="hidden" onChange={(event) => void importHomeZip(event.target.files?.[0])} />
+        <input ref={homeZipRef} type="file" accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream" className="hidden" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => void importHomeZip(event.target.files?.[0])} />
         <div className="hidden md:flex items-center gap-3 mb-8">
           <ForgeMark className="h-12 w-12" glow />
           <span className="font-display text-3xl text-gold">Code Haven</span>

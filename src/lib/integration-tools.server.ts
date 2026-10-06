@@ -59,5 +59,104 @@ export function createIntegrationTools(opts: { projectId: string; userId: string
         return { ok: true, saved: "DATABASE_URL", neonProjectId: r.neonProjectId };
       },
     }),
+    execute_sql: tool({
+      description:
+        "Run SQL (DDL like CREATE TABLE IF NOT EXISTS / ALTER TABLE / CREATE POLICY, or DML) on this project's connected Supabase database. Use it when a table is missing instead of telling the user to do it. Always enable RLS and add policies on new tables.",
+      inputSchema: z.object({ sql: z.string().min(3).max(50000) }),
+      execute: async ({ sql }) => {
+        const r = await runProjectSql(opts.projectId, sql);
+        log("tool.execute_sql", { ok: r.ok });
+        return r;
+      },
+    }),
+    attach_credential: tool({
+      description:
+        "Copy a credential from the admin vault into this project's secrets under a given env name (e.g. VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GROQ_API_KEY). part chooses key, url or id.",
+      inputSchema: z.object({
+        label: z.string().min(1),
+        secretName: z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
+        part: z.enum(["key", "url", "id"]).optional(),
+      }),
+      execute: async ({ label, secretName, part }) => {
+        const { readVaultSecret } = await import("./admin-vault.server");
+        const cred = await readVaultSecret(label);
+        if (!cred) return { ok: false, error: `No vault credential named "${label}".` };
+        const value = part === "url" ? cred.base_url : part === "id" ? cred.account_id : cred.key;
+        if (!value) return { ok: false, error: `That credential has no ${part}.` };
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { encryptSecret } = await import("./secrets-crypto.server");
+        const { error } = await supabaseAdmin.from("project_secrets").upsert(
+          {
+            project_id: opts.projectId,
+            user_id: opts.userId,
+            key: secretName,
+            value_encrypted: await encryptSecret(value),
+            expose_to_client: secretName.startsWith("VITE_"),
+            description: `From vault: ${cred.label}`,
+          },
+          { onConflict: "project_id,key" },
+        );
+        log("tool.attach_credential", { ok: !error, secretName });
+        return error ? { ok: false, error: error.message } : { ok: true, saved: secretName };
+      },
+    }),
+  };
+}
+
+async function projectSecret(projectId: string, keys: string[]) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { decryptSecret } = await import("./secrets-crypto.server");
+  const { data } = await supabaseAdmin
+    .from("project_secrets")
+    .select("key, value_encrypted")
+    .eq("project_id", projectId)
+    .in("key", keys);
+  for (const k of keys) {
+    const row = (data ?? []).find((r) => r.key === k);
+    if (row) {
+      try {
+        return await decryptSecret(row.value_encrypted);
+      } catch {
+        /* skip */
+      }
+    }
+  }
+  return null;
+}
+
+/** Runs SQL via the Supabase Management API (access token) or an exec_sql RPC (service key). */
+export async function runProjectSql(projectId: string, sql: string) {
+  const url = await projectSecret(projectId, ["SUPABASE_URL", "VITE_SUPABASE_URL"]);
+  if (!url) return { ok: false, error: "No Supabase connected to this project. Ask the user to connect one (or attach_credential from the vault)." };
+  const ref = /https?:\/\/([a-z0-9]+)\.supabase\.co/i.exec(url)?.[1];
+  const accessToken = await projectSecret(projectId, ["SUPABASE_ACCESS_TOKEN"]);
+  if (accessToken && ref) {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: sql }),
+    });
+    const text = await res.text();
+    return res.ok ? { ok: true, result: text.slice(0, 4000) } : { ok: false, error: `${res.status}: ${text.slice(0, 600)}` };
+  }
+  const serviceKey = await projectSecret(projectId, ["SUPABASE_SERVICE_ROLE_KEY"]);
+  if (!serviceKey) {
+    return {
+      ok: false,
+      error:
+        "Need SUPABASE_ACCESS_TOKEN (personal access token from supabase.com/dashboard/account/tokens) or SUPABASE_SERVICE_ROLE_KEY. Use request_secret to ask for SUPABASE_ACCESS_TOKEN.",
+    };
+  }
+  const res = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/rpc/exec_sql`, {
+    method: "POST",
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: sql }),
+  });
+  const text = await res.text();
+  if (res.ok) return { ok: true, result: text.slice(0, 4000) };
+  return {
+    ok: false,
+    error: `${res.status}: ${text.slice(0, 400)}`,
+    fix: "The database has no exec_sql helper. Ask the user for SUPABASE_ACCESS_TOKEN (request_secret), or to run once in their SQL editor: create or replace function public.exec_sql(query text) returns json language plpgsql security definer as $$ begin execute query; return json_build_object('ok', true); end $$; revoke all on function public.exec_sql(text) from public, anon, authenticated;",
   };
 }

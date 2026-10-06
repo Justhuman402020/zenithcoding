@@ -67,6 +67,7 @@ import {
   Upload,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
+import { LightCodeEditor } from "@/components/LightCodeEditor";
 import ReactMarkdown from "react-markdown";
 import { stripLeakedToolJson, summarizeToolInput } from "@/lib/chat-sanitize";
 import { DomainsPanel } from "@/components/DomainsPanel";
@@ -572,6 +573,14 @@ function ProjectEditor() {
   }
 
   const zipInputRef = useRef<HTMLInputElement>(null);
+  const [lightEditor, setLightEditor] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px), (pointer: coarse)");
+    const update = () => setLightEditor(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const [zipImporting, setZipImporting] = useState(false);
   async function importZip(file: File | undefined | null) {
     if (!file) return;
@@ -1670,8 +1679,9 @@ function ProjectEditor() {
         <input
           ref={zipInputRef}
           type="file"
-          accept=".zip,application/zip"
+          accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream"
           className="hidden"
+          onClick={(e) => { e.currentTarget.value = ""; }}
           onChange={(e) => void importZip(e.target.files?.[0])}
         />
         <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-1 sm:col-span-1 sm:ml-auto sm:flex-nowrap">
@@ -2626,6 +2636,16 @@ function ProjectEditor() {
               </div>
             </div>
             {activeFile ? (
+              lightEditor || activeFile.content.length > 150_000 ? (
+                <LightCodeEditor
+                  path={activeFile.path}
+                  value={activeFile.content}
+                  onSave={async (text) => {
+                    setFiles((fs) => fs.map((f) => (f.id === activeFile.id ? { ...f, content: text } : f)));
+                    await supabase.from("files").update({ content: text }).eq("id", activeFile.id);
+                  }}
+                />
+              ) : (
               <Editor
                 height="100%"
                 theme="vs-dark"
@@ -2640,6 +2660,7 @@ function ProjectEditor() {
                   wordWrap: "on",
                 }}
               />
+              )
             ) : files.length === 0 ? (
               <div className="flex h-full items-center justify-center p-5">
                 <Button
