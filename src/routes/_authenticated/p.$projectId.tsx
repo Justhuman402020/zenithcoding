@@ -2626,6 +2626,16 @@ function ProjectEditor() {
               </div>
             </div>
             {activeFile ? (
+              lightEditor || activeFile.content.length > 150_000 ? (
+                <LightCodeEditor
+                  path={activeFile.path}
+                  value={activeFile.content}
+                  onSave={async (text) => {
+                    setFiles((fs) => fs.map((f) => (f.id === activeFile.id ? { ...f, content: text } : f)));
+                    await supabase.from("files").update({ content: text }).eq("id", activeFile.id);
+                  }}
+                />
+              ) : (
               <Editor
                 height="100%"
                 theme="vs-dark"
