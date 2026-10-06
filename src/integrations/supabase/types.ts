@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_brain: {
+        Row: {
+          content: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          content?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          content?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      admin_credentials: {
+        Row: {
+          account_id: string | null
+          base_url: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          key_encrypted: string
+          kind: string
+          label: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          base_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_encrypted: string
+          kind?: string
+          label: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          base_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_encrypted?: string
+          kind?: string
+          label?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_gateway_settings: {
         Row: {
           enabled: boolean
