@@ -76,6 +76,8 @@ function AdminModelsPage() {
     { label: "GitHub Models", baseUrl: "https://models.github.ai/inference", tokenLabel: "GitHub access token" },
     { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
     { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
+    { label: "Google AI Studio", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", tokenLabel: "Google AI Studio API key" },
+    { label: "Custom API key", baseUrl: "", tokenLabel: "Paste API key" },
     { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
     { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
     { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
