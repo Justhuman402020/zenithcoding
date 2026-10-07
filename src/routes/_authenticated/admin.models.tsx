@@ -255,7 +255,7 @@ function AdminModelsPage() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold">AI model board</h1>
           <p className="text-sm text-muted-foreground">
-            Pick the model Forge codes with. If it runs out, Forge automatically moves to the next working model so your
+            Pick the model Code Haven codes with. If it runs out, Code Haven automatically moves to the next working model so your
             build never stops.
           </p>
         </div>
