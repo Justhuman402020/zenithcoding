@@ -584,7 +584,7 @@ function ProjectEditor() {
   const [zipImporting, setZipImporting] = useState(false);
   async function importZip(file: File | undefined | null) {
     if (!file) return;
-    if (!/\.zip$/i.test(file.name)) return toast.error("Please choose a .zip file");
+    { const { isZipFile } = await import("@/lib/zip-import"); if (!(await isZipFile(file))) return toast.error("That file is not a zip — please choose a .zip file"); }
     setZipImporting(true);
     const t = toast.loading(`Unpacking ${file.name}…`);
     try {
@@ -1679,7 +1679,7 @@ function ProjectEditor() {
         <input
           ref={zipInputRef}
           type="file"
-          accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream"
+          accept="*/*"
           className="hidden"
           onClick={(e) => { e.currentTarget.value = ""; }}
           onChange={(e) => void importZip(e.target.files?.[0])}
@@ -2581,7 +2581,7 @@ function ProjectEditor() {
             className="flex-1 min-h-0 flex flex-col"
             onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
             onDrop={(e) => {
-              const f = Array.from(e.dataTransfer.files).find((x) => /\.zip$/i.test(x.name));
+              const f = Array.from(e.dataTransfer.files).find((x) => /\.zip$/i.test(x.name) || /zip/i.test(x.type)) ?? e.dataTransfer.files[0];
               if (f) { e.preventDefault(); void importZip(f); }
             }}
           >

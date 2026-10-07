@@ -76,6 +76,8 @@ function AdminModelsPage() {
     { label: "GitHub Models", baseUrl: "https://models.github.ai/inference", tokenLabel: "GitHub access token" },
     { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
     { label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
+    { label: "Google AI Studio", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", tokenLabel: "Google AI Studio API key" },
+    { label: "Custom API key", baseUrl: "", tokenLabel: "Paste API key" },
     { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
     { label: "Mistral", baseUrl: "https://api.mistral.ai/v1" },
     { label: "Cerebras", baseUrl: "https://api.cerebras.ai/v1" },
@@ -92,7 +94,13 @@ function AdminModelsPage() {
   const [cfAccount, setCfAccount] = useState("");
   const selectedProvider = PROVIDER_PRESETS.find((provider) => provider.label === form.label) ?? PROVIDER_PRESETS[0];
   const isCloudflare = form.label === "Cloudflare Workers AI";
-  const keyTooShort = form.apiKey.trim().length < 8 || (isCloudflare && cfAccount.trim().length < 16);
+  const isCustom = form.label === "Custom API key";
+  const [customName, setCustomName] = useState("");
+  const [testedCount, setTestedCount] = useState<number | null>(null);
+  const keyTooShort =
+    form.apiKey.trim().length < 8 ||
+    (isCloudflare && cfAccount.trim().length < 16) ||
+    (isCustom && (customName.trim().length < 2 || !/^https?:\/\/.{3,}/.test(form.baseUrl.trim())));
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
@@ -162,7 +170,8 @@ function AdminModelsPage() {
     setTestResult(null);
     try {
       const res = await testKey({ data: { baseUrl: form.baseUrl, apiKey: form.apiKey } });
-      setTestResult(res.ok ? `Works — ${res.modelCount} models found` : `Did not work — ${res.error}`);
+      setTestedCount(res.ok ? res.modelCount : null);
+      setTestResult(res.ok ? `Works — ${res.modelCount} models available` : `Did not work — ${res.error}`);
     } catch (e) {
       setTestResult(e instanceof Error ? e.message : "Could not test that key");
     } finally {
@@ -173,9 +182,11 @@ function AdminModelsPage() {
   async function onSave() {
     setBusy("save");
     try {
-      const res = await addKey({ data: form });
+      const res = await addKey({ data: { ...form, label: isCustom ? customName.trim() : form.label } });
       toast.success(`Saved — ${res.modelCount} models added`);
-      setForm({ label: selectedProvider.label, baseUrl: isCloudflare ? form.baseUrl : selectedProvider.baseUrl, apiKey: "" });
+      setTestedCount(null);
+      if (isCustom) setCustomName("");
+      setForm({ label: selectedProvider.label, baseUrl: isCloudflare || isCustom ? (isCustom ? "" : form.baseUrl) : selectedProvider.baseUrl, apiKey: "" });
       setTestResult(null);
       refetch();
     } catch (e) {
@@ -244,7 +255,7 @@ function AdminModelsPage() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold">AI model board</h1>
           <p className="text-sm text-muted-foreground">
-            Pick the model Forge codes with. If it runs out, Forge automatically moves to the next working model so your
+            Pick the model Code Haven codes with. If it runs out, Code Haven automatically moves to the next working model so your
             build never stops.
           </p>
         </div>
@@ -336,7 +347,9 @@ function AdminModelsPage() {
             value={form.label}
             onChange={(e) => {
               const preset = PROVIDER_PRESETS.find((item) => item.label === e.target.value);
-              setForm(preset ? { ...form, ...preset } : { ...form, label: e.target.value });
+              setForm(preset ? { ...form, label: preset.label, baseUrl: preset.baseUrl } : { ...form, label: e.target.value });
+              setTestResult(null);
+              setTestedCount(null);
             }}
           >
             {PROVIDER_PRESETS.map((preset) => <option key={preset.label}>{preset.label}</option>)}
@@ -352,6 +365,13 @@ function AdminModelsPage() {
               }}
               aria-label="Cloudflare Account ID"
             />
+          ) : isCustom ? (
+            <Input
+              placeholder="Base URL, e.g. https://api.example.com/v1"
+              value={form.baseUrl}
+              onChange={(e) => { setForm({ ...form, baseUrl: e.target.value }); setTestedCount(null); }}
+              aria-label="Provider API URL"
+            />
           ) : (
             <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
           )}
@@ -359,27 +379,44 @@ function AdminModelsPage() {
             placeholder={selectedProvider.tokenLabel ?? "Paste API key"}
             type="password"
             value={form.apiKey}
-            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            onChange={(e) => { setForm({ ...form, apiKey: e.target.value }); setTestedCount(null); }}
             aria-label={selectedProvider.tokenLabel ?? "API key"}
           />
+          {isCustom ? (
+            <Input
+              className="sm:col-span-3"
+              placeholder="Name for this key (e.g. Together AI, My proxy)"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              aria-label="Custom provider name"
+            />
+          ) : null}
         </div>
         {isCloudflare ? (
           <p className="text-xs text-muted-foreground">
             Paste your Account ID and an API token (the one starting with cfat_) that has the{" "}
             <span className="font-medium">Workers AI Read</span> permission. Add as many Cloudflare accounts as you like.
           </p>
-        ) : selectedProvider.tokenLabel ? (
+        ) : form.label === "GitHub Models" ? (
           <p className="text-xs text-muted-foreground">
             GitHub uses a personal access token, not an API key. Create one at github.com/settings/personal-access-tokens
             and give it the <span className="font-medium">Models: read</span> permission.
           </p>
+        ) : form.label === "Google AI Studio" ? (
+          <p className="text-xs text-muted-foreground">
+            Get a free key at aistudio.google.com/apikey, paste it, tap Test key to see how many Gemini models it unlocks, then save.
+          </p>
+        ) : isCustom ? (
+          <p className="text-xs text-muted-foreground">
+            Works with any OpenAI-style service. Paste its Base URL and key, tap Test key to count its models, then save.
+          </p>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || keyTooShort}>
-            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
+            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test connection"}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={busy !== null || keyTooShort}>
-            {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
+          <Button size="sm" onClick={onSave} disabled={busy !== null || keyTooShort || (isCustom && testedCount === null)}>
+            {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : testedCount !== null ? `Save ${testedCount} models` : "Save & activate"}
           </Button>
           {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
         </div>

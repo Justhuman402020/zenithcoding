@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, ExternalLink, FlaskConical, KeyRound, Loader2, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { VaultKeyList } from "@/components/VaultKeyList";
 import { INTEGRATIONS, type IntegrationDef } from "@/lib/integrations-catalog";
 import {
   listIntegrationKeys,
@@ -17,9 +18,9 @@ import {
 export const Route = createFileRoute("/_authenticated/admin/integrations")({
   head: () => ({
     meta: [
-      { title: "Forge — Integrations & API keys" },
+      { title: "Code Haven — Integrations & API keys" },
       { name: "description", content: "Save and test keys for Unsplash, OpenRouter, Tavily, GitHub, E2B and Neon." },
-      { property: "og:title", content: "Forge — Integrations & API keys" },
+      { property: "og:title", content: "Code Haven — Integrations & API keys" },
       { property: "og:description", content: "Save and test keys for outside services." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -59,6 +60,11 @@ function IntegrationsPage() {
             ))}
           </div>
         )}
+        <div className="space-y-3 pt-4">
+          <h2 className="font-display text-xl">Saved credentials from the Brain</h2>
+          <p className="text-sm text-muted-foreground">Every key saved in the Brain vault. Add a note so the agent knows when to use it.</p>
+          <VaultKeyList />
+        </div>
       </div>
     </div>
   );

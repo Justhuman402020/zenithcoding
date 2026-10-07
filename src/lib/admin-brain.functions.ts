@@ -112,3 +112,77 @@ export const scanCredentialModels = createServerFn({ method: "POST" })
     }
     return { ok: r.ok, error: r.error, models: r.models.slice(0, 80), modelCount: r.models.length, imported };
   });
+
+// ---------- Structured brain notes (stored as JSON in admin_brain row "notes") ----------
+const noteSchema = z.object({
+  id: z.string().min(1).max(64),
+  category: z.string().trim().max(60),
+  purpose: z.string().trim().max(200),
+  body: z.string().max(8000),
+});
+export type BrainNote = z.infer<typeof noteSchema>;
+
+export const saveBrainNotes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { notes: BrainNote[] }) => z.object({ notes: z.array(noteSchema).max(200) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("admin_brain")
+      .upsert({ id: "notes", content: JSON.stringify(data.notes), updated_at: new Date().toISOString(), updated_by: context.userId });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const getBrainNotes = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdminRole(context);
+    const { loadBrainNotes } = await import("./admin-vault.server");
+    return { notes: await loadBrainNotes() };
+  });
+
+// ---------- Vault: reveal / update ----------
+export const revealCredential = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: row } = await supabaseAdmin.from("admin_credentials").select("key_encrypted").eq("id", data.id).maybeSingle();
+    if (!row) throw new Error("Credential not found");
+    return { key: await decryptSecret(row.key_encrypted) };
+  });
+
+export const updateCredential = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; label?: string; key?: string; baseUrl?: string; accountId?: string; notes?: string }) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        label: z.string().trim().min(2).max(80).optional(),
+        key: z.string().trim().min(4).max(8000).optional(),
+        baseUrl: z.string().trim().max(500).optional(),
+        accountId: z.string().trim().max(200).optional(),
+        notes: z.string().max(500).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (data.label !== undefined) patch.label = data.label;
+    if (data.baseUrl !== undefined) patch.base_url = data.baseUrl || null;
+    if (data.accountId !== undefined) patch.account_id = data.accountId || null;
+    if (data.notes !== undefined) patch.notes = data.notes || null;
+    if (data.key) {
+      const { encryptSecret } = await import("./secrets-crypto.server");
+      patch.key_encrypted = await encryptSecret(data.key);
+    }
+    const { error } = await supabaseAdmin.from("admin_credentials").update(patch as any).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });

@@ -38,14 +38,34 @@ export async function readVaultSecret(label: string): Promise<(VaultEntry & { ke
   return { ...(rest as VaultEntry), key: await decryptSecret(key_encrypted) };
 }
 
+export type BrainNote = { id: string; category: string; purpose: string; body: string };
+
+export async function loadBrainNotes(): Promise<BrainNote[]> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin.from("admin_brain").select("content").eq("id", "notes").maybeSingle();
+    const parsed = JSON.parse(data?.content || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Prompt section: names only, never values. */
 export async function vaultPromptSection(): Promise<string> {
-  const [brain, vault] = await Promise.all([loadAdminBrain(), listVault()]);
+  const [brain, vault, notes] = await Promise.all([loadAdminBrain(), listVault(), loadBrainNotes()]);
   let out = "";
   if (brain.trim()) out += `\n\n## Global admin rules (always follow)\n${brain.trim().slice(0, 6000)}`;
+  const usable = notes.filter((n) => n.body.trim());
+  if (usable.length) {
+    out += `\n\n## Admin brain notes\n${usable
+      .map((n) => `### [${n.category || "General"}] ${n.purpose || "Note"}\n${n.body.trim()}`)
+      .join("\n")
+      .slice(0, 6000)}`;
+  }
   if (vault.length) {
     out += `\n\n## Saved credentials in the admin vault\nUse the attach_credential tool to copy one into this project's secrets (values are never shown to you):\n${vault
-      .map((v) => `- "${v.label}" (${v.kind}${v.base_url ? `, url ${v.base_url}` : ""}${v.account_id ? ", has ID" : ""})`)
+      .map((v) => `- "${v.label}" (${v.kind}${v.base_url ? `, url ${v.base_url}` : ""}${v.account_id ? ", has ID" : ""})${v.notes ? ` — note: ${v.notes}` : ""}`)
       .join("\n")}`;
   }
   return out;

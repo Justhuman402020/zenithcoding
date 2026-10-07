@@ -15,6 +15,17 @@ function toBase64(u8: Uint8Array) {
   return btoa(s);
 }
 
+/** True when the file is a zip — checks the name, the type, or the "PK" bytes at the start (phones often hide the name/type). */
+export async function isZipFile(file: File): Promise<boolean> {
+  if (/\.zip$/i.test(file.name) || /zip/i.test(file.type)) return true;
+  try {
+    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    return head[0] === 0x50 && head[1] === 0x4b;
+  } catch {
+    return false;
+  }
+}
+
 /** Unpack a zip in the browser. Text files keep their text; images/fonts become data: URLs. */
 export async function unpackZip(file: File): Promise<{ files: { path: string; content: string }[]; skipped: number }> {
   const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
