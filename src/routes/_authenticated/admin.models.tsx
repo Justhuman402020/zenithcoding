@@ -170,7 +170,8 @@ function AdminModelsPage() {
     setTestResult(null);
     try {
       const res = await testKey({ data: { baseUrl: form.baseUrl, apiKey: form.apiKey } });
-      setTestResult(res.ok ? `Works — ${res.modelCount} models found` : `Did not work — ${res.error}`);
+      setTestedCount(res.ok ? res.modelCount : null);
+      setTestResult(res.ok ? `Works — ${res.modelCount} models available` : `Did not work — ${res.error}`);
     } catch (e) {
       setTestResult(e instanceof Error ? e.message : "Could not test that key");
     } finally {
@@ -181,9 +182,11 @@ function AdminModelsPage() {
   async function onSave() {
     setBusy("save");
     try {
-      const res = await addKey({ data: form });
+      const res = await addKey({ data: { ...form, label: isCustom ? customName.trim() : form.label } });
       toast.success(`Saved — ${res.modelCount} models added`);
-      setForm({ label: selectedProvider.label, baseUrl: isCloudflare ? form.baseUrl : selectedProvider.baseUrl, apiKey: "" });
+      setTestedCount(null);
+      if (isCustom) setCustomName("");
+      setForm({ label: selectedProvider.label, baseUrl: isCloudflare || isCustom ? (isCustom ? "" : form.baseUrl) : selectedProvider.baseUrl, apiKey: "" });
       setTestResult(null);
       refetch();
     } catch (e) {
