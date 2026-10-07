@@ -347,7 +347,9 @@ function AdminModelsPage() {
             value={form.label}
             onChange={(e) => {
               const preset = PROVIDER_PRESETS.find((item) => item.label === e.target.value);
-              setForm(preset ? { ...form, ...preset } : { ...form, label: e.target.value });
+              setForm(preset ? { ...form, label: preset.label, baseUrl: preset.baseUrl } : { ...form, label: e.target.value });
+              setTestResult(null);
+              setTestedCount(null);
             }}
           >
             {PROVIDER_PRESETS.map((preset) => <option key={preset.label}>{preset.label}</option>)}
@@ -363,6 +365,13 @@ function AdminModelsPage() {
               }}
               aria-label="Cloudflare Account ID"
             />
+          ) : isCustom ? (
+            <Input
+              placeholder="Base URL, e.g. https://api.example.com/v1"
+              value={form.baseUrl}
+              onChange={(e) => { setForm({ ...form, baseUrl: e.target.value }); setTestedCount(null); }}
+              aria-label="Provider API URL"
+            />
           ) : (
             <Input value={form.baseUrl} readOnly aria-label="Provider API URL" />
           )}
@@ -370,27 +379,44 @@ function AdminModelsPage() {
             placeholder={selectedProvider.tokenLabel ?? "Paste API key"}
             type="password"
             value={form.apiKey}
-            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            onChange={(e) => { setForm({ ...form, apiKey: e.target.value }); setTestedCount(null); }}
             aria-label={selectedProvider.tokenLabel ?? "API key"}
           />
+          {isCustom ? (
+            <Input
+              className="sm:col-span-3"
+              placeholder="Name for this key (e.g. Together AI, My proxy)"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              aria-label="Custom provider name"
+            />
+          ) : null}
         </div>
         {isCloudflare ? (
           <p className="text-xs text-muted-foreground">
             Paste your Account ID and an API token (the one starting with cfat_) that has the{" "}
             <span className="font-medium">Workers AI Read</span> permission. Add as many Cloudflare accounts as you like.
           </p>
-        ) : selectedProvider.tokenLabel ? (
+        ) : form.label === "GitHub Models" ? (
           <p className="text-xs text-muted-foreground">
             GitHub uses a personal access token, not an API key. Create one at github.com/settings/personal-access-tokens
             and give it the <span className="font-medium">Models: read</span> permission.
           </p>
+        ) : form.label === "Google AI Studio" ? (
+          <p className="text-xs text-muted-foreground">
+            Get a free key at aistudio.google.com/apikey, paste it, tap Test key to see how many Gemini models it unlocks, then save.
+          </p>
+        ) : isCustom ? (
+          <p className="text-xs text-muted-foreground">
+            Works with any OpenAI-style service. Paste its Base URL and key, tap Test key to count its models, then save.
+          </p>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" onClick={onTest} disabled={busy !== null || keyTooShort}>
-            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test key"}
+            {busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Test connection"}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={busy !== null || keyTooShort}>
-            {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save & activate"}
+          <Button size="sm" onClick={onSave} disabled={busy !== null || keyTooShort || (isCustom && testedCount === null)}>
+            {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : testedCount !== null ? `Save ${testedCount} models` : "Save & activate"}
           </Button>
           {testResult ? <span className="text-xs text-muted-foreground">{testResult}</span> : null}
         </div>
