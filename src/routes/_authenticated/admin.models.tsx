@@ -94,7 +94,13 @@ function AdminModelsPage() {
   const [cfAccount, setCfAccount] = useState("");
   const selectedProvider = PROVIDER_PRESETS.find((provider) => provider.label === form.label) ?? PROVIDER_PRESETS[0];
   const isCloudflare = form.label === "Cloudflare Workers AI";
-  const keyTooShort = form.apiKey.trim().length < 8 || (isCloudflare && cfAccount.trim().length < 16);
+  const isCustom = form.label === "Custom API key";
+  const [customName, setCustomName] = useState("");
+  const [testedCount, setTestedCount] = useState<number | null>(null);
+  const keyTooShort =
+    form.apiKey.trim().length < 8 ||
+    (isCloudflare && cfAccount.trim().length < 16) ||
+    (isCustom && (customName.trim().length < 2 || !/^https?:\/\/.{3,}/.test(form.baseUrl.trim())));
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const board = useServerFn(getModelBoard);
