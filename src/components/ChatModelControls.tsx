@@ -30,7 +30,7 @@ function Picker({ kind, items, selected, onSelect, refreshing, onRefresh }: { ki
           const key = `${item.provider}:${item.model}`;
           return <DropdownMenuItem key={key} onSelect={() => onSelect(item)} className="items-start">
             <Check className={`mt-0.5 h-3.5 w-3.5 ${selected === key ? "opacity-100 text-primary" : "opacity-0"}`} />
-            <span className="min-w-0"><span className="block truncate text-sm">{item.label}</span><span className="block truncate text-[11px] text-muted-foreground">{item.keyNumber ? `Key #${item.keyNumber} · ` : ""}{item.keyLabel}</span></span>
+            <span className="min-w-0"><span className="flex items-center gap-1.5 truncate text-sm">{item.label}{!isVision && item.vision ? <span className="rounded border px-1 text-[10px] uppercase text-muted-foreground">vision</span> : null}</span><span className="block truncate text-[11px] text-muted-foreground">{item.keyNumber ? `Key #${item.keyNumber} · ` : ""}{item.keyLabel}</span></span>
           </DropdownMenuItem>;
         })}
       </DropdownMenuContent>

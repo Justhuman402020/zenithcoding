@@ -51,7 +51,7 @@ async function loadControls(refresh = false) {
   const { data: settings } = await supabaseAdmin.from("ai_pool_settings").select("coding_model,vision_provider,vision_model").eq("id", "global").maybeSingle();
   return {
     vision: options.filter((option) => option.vision),
-    coding: options.filter((option) => option.keyNumber != null && !option.vision),
+    coding: options.filter((option) => option.keyNumber != null),
     settings: settings ?? { coding_model: "@cf/qwen/qwen3.8-27b", vision_provider: null, vision_model: null },
   };
 }
