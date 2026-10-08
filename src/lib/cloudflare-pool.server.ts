@@ -175,20 +175,35 @@ export async function recordMetaLicense(providerId: string) {
   }
 }
 
-/** Runs the license handshake on every saved Cloudflare key. */
+/** Runs the license handshake on saved Cloudflare keys, 3 at a time, skipping keys already agreed. */
 export async function syncMetaLicenseAll() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { decryptSecret } = await import("./secrets-crypto.server");
-  const { data } = await supabaseAdmin.from("custom_ai_providers").select("id, label, base_url, key_encrypted");
+  const { data } = await supabaseAdmin.from("custom_ai_providers").select("id, label, base_url, key_encrypted, meta_license_agreed_at" as any);
   const rows = ((data ?? []) as any[]).filter((r) => isCloudflareBaseUrl(r.base_url));
-  const results = await Promise.all(rows.map(async (r) => {
-    try {
-      const out = await agreeMetaLicense(r.base_url, await decryptSecret(r.key_encrypted));
-      if (out.ok) await recordMetaLicense(r.id);
-      return { label: r.label as string, ...out };
-    } catch (e) {
-      return { label: r.label as string, ok: false, error: e instanceof Error ? e.message : "decrypt failed" };
-    }
-  }));
-  return { total: results.length, agreed: results.filter((r) => r.ok).length, results };
+  const already = rows.filter((r) => r.meta_license_agreed_at).length;
+  const pending = rows.filter((r) => !r.meta_license_agreed_at);
+  const results: { label: string; ok: boolean; error: string | null }[] = [];
+  for (let i = 0; i < pending.length; i += 3) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1200));
+    const batch = await Promise.all(pending.slice(i, i + 3).map(async (r) => {
+      try {
+        const out = await agreeMetaLicense(r.base_url, await decryptSecret(r.key_encrypted));
+        if (out.ok) await recordMetaLicense(r.id);
+        return { label: r.label as string, ...out };
+      } catch (e) {
+        return { label: r.label as string, ok: false, error: e instanceof Error ? e.message : "decrypt failed" };
+      }
+    }));
+    results.push(...batch);
+  }
+  const agreedNow = results.filter((r) => r.ok).length;
+  return {
+    total: rows.length,
+    agreed: already + agreedNow,
+    agreedNow,
+    skipped: already,
+    results,
+    failures: results.filter((r) => !r.ok).map((r) => ({ label: r.label, error: r.error ?? "Unknown error" })),
+  };
 }
