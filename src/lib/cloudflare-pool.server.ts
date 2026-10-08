@@ -141,3 +141,54 @@ export const addNeurons = (providerId: string, neurons: number) =>
   upsertUsage(providerId, (c) => ({ used: c.used + neurons, exhausted: c.exhausted || c.used + neurons >= NEURONS_PER_KEY }));
 
 export const markExhausted = (providerId: string) => upsertUsage(providerId, (c) => ({ ...c, exhausted: true }));
+
+/** Meta Llama 3.2 Vision on Workers AI: needs a one-time license "agree" per account. */
+export const CLOUDFLARE_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
+export const isMetaLicenseError = (text: string) => /agree|licen[cs]e|community license/i.test(text);
+
+/** Sends {"prompt":"agree"} to the Llama 3.2 Vision endpoint for one account. */
+export async function agreeMetaLicense(baseUrl: string, token: string): Promise<{ ok: boolean; error: string | null }> {
+  const acct = /accounts\/([^/]+)\//i.exec(baseUrl)?.[1];
+  if (!acct) return { ok: false, error: "Not a Cloudflare Workers AI address" };
+  try {
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acct}/ai/run/${CLOUDFLARE_VISION_MODEL}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token.replace(/^Bearer\s+/i, "").trim()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "agree" }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const text = await res.text().catch(() => "");
+    // Cloudflare answers the agree call with either success or a "Thank you for agreeing" message.
+    if (res.ok || /thank you for agreeing/i.test(text)) return { ok: true, error: null };
+    return { ok: false, error: `${res.status}: ${text.slice(0, 200)}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function recordMetaLicense(providerId: string) {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("custom_ai_providers").update({ meta_license_agreed_at: new Date().toISOString() } as any).eq("id", providerId);
+  } catch {
+    /* best effort */
+  }
+}
+
+/** Runs the license handshake on every saved Cloudflare key. */
+export async function syncMetaLicenseAll() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { decryptSecret } = await import("./secrets-crypto.server");
+  const { data } = await supabaseAdmin.from("custom_ai_providers").select("id, label, base_url, key_encrypted");
+  const rows = ((data ?? []) as any[]).filter((r) => isCloudflareBaseUrl(r.base_url));
+  const results = await Promise.all(rows.map(async (r) => {
+    try {
+      const out = await agreeMetaLicense(r.base_url, await decryptSecret(r.key_encrypted));
+      if (out.ok) await recordMetaLicense(r.id);
+      return { label: r.label as string, ...out };
+    } catch (e) {
+      return { label: r.label as string, ok: false, error: e instanceof Error ? e.message : "decrypt failed" };
+    }
+  }));
+  return { total: results.length, agreed: results.filter((r) => r.ok).length, results };
+}

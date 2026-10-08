@@ -35,7 +35,7 @@ export async function planAttachedImages(args: {
     const key = args.keys[provider.id];
     if (!key) continue;
     const models = await listProviderModels(provider.id, key, provider);
-    for (const model of models.filter((item) => item.vision && item.tools)) {
+    for (const model of models.filter((item) => item.vision)) {
       if (!candidates.some((ref) => ref.provider === provider.id && ref.model === model.id)) candidates.push({ provider: provider.id, model: model.id });
     }
   }
@@ -46,7 +46,7 @@ export async function planAttachedImages(args: {
     if (!provider || !apiKey) continue;
     const baseURL = gatewayBaseURL(args.gateway, ref.provider, provider.baseURL);
     try {
-      const response = await fetch(`${baseURL}/chat/completions`, {
+      const send = () => fetch(`${baseURL}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...(/models\.github\.ai/i.test(baseURL) ? { "User-Agent": "CodeHaven/1.0" } : {}) },
         body: JSON.stringify({
@@ -56,6 +56,16 @@ export async function planAttachedImages(args: {
           stream: false,
         }),
       });
+      let response = await send();
+      // Meta Llama 3.2 Vision on Cloudflare needs a license "agree" first: do it and retry once.
+      if (!response.ok && /api\.cloudflare\.com/i.test(provider.baseURL)) {
+        const text = await response.clone().text().catch(() => "");
+        const cf = await import("./cloudflare-pool.server");
+        if (cf.isMetaLicenseError(text) && (await cf.agreeMetaLicense(provider.baseURL, apiKey)).ok) {
+          await cf.recordMetaLicense(ref.provider);
+          response = await send();
+        }
+      }
       const json: any = await response.json().catch(() => null);
       const brief = String(json?.choices?.[0]?.message?.content ?? "").trim();
       if (response.ok && brief.length > 80) return { brief, ref, failed };

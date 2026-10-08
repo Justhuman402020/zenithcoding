@@ -263,7 +263,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
         // unless the user picked a model by hand in the editor. With Auto off the
         // manually picked model is used exactly as chosen — never rerouted to Qwen.
-        if (editorAuto) {
+        if (editorAuto && autoFallback) {
           const { loadCloudflarePool, readCloudflareCodingModel } = await import("@/lib/cloudflare-pool.server");
           const pool = (await loadCloudflarePool()).filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
           if (pool.length) {
@@ -278,9 +278,11 @@ export const Route = createFileRoute("/api/public/chat")({
               chain = autoFallback ? [...poolRefs, ...rest] : poolRefs;
             }
           }
-        } else if (requestedRef) {
-          // Auto off + a manual pick: lock to that one model, no Qwen, no fallback.
-          chain = [requestedRef];
+        } else {
+          // Auto off: lock to the selected model (editor pick, else the AI Models panel pick).
+          // No Qwen pool, no provider switching.
+          const locked = requestedRef ?? adminRef;
+          if (locked) chain = [locked];
         }
 
 

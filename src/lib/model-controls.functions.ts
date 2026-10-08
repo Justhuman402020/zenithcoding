@@ -31,7 +31,7 @@ async function loadControls(refresh = false) {
     if (!key) continue;
     const models = await listProviderModels(provider.id, key, provider, refresh);
     for (const model of models) {
-      if (!model.tools) continue;
+      if (!model.tools && !model.vision) continue;
       const cloudflare = isCloudflareBaseUrl(provider.baseURL);
       if (cloudflare && BAD_CF_MODEL.test(model.id)) continue;
       if (cloudflare && !model.vision && !FREE_CF_CODER.test(model.id)) continue;

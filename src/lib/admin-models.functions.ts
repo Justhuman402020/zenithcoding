@@ -223,6 +223,8 @@ export const addProviderKey = createServerFn({ method: "POST" })
     }
     const test = await testProviderKey(baseUrl, apiKey);
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
+    // Cloudflare: accept the Meta Llama 3.2 Vision license before saving.
+    const licenseOk = cfPool.isCloudflareBaseUrl(baseUrl) ? (await cfPool.agreeMetaLicense(baseUrl, apiKey)).ok : false;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Block saving the exact same token twice, but allow as many different tokens as you like.
@@ -272,6 +274,7 @@ export const addProviderKey = createServerFn({ method: "POST" })
       created_by: context.userId,
       updated_at: new Date().toISOString(),
       ...(poolPosition ? { pool_position: poolPosition } : {}),
+      ...(licenseOk ? { meta_license_agreed_at: new Date().toISOString() } : {}),
     } as any);
     if (error) throw new Error(error.message);
     return { ok: true, id, modelCount: test.models.length };
@@ -388,4 +391,13 @@ export const testSavedProviderKey = createServerFn({ method: "POST" })
     if (!p) return { ok: false, error: "Key not found", modelCount: 0 };
     const r = await testProviderKey(p.baseURL, p.apiKey);
     return { ok: r.ok, error: r.error, modelCount: r.models.length };
+  });
+
+/** Accepts the Meta Llama 3.2 Vision license on every saved Cloudflare key. */
+export const syncCloudflareMetaLicense = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertModelsAdmin(context);
+    const { syncMetaLicenseAll } = await import("./cloudflare-pool.server");
+    return syncMetaLicenseAll();
   });
