@@ -73,7 +73,7 @@ export async function planAttachedImages(args: {
         }
       }
       const json: any = await response.json().catch(() => null);
-      const brief = String(json?.choices?.[0]?.message?.content ?? "").trim();
+      const brief = String(json?.choices?.[0]?.message?.content ?? json?.result?.response ?? "").trim();
       if (response.ok && brief.length > 80) return { brief, ref, failed };
     } catch {
       // Try the next saved vision key.
