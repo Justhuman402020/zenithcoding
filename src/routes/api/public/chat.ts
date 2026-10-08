@@ -222,7 +222,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const planPreference = planMode && !adminRef ? pickPlanPreference(availableProviders, hasImages) : null;
         // A model picked by hand always leads; it is only replaced when it stops working.
         const preferred: ModelRef | null = requestedRef ?? (backendIntent && adminRef ? adminRef : (adminRef ?? planPreference));
-        const fullChain = buildModelChain(preferred, { vision: hasImages, availableProviders });
+        const fullChain = buildModelChain(preferred, { vision: false, availableProviders }) // images go to the vision planner; the coder gets a text blueprint;
         // Providers the admin added by pasting a key join the backup chain too.
         const { isCloudflareBaseUrl } = await import("@/lib/cloudflare-pool.server");
         // Cloudflare keys only ever run Qwen 3.8 27B through the pool below.
@@ -231,7 +231,7 @@ export const Route = createFileRoute("/api/public/chat")({
           const { listProviderModels } = await import("@/lib/model-discovery.server");
           for (const provider of extraProviders) {
             const models = await listProviderModels(provider.id, providerKeys[provider.id]!, provider);
-            for (const model of models.filter((m) => m.tools && (!hasImages || m.vision)).slice(0, 3)) {
+            for (const model of models.filter((m) => m.tools).slice(0, 3)) {
               if (!fullChain.some((r) => r.provider === provider.id && r.model === model.id)) {
                 fullChain.push({ provider: provider.id, model: model.id });
               }
@@ -263,7 +263,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
         // unless the user picked a model by hand in the editor. With Auto off the
         // manually picked model is used exactly as chosen — never rerouted to Qwen.
-        if (editorAuto) {
+        if (editorAuto && autoFallback) {
           const { loadCloudflarePool, readCloudflareCodingModel } = await import("@/lib/cloudflare-pool.server");
           const pool = (await loadCloudflarePool()).filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
           if (pool.length) {
@@ -278,9 +278,11 @@ export const Route = createFileRoute("/api/public/chat")({
               chain = autoFallback ? [...poolRefs, ...rest] : poolRefs;
             }
           }
-        } else if (requestedRef) {
-          // Auto off + a manual pick: lock to that one model, no Qwen, no fallback.
-          chain = [requestedRef];
+        } else {
+          // Auto off: lock to the selected model (editor pick, else the AI Models panel pick).
+          // No Qwen pool, no provider switching.
+          const locked = requestedRef ?? adminRef;
+          if (locked) chain = [locked];
         }
 
 
@@ -337,9 +339,10 @@ export const Route = createFileRoute("/api/public/chat")({
                   : /429|rate limit|quota/i.test(raw)
                     ? " The provider's limit has been reached for now."
                     : "";
-          const locked = !editorAuto && !!requestedRef;
+          const lockedRef = !(editorAuto && autoFallback) ? (requestedRef ?? adminRef) : null;
+          const locked = !!lockedRef;
           const message = locked
-            ? `The model you picked (${requestedRef!.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
+            ? `The model you picked (${lockedRef!.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
             : pick.error;
           // A locked model being out of quota is an expected, explained outcome,
           // not a server crash — answer with a 4xx so it isn't reported as one.

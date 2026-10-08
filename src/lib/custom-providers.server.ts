@@ -115,6 +115,7 @@ export async function listModelIds(
         })
         .map((m) => m.name)
         .filter((n): n is string => !!n);
+      if (!models.includes("@cf/meta/llama-3.2-11b-vision-instruct")) models.push("@cf/meta/llama-3.2-11b-vision-instruct");
       if (!models.length) return { ok: false, error: "The token worked but no text models were returned.", models };
       return { ok: true, error: null, models };
     }

@@ -389,6 +389,7 @@ export type Database = {
           id: string
           key_encrypted: string
           label: string
+          meta_license_agreed_at: string | null
           pool_position: number | null
           updated_at: string
         }
@@ -399,6 +400,7 @@ export type Database = {
           id: string
           key_encrypted: string
           label: string
+          meta_license_agreed_at?: string | null
           pool_position?: number | null
           updated_at?: string
         }
@@ -409,6 +411,7 @@ export type Database = {
           id?: string
           key_encrypted?: string
           label?: string
+          meta_license_agreed_at?: string | null
           pool_position?: number | null
           updated_at?: string
         }

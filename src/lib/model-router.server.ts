@@ -244,6 +244,13 @@ export async function pickAvailableModel(
         if (quota?.remainingRequests === 0 || retryAfter > 8) exhaustedProviders.add(ref.provider);
         break;
       }
+      if (/api\.cloudflare\.com/i.test(provider.baseURL) && attempt === 0) {
+        const cf = await import("./cloudflare-pool.server");
+        if (cf.isMetaLicenseError(lastError) && (await cf.agreeMetaLicense(provider.baseURL, apiKey)).ok) {
+          await cf.recordMetaLicense(ref.provider);
+          continue;
+        }
+      }
       if (res.status === 401 || res.status === 403) {
         await recordModelStatus(ref, "unauthorized", quota, lastError);
         exhaustedProviders.add(ref.provider);
