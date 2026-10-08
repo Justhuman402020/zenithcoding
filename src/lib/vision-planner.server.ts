@@ -45,16 +45,22 @@ export async function planAttachedImages(args: {
     const apiKey = args.keys[ref.provider];
     if (!provider || !apiKey) continue;
     const baseURL = gatewayBaseURL(args.gateway, ref.provider, provider.baseURL);
-    try {
-      const send = () => fetch(`${baseURL}/chat/completions`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...(/models\.github\.ai/i.test(baseURL) ? { "User-Agent": "CodeHaven/1.0" } : {}) },
-        body: JSON.stringify({
+    const { isCloudflareBaseUrl } = await import("./cloudflare-pool.server");
+    const cloudflare = isCloudflareBaseUrl(provider.baseURL);
+    // Cloudflare Workers AI expects plain-text messages plus a top-level `image` data URI.
+    const body = cloudflare
+      ? { model: ref.model, messages: [{ role: "user", content: PLANNER_PROMPT }], image: urls[0], max_tokens: 1800, stream: false }
+      : {
           model: ref.model,
           messages: [{ role: "user", content: [{ type: "text", text: PLANNER_PROMPT }, ...urls.map((url) => ({ type: "image_url", image_url: { url } }))] }],
           max_tokens: 1800,
           stream: false,
-        }),
+        };
+    try {
+      const send = () => fetch(`${baseURL}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...(/models\.github\.ai/i.test(baseURL) ? { "User-Agent": "CodeHaven/1.0" } : {}) },
+        body: JSON.stringify(body),
       });
       let response = await send();
       // Meta Llama 3.2 Vision on Cloudflare needs a license "agree" first: do it and retry once.
