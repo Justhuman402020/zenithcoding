@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { deployToCloudflarePages } from "@/lib/cloudflare-pages.functions";
@@ -136,6 +137,18 @@ type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
 type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
 const CHAT_JOB_STALE_MS = 600_000;
+
+type LatestJob = {
+  id: string;
+  status: string;
+  progress: string | null;
+  error: string | null;
+  updated_at: string;
+  outcome: string | null;
+  steps_done: number;
+  files_changed: number;
+  rounds: number;
+};
 
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
@@ -746,6 +759,8 @@ function ProjectEditor() {
     }
     return lines.join("\n");
   }
+  const [latestJob, setLatestJob] = useState<LatestJob | null>(null);
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
   // Only clear the error when the page itself really changed. Re-fetching the
   // same files used to wipe the error while the iframe (unchanged) never
@@ -1089,11 +1104,12 @@ function ProjectEditor() {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,progress,error,updated_at")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
       if (disposed) return;
+      setLatestJob(((jobs ?? [])[0] as LatestJob | undefined) ?? null);
       // A crashed request cannot update its final state. The server heartbeats
       // healthy work, so an old timestamp is safe evidence that this job died.
       const activeJob = (jobs ?? []).find((job) => isActiveChatJob(job));
@@ -1109,9 +1125,13 @@ function ProjectEditor() {
         setPreviewKey((key) => key + 1);
         // Only the newest job decides the outcome; older failures are history.
         const latest = (jobs ?? [])[0];
-        const failed = latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") ? latest : null;
-        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)), { id: "forge-chat-error" });
-        else toast.success("Build finished and the preview is updated");
+        const outcome = (latest as any)?.outcome as string | null | undefined;
+        const counts = latest ? `${(latest as any).steps_done ?? 0} steps, ${(latest as any).files_changed ?? 0} files changed` : "";
+        if (outcome === "finished" || (!outcome && latest?.status === "completed")) toast.success(`Build finished · ${counts}`);
+        else if (outcome === "stopped_early") toast.warning(`Stopped early · ${counts}. Tap Continue to finish.`, { id: "forge-chat-error" });
+        else if (outcome === "out_of_keys") toast.error(`Out of saved AI keys · ${counts}`, { id: "forge-chat-error" });
+        else if (latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") && latest.error)
+          toast.error(getChatErrorMessage(new Error(latest.error)), { id: "forge-chat-error" });
         return;
       }
 
@@ -2215,7 +2235,59 @@ function ProjectEditor() {
                   <Button type="button" size="sm" variant="ghost" onClick={() => setFixBackup(null)}>Keep</Button>
                 </div>
               ) : null}
-              {lastProgress && lastProgress.status !== "finished" && !isBusy && messages.length > 0 ? (
+              {(() => {
+                if (!latestJob || isBusy || dismissedJobId === latestJob.id) return null;
+                const active = latestJob.status === "queued" || latestJob.status === "running";
+                const interrupted = active && !isActiveChatJob(latestJob);
+                if (active && !interrupted) return null;
+                const kind = interrupted ? "interrupted" : (latestJob.outcome ?? (latestJob.status === "completed" ? "finished" : null));
+                if (!kind || kind === "stopped" || kind === "failed") return null;
+                const counts = `${latestJob.steps_done} step${latestJob.steps_done === 1 ? "" : "s"}, ${latestJob.files_changed} file${latestJob.files_changed === 1 ? "" : "s"} changed`;
+                const title =
+                  kind === "finished" ? "Finished" : kind === "stopped_early" ? "Stopped early" : kind === "out_of_keys" ? "Out of AI keys" : "Interrupted";
+                const detail =
+                  kind === "finished"
+                    ? counts
+                    : kind === "stopped_early"
+                      ? `${counts} · ran ${latestJob.rounds} round(s) and hit the step limit`
+                      : kind === "out_of_keys"
+                        ? `${counts} · every saved key was used up before the work finished`
+                        : "The server stopped in the middle of this job";
+                const canContinue = kind !== "finished";
+                return (
+                  <div className={cn("rounded-lg border px-3 py-2.5 text-sm", kind === "finished" ? "border-primary/30 bg-primary/5" : "border-destructive/40 bg-destructive/5")}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="block text-[10px] uppercase text-muted-foreground">Last build</span>
+                        <span className="font-semibold">{title}</span>
+                        <span className="block text-xs text-muted-foreground">{detail}</span>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {canContinue ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={async () => {
+                              setDismissedJobId(latestJob.id);
+                              setLastProgress(null);
+                              setMode("build");
+                              modeRef.current = "build";
+                              requestKeyRef.current = crypto.randomUUID();
+                              await sendMessage({ text: "Continue exactly where you stopped. Do not repeat finished work, and finish the remaining steps." });
+                            }}
+                          >
+                            Continue
+                          </Button>
+                        ) : null}
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedJobId(latestJob.id)}>
+                          Hide
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {lastProgress && lastProgress.status !== "finished" && !isBusy && !latestJob?.outcome && messages.length > 0 ? (
                 <button
                   type="button"
                   onClick={async () => {
