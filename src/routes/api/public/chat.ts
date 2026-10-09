@@ -460,7 +460,9 @@ export const Route = createFileRoute("/api/public/chat")({
         // breaks, the server switches to the next key itself and continues
         // from the last finished step. The browser only watches.
         const STEP_TIMEOUT_MS = 35_000;
-        const MAX_ATTEMPTS = 8;
+        const MAX_ATTEMPTS = 12;
+        const STEP_LIMIT = 40;
+        const MAX_ROUNDS = 3; // total rounds, including the first one
         const isCfUrl = (url: string) => /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(url);
         const errText = (e: unknown) => (e instanceof Error ? e.message : String(e ?? ""));
 
@@ -592,6 +594,10 @@ export const Route = createFileRoute("/api/public/chat")({
           const writer = safeWriter(rawWriter);
           let finalReason: string | undefined;
           let lastError: string | null = null;
+          let rounds = 1;
+          let stoppedEarly = false;
+          let stopCause = "";
+          let outOfKeys = false;
 
           for (let attempt = 0; attempt < MAX_ATTEMPTS && !userStopped; attempt++) {
             const isGh = /models\.github\.ai/i.test(current.baseURL);
@@ -616,6 +622,8 @@ export const Route = createFileRoute("/api/public/chat")({
             let failure: string | null = null;
             let finished = false;
             let attemptSteps: any[] = [];
+            let attemptStepCount = 0;
+            let loopHit = false;
             let watchdog: ReturnType<typeof setTimeout> | undefined;
             const kick = () => {
               if (watchdog) clearTimeout(watchdog);
@@ -638,6 +646,7 @@ export const Route = createFileRoute("/api/public/chat")({
               onStepFinish: (step: any) => {
                 kick();
                 stepNo += 1;
+                attemptStepCount += 1;
                 attemptSteps = step?.response?.messages ?? attemptSteps;
                 if (step?.text?.trim()) replyTexts.push(step.text.trim());
                 let last = "";
@@ -673,11 +682,13 @@ export const Route = createFileRoute("/api/public/chat")({
                 };
               },
               stopWhen: [
-                stepCountIs(40),
+                stepCountIs(STEP_LIMIT),
                 () => handoff,
                 () => {
                   const n = recentCalls.length;
-                  return n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
+                  const looping = n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
+                  if (looping) loopHit = true;
+                  return looping;
                 },
               ],
               // Alibaba Model Studio only accepts reply lengths between 10 and 2048.
@@ -738,7 +749,41 @@ export const Route = createFileRoute("/api/public/chat")({
               }
             }
             // An empty stream with no output counts as a failure too.
-            if (success && (stepNo > 0 || replyTexts.length)) break;
+            if (success && (stepNo > 0 || replyTexts.length)) {
+              // Only a natural finish counts. The 40-step limit and the
+              // repeated-call guard mean the work is not done yet.
+              const hitLimit = loopHit || attemptStepCount >= STEP_LIMIT;
+              if (!hitLimit) {
+                stoppedEarly = false;
+                break;
+              }
+              stoppedEarly = true;
+              stopCause = loopHit ? "repeated-tool-call guard" : `${STEP_LIMIT}-step limit`;
+              trace.log("round.limit", { detail: { round: rounds, cause: stopCause, steps: stepNo } });
+              if (rounds >= MAX_ROUNDS || userStopped) break;
+              if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+              carried.push({
+                role: "user",
+                content: `Continuation (round ${rounds + 1} of ${MAX_ROUNDS}): the previous round was cut off by the ${stopCause}, the task is NOT finished. Files already written (trust them): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Do not repeat the same tool call with the same input. Do the remaining work of the original request, then stop with a short summary.`,
+              });
+              recentCalls.length = 0;
+              rounds += 1;
+              if (autoFallback && editorAuto) {
+                const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
+                const next = remaining.length ? await pickAvailableModel(remaining, providerKeys, providerRegistry, gateway) : null;
+                if (!next || !next.ok) {
+                  if (next && !next.ok) lastError = null;
+                  outOfKeys = true;
+                  break;
+                }
+                current = next;
+                tried.add(`${next.ref.provider}:${next.ref.model}`);
+                writer?.write({ type: "message-metadata", messageMetadata: { model: `${next.ref.model.split("/").pop()} · ${next.ref.provider}` } });
+              }
+              setProgress(`Round ${rounds} of ${MAX_ROUNDS} · continuing · ${progressModel.files.size} file(s) changed`);
+              finalReason = undefined;
+              continue;
+            }
             if (userStopped) break;
             lastError = handoff ? "Soft cap handoff" : failure ?? (timedOut ? "Timed out" : "The model returned nothing");
             // A dropped browser connection is not the key's fault: retry the same key.
@@ -760,12 +805,16 @@ export const Route = createFileRoute("/api/public/chat")({
 
             if (!(autoFallback && editorAuto)) break;
             const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
-            if (!remaining.length) break;
+            if (!remaining.length) {
+              outOfKeys = true;
+              break;
+            }
             setProgress(`${progressText} · switching to the next key`);
             if (writer) writer.write({ type: "message-metadata", messageMetadata: { model: "switching to the next key…" } });
             const next = await pickAvailableModel(remaining, providerKeys, providerRegistry, gateway);
             if (!next.ok) {
               lastError = next.error;
+              outOfKeys = true;
               break;
             }
             current = next;
@@ -781,17 +830,29 @@ export const Route = createFileRoute("/api/public/chat")({
           currentAbort = null;
           const succeeded = !userStopped && !lastError && finalReason !== undefined;
           const truncated = finalReason === "length";
-          if (succeeded) {
+          const fileCount = progressModel.files.size;
+          const counts = `${stepNo} step${stepNo === 1 ? "" : "s"}, ${fileCount} file${fileCount === 1 ? "" : "s"} changed`;
+          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" = userStopped
+            ? "stopped"
+            : succeeded && !stoppedEarly
+              ? "finished"
+              : outOfKeys
+                ? "out_of_keys"
+                : succeeded && stoppedEarly
+                  ? "stopped_early"
+                  : "failed";
+          const jobStats = { outcome, steps_done: stepNo, files_changed: fileCount, rounds, trace_id: trace.traceId };
+          if (outcome === "finished") {
             const finalText =
-              (replyTexts.join("\n\n").trim() || (truncated ? "" : "The build finished and all completed file changes were saved.")) +
+              (replyTexts.join("\n\n").trim() || (truncated ? "" : `Finished: ${counts}.`)) +
               (truncated ? "\n\n[[FORGE_CONTINUE]]" : "");
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
+                ...jobStats,
                 status: "completed",
-                progress: truncated ? "Continuing…" : "Finished",
+                progress: truncated ? "Continuing…" : `Finished · ${counts}`,
                 assistant_reply: finalText,
                 error: null,
-                trace_id: trace.traceId,
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
             }
@@ -804,18 +865,34 @@ export const Route = createFileRoute("/api/public/chat")({
               at: new Date().toISOString(),
             });
           } else {
-            const reason = userStopped ? "Stopped by you" : lastError || "The AI build stopped";
+            const reason =
+              outcome === "stopped"
+                ? "Stopped by you"
+                : outcome === "stopped_early"
+                  ? `Stopped early by the ${stopCause} after ${rounds} round(s) · ${counts}. Tap Continue to finish.`
+                  : outcome === "out_of_keys"
+                    ? `Out of saved AI keys before the work finished · ${counts}.${lastError ? ` Last error: ${lastError}` : ""}`
+                    : lastError || "The AI build stopped";
+            const partial = replyTexts.join("\n\n").trim();
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
+                ...jobStats,
                 status: "failed",
-                progress: userStopped ? "Stopped" : `${progressText} · stopped`,
+                progress: outcome === "stopped" ? "Stopped" : `${outcome.replace("_", " ")} · ${counts}`,
+                assistant_reply: partial || null,
                 error: reason,
-                trace_id: trace.traceId,
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId).in("status", ["queued", "running"]);
             }
+            if (outcome !== "stopped" && (partial || stepNo > 0)) {
+              await supabaseAdmin.from("chat_messages").insert({
+                project_id: projectId, user_id: userId, role: "assistant",
+                content: `${partial ? `${partial}\n\n` : ""}⚠️ ${reason}`,
+              });
+            }
             await saveProgress({
-              status: userStopped ? "unfinished" : "failed",
+              status: userStopped || outcome === "stopped_early" ? "unfinished" : "failed",
+              outcome,
               lastRequest: lastUserText.slice(0, 600),
               error: reason.slice(0, 600),
               at: new Date().toISOString(),
