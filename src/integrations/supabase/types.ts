@@ -203,12 +203,16 @@ export type Database = {
           completed_at: string | null
           created_at: string
           error: string | null
+          files_changed: number
           id: string
+          outcome: string | null
           progress: string | null
           project_id: string
           prompt: string
           request_key: string
+          rounds: number
           status: string
+          steps_done: number
           trace_id: string | null
           updated_at: string
           user_id: string
@@ -218,12 +222,16 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error?: string | null
+          files_changed?: number
           id?: string
+          outcome?: string | null
           progress?: string | null
           project_id: string
           prompt?: string
           request_key: string
+          rounds?: number
           status?: string
+          steps_done?: number
           trace_id?: string | null
           updated_at?: string
           user_id: string
@@ -233,12 +241,16 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error?: string | null
+          files_changed?: number
           id?: string
+          outcome?: string | null
           progress?: string | null
           project_id?: string
           prompt?: string
           request_key?: string
+          rounds?: number
           status?: string
+          steps_done?: number
           trace_id?: string | null
           updated_at?: string
           user_id?: string
