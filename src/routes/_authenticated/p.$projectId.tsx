@@ -137,6 +137,18 @@ type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
 
 const CHAT_JOB_STALE_MS = 600_000;
 
+type LatestJob = {
+  id: string;
+  status: string;
+  progress: string | null;
+  error: string | null;
+  updated_at: string;
+  outcome: string | null;
+  steps_done: number;
+  files_changed: number;
+  rounds: number;
+};
+
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
   const updatedAt = job.updated_at ? new Date(job.updated_at).getTime() : 0;
@@ -1089,11 +1101,12 @@ function ProjectEditor() {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,progress,error,updated_at")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
       if (disposed) return;
+      setLatestJob(((jobs ?? [])[0] as LatestJob | undefined) ?? null);
       // A crashed request cannot update its final state. The server heartbeats
       // healthy work, so an old timestamp is safe evidence that this job died.
       const activeJob = (jobs ?? []).find((job) => isActiveChatJob(job));
@@ -1109,9 +1122,13 @@ function ProjectEditor() {
         setPreviewKey((key) => key + 1);
         // Only the newest job decides the outcome; older failures are history.
         const latest = (jobs ?? [])[0];
-        const failed = latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") ? latest : null;
-        if (failed?.error) toast.error(getChatErrorMessage(new Error(failed.error)), { id: "forge-chat-error" });
-        else toast.success("Build finished and the preview is updated");
+        const outcome = (latest as any)?.outcome as string | null | undefined;
+        const counts = latest ? `${(latest as any).steps_done ?? 0} steps, ${(latest as any).files_changed ?? 0} files changed` : "";
+        if (outcome === "finished" || (!outcome && latest?.status === "completed")) toast.success(`Build finished · ${counts}`);
+        else if (outcome === "stopped_early") toast.warning(`Stopped early · ${counts}. Tap Continue to finish.`, { id: "forge-chat-error" });
+        else if (outcome === "out_of_keys") toast.error(`Out of saved AI keys · ${counts}`, { id: "forge-chat-error" });
+        else if (latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") && latest.error)
+          toast.error(getChatErrorMessage(new Error(latest.error)), { id: "forge-chat-error" });
         return;
       }
 
