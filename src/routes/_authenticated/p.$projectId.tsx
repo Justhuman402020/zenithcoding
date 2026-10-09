@@ -758,6 +758,8 @@ function ProjectEditor() {
     }
     return lines.join("\n");
   }
+  const [latestJob, setLatestJob] = useState<LatestJob | null>(null);
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
   const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
   // Only clear the error when the page itself really changed. Re-fetching the
   // same files used to wipe the error while the iframe (unchanged) never
@@ -2232,7 +2234,59 @@ function ProjectEditor() {
                   <Button type="button" size="sm" variant="ghost" onClick={() => setFixBackup(null)}>Keep</Button>
                 </div>
               ) : null}
-              {lastProgress && lastProgress.status !== "finished" && !isBusy && messages.length > 0 ? (
+              {(() => {
+                if (!latestJob || isBusy || dismissedJobId === latestJob.id) return null;
+                const active = latestJob.status === "queued" || latestJob.status === "running";
+                const interrupted = active && !isActiveChatJob(latestJob);
+                if (active && !interrupted) return null;
+                const kind = interrupted ? "interrupted" : (latestJob.outcome ?? (latestJob.status === "completed" ? "finished" : null));
+                if (!kind || kind === "stopped" || kind === "failed") return null;
+                const counts = `${latestJob.steps_done} step${latestJob.steps_done === 1 ? "" : "s"}, ${latestJob.files_changed} file${latestJob.files_changed === 1 ? "" : "s"} changed`;
+                const title =
+                  kind === "finished" ? "Finished" : kind === "stopped_early" ? "Stopped early" : kind === "out_of_keys" ? "Out of AI keys" : "Interrupted";
+                const detail =
+                  kind === "finished"
+                    ? counts
+                    : kind === "stopped_early"
+                      ? `${counts} · ran ${latestJob.rounds} round(s) and hit the step limit`
+                      : kind === "out_of_keys"
+                        ? `${counts} · every saved key was used up before the work finished`
+                        : "The server stopped in the middle of this job";
+                const canContinue = kind !== "finished";
+                return (
+                  <div className={cn("rounded-lg border px-3 py-2.5 text-sm", kind === "finished" ? "border-primary/30 bg-primary/5" : "border-destructive/40 bg-destructive/5")}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="block text-[10px] uppercase text-muted-foreground">Last build</span>
+                        <span className="font-semibold">{title}</span>
+                        <span className="block text-xs text-muted-foreground">{detail}</span>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {canContinue ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={async () => {
+                              setDismissedJobId(latestJob.id);
+                              setLastProgress(null);
+                              setMode("build");
+                              modeRef.current = "build";
+                              requestKeyRef.current = crypto.randomUUID();
+                              await sendMessage({ text: "Continue exactly where you stopped. Do not repeat finished work, and finish the remaining steps." });
+                            }}
+                          >
+                            Continue
+                          </Button>
+                        ) : null}
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedJobId(latestJob.id)}>
+                          Hide
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {lastProgress && lastProgress.status !== "finished" && !isBusy && !latestJob?.outcome && messages.length > 0 ? (
                 <button
                   type="button"
                   onClick={async () => {
