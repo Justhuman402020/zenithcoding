@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791152189661,
+      "tag": "0000_brain_notes_and_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791155554796,
+      "tag": "0001_add_model_preferences_and_visual_briefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791246832422,
+      "tag": "0002_admin_brain_and_vault",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791461180915,
+      "tag": "0003_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791508277806,
+      "tag": "0004_chat_jobs_outcome",
+      "breakpoints": true
+    }
+  ]
+}

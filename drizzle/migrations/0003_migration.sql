@@ -1,0 +1,1 @@
+ALTER TABLE public.custom_ai_providers ADD COLUMN IF NOT EXISTS meta_license_agreed_at timestamptz;

@@ -11,6 +11,7 @@ import {
   type ProviderOption,
 } from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
+import { listModelIds } from "./custom-providers.server";
 
 
 export type DiscoveredModel = ModelOption & { curated: boolean };
@@ -32,24 +33,20 @@ export async function listProviderModels(
   providerId: string,
   apiKey: string,
   option?: ProviderOption,
+  refresh = false,
 ): Promise<DiscoveredModel[]> {
   const provider = option ?? findProvider(providerId);
   if (!provider) return [];
 
   const cached = cache.get(providerId);
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
+  if (!refresh && cached && Date.now() - cached.at < TTL_MS) return cached.models;
 
 
   const curated = new Map(provider.models.map((m) => [m.id, m]));
   let ids: string[] = [];
   try {
-    const res = await fetch(`${provider.baseURL}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (res.ok) {
-      const json = (await res.json()) as { data?: Array<{ id?: string }> };
-      ids = (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
-    }
+    const listed = await listModelIds(provider.baseURL, apiKey);
+    ids = listed.models;
   } catch {
     // fall back to the curated list below
   }
@@ -68,6 +65,10 @@ export async function listProviderModels(
   });
   cache.set(providerId, { at: Date.now(), models });
   return models;
+}
+
+export function clearModelDiscoveryCache() {
+  cache.clear();
 }
 
 /** OpenRouter exposes real credit usage for a key; others do not. */

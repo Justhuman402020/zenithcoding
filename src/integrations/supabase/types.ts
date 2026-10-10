@@ -14,6 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_brain: {
+        Row: {
+          content: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          content?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          content?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      admin_credentials: {
+        Row: {
+          account_id: string | null
+          base_url: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          key_encrypted: string
+          kind: string
+          label: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          base_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_encrypted: string
+          kind?: string
+          label: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          base_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_encrypted?: string
+          kind?: string
+          label?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ai_gateway_settings: {
+        Row: {
+          enabled: boolean
+          id: string
+          updated_at: string
+          updated_by: string | null
+          url: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          url?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       ai_model_settings: {
         Row: {
           auto_fallback: boolean
@@ -85,6 +169,101 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      ai_pool_settings: {
+        Row: {
+          coding_model: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+          vision_model: string | null
+          vision_provider: string | null
+        }
+        Insert: {
+          coding_model?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vision_model?: string | null
+          vision_provider?: string | null
+        }
+        Update: {
+          coding_model?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vision_model?: string | null
+          vision_provider?: string | null
+        }
+        Relationships: []
+      }
+      chat_jobs: {
+        Row: {
+          assistant_reply: string | null
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          files_changed: number
+          id: string
+          outcome: string | null
+          progress: string | null
+          project_id: string
+          prompt: string
+          request_key: string
+          rounds: number
+          status: string
+          steps_done: number
+          trace_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assistant_reply?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          files_changed?: number
+          id?: string
+          outcome?: string | null
+          progress?: string | null
+          project_id: string
+          prompt?: string
+          request_key: string
+          rounds?: number
+          status?: string
+          steps_done?: number
+          trace_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assistant_reply?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          files_changed?: number
+          id?: string
+          outcome?: string | null
+          progress?: string | null
+          project_id?: string
+          prompt?: string
+          request_key?: string
+          rounds?: number
+          status?: string
+          steps_done?: number
+          trace_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       chat_messages: {
         Row: {
@@ -163,6 +342,30 @@ export type Database = {
         }
         Relationships: []
       }
+      cloudflare_neuron_usage: {
+        Row: {
+          day: string
+          exhausted: boolean
+          neurons_used: number
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          day: string
+          exhausted?: boolean
+          neurons_used?: number
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          day?: string
+          exhausted?: boolean
+          neurons_used?: number
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       credit_ledger: {
         Row: {
           created_at: string
@@ -198,6 +401,8 @@ export type Database = {
           id: string
           key_encrypted: string
           label: string
+          meta_license_agreed_at: string | null
+          pool_position: number | null
           updated_at: string
         }
         Insert: {
@@ -207,6 +412,8 @@ export type Database = {
           id: string
           key_encrypted: string
           label: string
+          meta_license_agreed_at?: string | null
+          pool_position?: number | null
           updated_at?: string
         }
         Update: {
@@ -216,6 +423,8 @@ export type Database = {
           id?: string
           key_encrypted?: string
           label?: string
+          meta_license_agreed_at?: string | null
+          pool_position?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -342,6 +551,133 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_integration_keys: {
+        Row: {
+          field: string
+          service: string
+          updated_at: string
+          updated_by: string | null
+          value_encrypted: string
+        }
+        Insert: {
+          field: string
+          service: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted: string
+        }
+        Update: {
+          field?: string
+          service?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_encrypted?: string
+        }
+        Relationships: []
+      }
+      platform_supabase_connection: {
+        Row: {
+          anon_key_encrypted: string
+          created_at: string
+          id: string
+          label: string | null
+          project_url: string
+          service_key_encrypted: string | null
+          updated_at: string
+        }
+        Insert: {
+          anon_key_encrypted: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          project_url: string
+          service_key_encrypted?: string | null
+          updated_at?: string
+        }
+        Update: {
+          anon_key_encrypted?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          project_url?: string
+          service_key_encrypted?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      project_assets: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          handle: string
+          id: string
+          project_id: string
+          size: number | null
+          storage_path: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          handle: string
+          id?: string
+          project_id: string
+          size?: number | null
+          storage_path: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          handle?: string
+          id?: string
+          project_id?: string
+          size?: number | null
+          storage_path?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_brain_notes: {
+        Row: {
+          content: string
+          project_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          project_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          project_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_brain_notes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_domains: {
         Row: {
           created_at: string
@@ -385,6 +721,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_domains_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_drafts: {
+        Row: {
+          device_id: string
+          project_id: string
+          text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          device_id?: string
+          project_id: string
+          text?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          device_id?: string
+          project_id?: string
+          text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_drafts_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -563,8 +931,52 @@ export type Database = {
           },
         ]
       }
+      project_visual_briefs: {
+        Row: {
+          brief: string
+          created_at: string
+          id: string
+          project_id: string
+          source_name: string | null
+          user_id: string
+          vision_model: string
+          vision_provider: string
+        }
+        Insert: {
+          brief: string
+          created_at?: string
+          id?: string
+          project_id: string
+          source_name?: string | null
+          user_id: string
+          vision_model: string
+          vision_provider: string
+        }
+        Update: {
+          brief?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          source_name?: string | null
+          user_id?: string
+          vision_model?: string
+          vision_provider?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_visual_briefs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
+          agent_progress: Json | null
+          cloudflare_pages_project: string | null
+          cloudflare_pages_url: string | null
           created_at: string
           description: string | null
           id: string
@@ -579,6 +991,9 @@ export type Database = {
           workspace_id: string | null
         }
         Insert: {
+          agent_progress?: Json | null
+          cloudflare_pages_project?: string | null
+          cloudflare_pages_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -593,6 +1008,9 @@ export type Database = {
           workspace_id?: string | null
         }
         Update: {
+          agent_progress?: Json | null
+          cloudflare_pages_project?: string | null
+          cloudflare_pages_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -993,12 +1411,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1022,11 +1440,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1047,11 +1465,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1072,11 +1490,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1089,11 +1507,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

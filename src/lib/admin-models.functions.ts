@@ -217,21 +217,118 @@ export const addProviderKey = createServerFn({ method: "POST" })
     const { encryptSecret } = await import("./secrets-crypto.server");
     const baseUrl = normalizeBaseUrl(data.baseUrl);
     const apiKey = data.apiKey.trim();
+    const cfPool = await import("./cloudflare-pool.server");
+    if (cfPool.isCloudflareBaseUrl(baseUrl) && (await cfPool.loadCloudflarePool()).length >= cfPool.MAX_POOL_KEYS) {
+      throw new Error(`The Cloudflare pool is full (${cfPool.MAX_POOL_KEYS} keys). Delete one first.`);
+    }
     const test = await testProviderKey(baseUrl, apiKey);
     if (!test.ok) throw new Error(`That key did not work — ${test.error}`);
+    // Cloudflare: accept the Meta Llama 3.2 Vision license before saving.
+    const licenseOk = cfPool.isCloudflareBaseUrl(baseUrl) ? (await cfPool.agreeMetaLicense(baseUrl, apiKey)).ok : false;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const id = slugifyProviderId(data.label);
-    const { error } = await supabaseAdmin.from("custom_ai_providers").upsert({
+    // Block saving the exact same token twice, but allow as many different tokens as you like.
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: existingKeys } = await supabaseAdmin
+      .from("custom_ai_providers")
+      .select("label, key_encrypted");
+    for (const row of existingKeys ?? []) {
+      try {
+        if ((await decryptSecret(row.key_encrypted as string)).trim() === apiKey) {
+          throw new Error(`That token is already saved as "${row.label}" — no need to add it again.`);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("already saved")) throw e;
+      }
+    }
+    // Every saved key gets its own id so a second key with the same name never overwrites the first.
+    const id = `${slugifyProviderId(data.label)}-${crypto.randomUUID().slice(0, 8)}`;
+    // Find the highest "#N" already used for this name and take N+1 (a plain name counts as #1).
+    const base = data.label.trim().replace(/\s*#\d+$/, "");
+    const { data: siblings } = await supabaseAdmin
+      .from("custom_ai_providers")
+      .select("label, base_url, pool_position" as any)
+      .like("label", `${base}%`);
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${esc}(?:\\s*#(\\d+))?$`);
+    let maxN = 0;
+    for (const s of (siblings ?? []) as any[]) {
+      const m = re.exec(String(s.label).trim());
+      if (m) maxN = Math.max(maxN, m[1] ? Number(m[1]) : 1);
+    }
+    const label = maxN ? `${base} #${maxN + 1}` : base;
+    const { isCloudflareBaseUrl } = await import("./cloudflare-pool.server");
+    let poolPosition: number | null = null;
+    if (isCloudflareBaseUrl(baseUrl)) {
+      const { data: cfRows } = await supabaseAdmin
+        .from("custom_ai_providers")
+        .select("base_url, pool_position" as any);
+      const cf = ((cfRows ?? []) as any[]).filter((r) => isCloudflareBaseUrl(r.base_url));
+      poolPosition = cf.reduce((mx, r) => Math.max(mx, r.pool_position ?? 0), 0) + 1;
+    }
+    const { error } = await supabaseAdmin.from("custom_ai_providers").insert({
       id,
-      label: data.label.trim(),
+      label,
       base_url: baseUrl,
       key_encrypted: await encryptSecret(apiKey),
       created_by: context.userId,
       updated_at: new Date().toISOString(),
-    });
+      ...(poolPosition ? { pool_position: poolPosition } : {}),
+      ...(licenseOk ? { meta_license_agreed_at: new Date().toISOString() } : {}),
+    } as any);
     if (error) throw new Error(error.message);
     return { ok: true, id, modelCount: test.models.length };
+  });
+
+/** Reads the saved AI Gateway / proxy setting (admin only). */
+export const getAiGateway = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertModelsAdmin(context);
+    const { readAiGatewaySetting } = await import("./model-router.server");
+    return readAiGatewaySetting();
+  });
+
+/** Saves (or clears) the AI Gateway / proxy setting. */
+export const saveAiGateway = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { url: string; enabled: boolean }) =>
+    z.object({ url: z.string().max(500), enabled: z.boolean() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const url = data.url.trim().replace(/\/+$/, "") || null;
+    if (url && !/^https:\/\//i.test(url)) throw new Error("The gateway address must start with https://");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("ai_gateway_settings").upsert({
+      id: "global",
+      url,
+      enabled: data.enabled && !!url,
+      updated_at: new Date().toISOString(),
+      updated_by: context.userId,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Checks the gateway address answers before it is saved. */
+export const testAiGateway = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { url: string }) => z.object({ url: z.string().min(8).max(500) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const base = data.url.trim().replace(/\/+$/, "");
+    if (!/^https:\/\//i.test(base)) return { ok: false, error: "The address must start with https://" };
+    try {
+      const res = await fetch(`${base}/groq/models`, {
+        headers: { Authorization: "Bearer gateway-probe" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      // Any HTTP answer (even 401/404) proves the gateway is reachable.
+      return { ok: true, status: res.status };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "No answer from that address" };
+    }
   });
 
 export const removeProviderKey = createServerFn({ method: "POST" })
@@ -243,4 +340,64 @@ export const removeProviderKey = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin.from("custom_ai_providers").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+/** Cloudflare key pool with today's Neurons per key (null for non-admins). */
+export const getCloudflarePool = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    if (!(await isModelsAdmin(context))) return null;
+    const { loadCloudflarePool, nextResetAt, NEURONS_PER_KEY, MAX_POOL_KEYS } = await import("./cloudflare-pool.server");
+    const keys = await loadCloudflarePool();
+    return {
+      keys,
+      totalUsed: keys.reduce((s, k) => s + k.used, 0),
+      totalRemaining: keys.reduce((s, k) => s + k.remaining, 0),
+      totalLimit: keys.length * NEURONS_PER_KEY,
+      maxKeys: MAX_POOL_KEYS,
+      resetAt: nextResetAt(),
+    };
+  });
+
+/** Moves a Cloudflare key up or down in the 1–21 order. */
+export const moveCloudflareKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string; direction: "up" | "down" }) =>
+    z.object({ id: z.string().min(1), direction: z.enum(["up", "down"]) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const { loadCloudflarePool } = await import("./cloudflare-pool.server");
+    const ids = (await loadCloudflarePool()).map((k) => k.id);
+    const i = ids.indexOf(data.id);
+    const j = data.direction === "up" ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= ids.length) return { ok: true };
+    [ids[i], ids[j]] = [ids[j]!, ids[i]!];
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    for (let n = 0; n < ids.length; n++) {
+      await supabaseAdmin.from("custom_ai_providers").update({ pool_position: n + 1 } as any).eq("id", ids[n]!);
+    }
+    return { ok: true };
+  });
+
+/** Re-tests one saved Cloudflare key by its id. */
+export const testSavedProviderKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const { loadCustomProviders, testProviderKey } = await import("./custom-providers.server");
+    const p = (await loadCustomProviders()).find((x) => x.id === data.id);
+    if (!p) return { ok: false, error: "Key not found", modelCount: 0 };
+    const r = await testProviderKey(p.baseURL, p.apiKey);
+    return { ok: r.ok, error: r.error, modelCount: r.models.length };
+  });
+
+/** Accepts the Meta Llama 3.2 Vision license on every saved Cloudflare key. */
+export const syncCloudflareMetaLicense = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertModelsAdmin(context);
+    const { syncMetaLicenseAll } = await import("./cloudflare-pool.server");
+    return syncMetaLicenseAll();
   });

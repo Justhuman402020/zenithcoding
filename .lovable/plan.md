@@ -1,61 +1,22 @@
-## In-browser build pipeline for Forge
+## Fix: builds stuck on key #1 instead of moving to key #2, #3…
 
-Add a client-side build step that runs before Publish and before Push-to-GitHub, so imported source repos (Vite/React/Vue/Svelte/TS/Tailwind) actually produce a working `dist/` instead of shipping raw source.
+### What is actually happening (confirmed)
+- The Auto-switch button in the editor shows **On**, but a second, hidden Auto-switch setting in Admin → AI Models is saved as **Off**. The server only switches keys when *both* are on, so it locks to the one model/key and shows "The model you picked… can't answer right now", the error in your screenshot.
+- When you pick a Cloudflare model in the first menu, every option points to one key (the menu shows "Key #2 · Cloudflare Workers AI #1" on all of them). Choosing it pins the build to that key, so even with switching on it doesn't spread across the other keys.
+- Today's usage record shows key #1 marked as used up, so the job has to move on, but the lock above stops it.
 
-### Approach
+### Changes
+1. **One Auto-switch that you can trust:** the editor's Auto-switch button is the deciding control. When it's On, the server always moves through the keys, even if the old admin setting is Off. The admin setting only sets the default for new devices, and its label explains that.
+2. **Picking a Cloudflare model means "this model on every key":** choosing e.g. Qwen 3.8 or GLM 4.7 in the menu runs it on key #1, then #2, #3… in order. It no longer pins one key. The menu label changes to "All keys · N available" so it no longer shows the wrong key number.
+3. **Move on straight away:** when a key says it's out of quota (429 / daily limit), the server marks it used up and tries the next key with the same model in the same request. You get no error in between, and the 5-second countdown banner shows "Switching to key #N".
+4. **Honest error only when truly out:** the "can't answer" message only appears when Auto-switch is really Off. With Auto On and every key used up, you'll see "All N keys are used up for today — resets in HH:MM" instead.
+5. **Clear stale stuck banner:** "Forge is still working…" clears when the server returns this error, so the screen doesn't keep spinning.
 
-Build runs in the user's browser using **`@bhwd/esbuild-wasm`** (esbuild compiled to WASM) as the bundler, plus a lightweight virtual-FS resolver over the project's `files` table. No server compute — fits Cloudflare Workers constraints. For unknown/Node-only packages we surface a clear error and fall back to pushing/publishing the source as-is (current behavior).
+### Technical details
+- `chat.ts`: base the pool decision on `editorAuto` alone (drop the `&& autoFallback` gate on lines 262/266/342/664/771/806). Use `autoFallback` only as the default when the header is missing.
+- When `requestedRef.provider` is a Cloudflare pool key, keep `requestedRef.model` and expand it to `poolRefs` with that model, ordered by pool position, so the coding model setting doesn't silently override it.
+- `model-controls.functions.ts` / `ChatModelControls.tsx`: remove duplicate Cloudflare options so there is one option per model, labeled with the pool size.
+- Add a test in `tests/chat-tool-flow.test.ts`: with the admin auto set to false and the header set to on, the chain contains every non-exhausted pool key in order, and a 429 on key #1 picks key #2.
 
-### Pieces to build
-
-1. **`src/lib/browser-build.ts`** — new client module:
-   - Loads `esbuild-wasm` lazily (dynamic import + `initialize({ wasmURL })` from CDN).
-   - Virtual FS built from the project's files (path → content map).
-   - Resolver plugin:
-     - Relative/absolute paths → look up in virtual FS (with `.ts/.tsx/.jsx/.js/index.*` resolution).
-     - Bare imports (`react`, `react-dom`, `@tanstack/*`, etc.) → rewrite to `https://esm.sh/<pkg>@<version>?bundle` using versions from the project's `package.json`.
-     - CSS/`@import` handled by esbuild's `css` loader; Tailwind detected via `tailwindcss` in deps → run Tailwind in-browser via `@tailwindcss/browser` CDN script injected into the built `index.html` (pragmatic: avoids running the PostCSS pipeline in-browser).
-   - Entry detection: read `index.html`, find `<script type="module" src="...">`, bundle that entry to `dist/assets/index-[hash].js` + `dist/assets/index-[hash].css`, rewrite `index.html` to point at the built assets, copy `public/*` verbatim.
-   - Returns `{ ok: true, files: {path, content}[] }` or `{ ok: false, error }`.
-
-2. **`src/components/BuildDialog.tsx`** — new UI:
-   - Progress log (reuses same NDJSON-style event shape as `push-stream`).
-   - "Build" / "Skip build & publish source" buttons.
-   - On failure: show error + option to publish source anyway.
-
-3. **Wire into Publish flow** (`src/routes/_authenticated/p.$projectId.tsx` — the publish button):
-   - Detect "buildable" project: presence of `package.json` with a `build` script AND either `vite`, `react`, `vue`, or `svelte` in deps.
-   - If buildable → open BuildDialog → on success, upload the produced `dist/*` files to a new `project_build_artifacts` table (or reuse `files` with a `kind: 'build'` column).
-   - `/s/$slug` route: prefer built artifacts when present, else current behavior.
-
-4. **Wire into Push-to-GitHub flow** (`GithubPushDialog.tsx` + `push-stream.ts`):
-   - Before calling `push-stream`, run the same browser build.
-   - If build succeeds, include `dist/` files in the push payload (send as `extraFiles` alongside `priorBlobs`).
-   - Server route accepts optional `extraFiles: {path, content}[]` and adds them to the tree.
-   - Skippable via checkbox "Push source only (no build)".
-
-5. **DB migration** — add `kind text default 'source'` to `files` table, or add `project_build_artifacts` table with same shape as `files`. Simpler: add `kind` column; `/s/$slug` reads `kind='build'` if any exist, else `kind='source'`.
-
-### Failure handling (per your "one that wouldn't fail" choice)
-
-The build **will** fail on Node-only deps (sharp, fs, native modules). We handle it by:
-- Catching the error, showing exactly which import failed.
-- Offering a "publish/push source anyway" button that falls back to today's behavior.
-- Never silently shipping a broken build.
-
-### What's out of scope
-
-- SSR frameworks (Next.js, Remix, TanStack Start source) — will fail-and-fallback. Detected up front with a warning: "This looks like an SSR app; in-browser build can't handle it. Publish source instead?"
-- Custom Vite plugins that need Node APIs.
-
-### Files touched
-
-- **New:** `src/lib/browser-build.ts`, `src/components/BuildDialog.tsx`, migration for `files.kind`.
-- **Edited:** `src/routes/_authenticated/p.$projectId.tsx` (publish button), `src/components/GithubPushDialog.tsx`, `src/routes/api/public/push-stream.ts` (accept extraFiles), `src/routes/s.$slug.tsx` (prefer built artifacts).
-- **Package:** `bun add esbuild-wasm`.
-
-### Estimated size
-
-Medium-large — ~600 lines across 3 new files + edits to 4 existing files. One migration.
-
-Approve and I'll build it in one pass.
+### Not doing
+- No live test that uses neurons/credits; checks will use code and tests only.

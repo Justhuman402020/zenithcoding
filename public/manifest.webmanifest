@@ -1,7 +1,7 @@
 {
-  "name": "Forge — AI Coding Workspace",
-  "short_name": "Forge",
-  "description": "Your personal AI-powered coding workspace. Build apps with a chat.",
+  "name": "Code Haven — AI Coding Workspace",
+  "short_name": "Code Haven",
+  "description": "Plan, build, preview, and publish websites with AI coding agents.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
