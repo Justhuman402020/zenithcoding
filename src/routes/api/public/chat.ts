@@ -476,7 +476,7 @@ export const Route = createFileRoute("/api/public/chat")({
           progress: (progressRow?.agent_progress as any) ?? null,
           description: proj.description,
           originalGoal: firstUserMessage?.content ?? null,
-          filePaths: (briefFiles ?? []).map((file) => file.path),
+          filePaths: (briefFiles ?? []).map((file: any) => file.path),
           userNotes: `${brainRow?.content ?? ""}${visualBrief ? `\n\nLatest visual brief:\n${visualBrief}` : ""}`,
         };
         trace.log("project.brief", {
