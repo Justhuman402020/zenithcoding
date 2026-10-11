@@ -36,6 +36,13 @@
       "when": 1791508277806,
       "tag": "0004_chat_jobs_outcome",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791681121245,
+      "tag": "0005_server_auto_resume_jobs",
+      "breakpoints": true
     }
   ]
 }

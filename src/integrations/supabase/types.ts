@@ -200,6 +200,7 @@ export type Database = {
       chat_jobs: {
         Row: {
           assistant_reply: string | null
+          auto_resumes: number
           completed_at: string | null
           created_at: string
           error: string | null
@@ -210,6 +211,8 @@ export type Database = {
           project_id: string
           prompt: string
           request_key: string
+          resume_payload: Json | null
+          resumed_at: string | null
           rounds: number
           status: string
           steps_done: number
@@ -219,6 +222,7 @@ export type Database = {
         }
         Insert: {
           assistant_reply?: string | null
+          auto_resumes?: number
           completed_at?: string | null
           created_at?: string
           error?: string | null
@@ -229,6 +233,8 @@ export type Database = {
           project_id: string
           prompt?: string
           request_key: string
+          resume_payload?: Json | null
+          resumed_at?: string | null
           rounds?: number
           status?: string
           steps_done?: number
@@ -238,6 +244,7 @@ export type Database = {
         }
         Update: {
           assistant_reply?: string | null
+          auto_resumes?: number
           completed_at?: string | null
           created_at?: string
           error?: string | null
@@ -248,6 +255,8 @@ export type Database = {
           project_id?: string
           prompt?: string
           request_key?: string
+          resume_payload?: Json | null
+          resumed_at?: string | null
           rounds?: number
           status?: string
           steps_done?: number
@@ -515,6 +524,21 @@ export type Database = {
           scope?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      job_resume_config: {
+        Row: {
+          id: string
+          token: string
+        }
+        Insert: {
+          id?: string
+          token?: string
+        }
+        Update: {
+          id?: string
+          token?: string
         }
         Relationships: []
       }
@@ -1381,6 +1405,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      arm_job_resume: { Args: never; Returns: undefined }
+      disarm_job_resume_if_idle: { Args: never; Returns: undefined }
       get_credit_balance: { Args: { _user: string }; Returns: number }
       has_role: {
         Args: {
