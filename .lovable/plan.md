@@ -1,22 +1,24 @@
-## Fix: builds stuck on key #1 instead of moving to key #2, #3…
+## Third lightning icon: "Clone a site" with MiroMiro, and saved keys in Plan mode
 
-### What is actually happening (confirmed)
-- The Auto-switch button in the editor shows **On**, but a second, hidden Auto-switch setting in Admin → AI Models is saved as **Off**. The server only switches keys when *both* are on, so it locks to the one model/key and shows "The model you picked… can't answer right now", the error in your screenshot.
-- When you pick a Cloudflare model in the first menu, every option points to one key (the menu shows "Key #2 · Cloudflare Workers AI #1" on all of them). Choosing it pins the build to that key, so even with switching on it doesn't spread across the other keys.
-- Today's usage record shows key #1 marked as used up, so the job has to move on, but the lock above stops it.
+### What I found
+- Your key "MiroMiro api key" is saved in Brain → Credential Vault.
+- Its note field also holds the key itself (`MIROMIRO_API_KEY=...`). Notes are shown to the agent as plain text, so the key leaks into the prompt. I'll move the value into the hidden key field and keep only a short description in the note.
+- Plan mode can't use the saved keys right now. It can only read files, search the web and find images, so it can't recommend a key.
+- Website cloning today grabs a rough outline (colors, headings, links) with a simple fetch. It doesn't use MiroMiro.
 
-### Changes
-1. **One Auto-switch that you can trust:** the editor's Auto-switch button is the deciding control. When it's On, the server always moves through the keys, even if the old admin setting is Off. The admin setting only sets the default for new devices, and its label explains that.
-2. **Picking a Cloudflare model means "this model on every key":** choosing e.g. Qwen 3.8 or GLM 4.7 in the menu runs it on key #1, then #2, #3… in order. It no longer pins one key. The menu label changes to "All keys · N available" so it no longer shows the wrong key number.
-3. **Move on straight away:** when a key says it's out of quota (429 / daily limit), the server marks it used up and tries the next key with the same model in the same request. You get no error in between, and the 5-second countdown banner shows "Switching to key #N".
-4. **Honest error only when truly out:** the "can't answer" message only appears when Auto-switch is really Off. With Auto On and every key used up, you'll see "All N keys are used up for today — resets in HH:MM" instead.
-5. **Clear stale stuck banner:** "Forge is still working…" clears when the server returns this error, so the screen doesn't keep spinning.
+### What you'll get
+1. **A third ⚡ icon above the chat: "Clone a site".** Tapping it turns on clone mode, and the box asks for a website link. Send "build a site like this https://..." and Code Haven knows to use MiroMiro. You don't have to guess the right words.
+2. **MiroMiro fetches the full site.** The server calls MiroMiro with your saved key and gets the page's layout, text, colors, fonts and images. Then it removes scripts, trackers and MiroMiro's own extras, keeping only the design.
+3. **Forge takes over.** The cleaned design is saved to the project Brain as a "Clone blueprint", and the coding model builds the site from it, one section at a time. This keeps it inside Qwen's token limit.
+4. **Plan mode sees all saved keys.** Plan mode gets the list of saved integrations and vault keys (names and notes only, never the values). Every plan includes a "Keys this will use" line, for example "MiroMiro, to copy the site" or "Unsplash, for photos", and flags any key that's missing.
+5. **Fallback:** if MiroMiro fails or its key runs out, the old simple outline is used and you get a short notice.
 
 ### Technical details
-- `chat.ts`: base the pool decision on `editorAuto` alone (drop the `&& autoFallback` gate on lines 262/266/342/664/771/806). Use `autoFallback` only as the default when the header is missing.
-- When `requestedRef.provider` is a Cloudflare pool key, keep `requestedRef.model` and expand it to `poolRefs` with that model, ordered by pool position, so the coding model setting doesn't silently override it.
-- `model-controls.functions.ts` / `ChatModelControls.tsx`: remove duplicate Cloudflare options so there is one option per model, labeled with the pool size.
-- Add a test in `tests/chat-tool-flow.test.ts`: with the admin auto set to false and the header set to on, the chain contains every non-exhausted pool key in order, and a 429 on key #1 picks key #2.
+- `ChatModelControls.tsx`: add a third Zap toggle `cloneMode` and send header `x-forge-clone: 1`.
+- New `src/lib/miromiro.server.ts`: read the key from `admin_credentials` (label match "miromiro") with `getIntegrationKey` fallback, then call the MiroMiro API and normalize and strip the result into a blueprint of at most about 1,500 tokens, chunked by section.
+- `chat.ts`: when the clone header is set or `detectCloneUrl` matches, use MiroMiro first and `buildSiteBlueprint` as the fallback. Save the blueprint to the brain/progress note.
+- Plan mode tools: add `list_saved_credentials` (names, notes, service) and include `vaultPromptSection()` in `buildPlanSystemPrompt`.
+- Vault hygiene: migrate the secret out of the `notes` text into the encrypted value, and make the prompt builder hide anything that looks like `KEY=value` in notes.
 
-### Not doing
-- No live test that uses neurons/credits; checks will use code and tests only.
+### Open item
+- I need MiroMiro's API address and request format (a link to their docs is enough). Until then I'll build everything around it and plug the exact call in once you share it.
