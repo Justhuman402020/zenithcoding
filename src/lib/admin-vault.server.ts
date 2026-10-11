@@ -51,9 +51,21 @@ export async function loadBrainNotes(): Promise<BrainNote[]> {
   }
 }
 
+/** Notes sometimes contain pasted "KEY=value" secrets — never leak those into prompts. */
+function scrubNote(note: string | null): string {
+  if (!note) return "";
+  return note
+    .split("\n")
+    .filter((line) => !/^[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/.test(line.trim()))
+    .join("\n")
+    .replace(/[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/g, "[hidden]")
+    .trim();
+}
+
 /** Prompt section: names only, never values. */
 export async function vaultPromptSection(): Promise<string> {
-  const [brain, vault, notes] = await Promise.all([loadAdminBrain(), listVault(), loadBrainNotes()]);
+  const [brain, vaultRaw, notes] = await Promise.all([loadAdminBrain(), listVault(), loadBrainNotes()]);
+  const vault = vaultRaw.map((v) => ({ ...v, notes: scrubNote(v.notes) || null }));
   let out = "";
   if (brain.trim()) out += `\n\n## Global admin rules (always follow)\n${brain.trim().slice(0, 6000)}`;
   const usable = notes.filter((n) => n.body.trim());

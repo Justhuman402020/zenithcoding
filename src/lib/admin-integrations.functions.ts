@@ -67,6 +67,10 @@ async function probe(service: string, v: Record<string, string>): Promise<{ ok: 
         const z = zones[0];
         return { ok: true, message: z ? `Connected to ${z.name} (${z.status}) · nameservers: ${(z.name_servers ?? []).join(", ")}` : "Key works" };
       }
+      case "miromiro": {
+        const { testMiroMiroKey } = await import("./miromiro.server");
+        return testMiroMiroKey(v.apiKey);
+      }
       case "neon":
         return await call("https://console.neon.tech/api/v2/users/me", { Authorization: `Bearer ${v.apiKey}` });
     }

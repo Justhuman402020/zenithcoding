@@ -58,6 +58,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
     ],
   },
   {
+    id: "miromiro",
+    name: "MiroMiro",
+    purpose: "Clone a site's design (colors, fonts, images, layout) from a link. Free plan: 300 credits/month.",
+    getUrl: "https://miromiro.app",
+    fields: [{ key: "apiKey", label: "API Key", required: true, placeholder: "Paste your MiroMiro API key" }],
+  },
+  {
     id: "cloudflare_dns",
     name: "Cloudflare Domains (DNS)",
     purpose: "Manage your domain's DNS. Changing the key keeps your domain settings.",
