@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Eye, Loader2, RefreshCw, Zap } from "lucide-react";
+import { Check, Eye, Globe, Loader2, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,6 +8,7 @@ import { getEditorModelControls, refreshEditorModelControls, type EditorModelOpt
 import { MODEL_STORAGE_KEY } from "@/lib/ai-providers";
 
 export const VISION_MODEL_STORAGE_KEY = "forge:vision-model";
+export const CLONE_MODE_STORAGE_KEY = "forge:clone-mode";
 
 function Picker({ kind, items, selected, onSelect, refreshing, onRefresh }: { kind: "vision" | "coding"; items: EditorModelOption[]; selected: string; onSelect: (item: EditorModelOption) => void; refreshing: boolean; onRefresh: () => void }) {
   const isVision = kind === "vision";
