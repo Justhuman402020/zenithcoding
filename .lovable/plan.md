@@ -9,6 +9,7 @@
 ### What you'll get
 1. **A third ⚡ icon above the chat: "Clone a site".** Tapping it turns on clone mode, and the box asks for a website link. Send "build a site like this https://..." and Code Haven knows to use MiroMiro. You don't have to guess the right words.
 2. **MiroMiro fetches the full site.** The server calls MiroMiro with your saved key and gets the page's layout, text, colors, fonts and images. Then it removes scripts, trackers and MiroMiro's own extras, keeping only the design.
+2b. **A MiroMiro card in Admin → Integrations & API keys.** Your current key moves there automatically. On the card you can paste, test (it shows the credits left), replace or remove keys, and add more than one. When a key runs out of credits, Code Haven moves to the next one, and the card marks it "Out of credits", so swapping in a fresh key takes one paste.
 3. **Forge takes over.** The cleaned design is saved to the project Brain as a "Clone blueprint", and the coding model builds the site from it, one section at a time. This keeps it inside Qwen's token limit.
 4. **Plan mode sees all saved keys.** Plan mode gets the list of saved integrations and vault keys (names and notes only, never the values). Every plan includes a "Keys this will use" line, for example "MiroMiro, to copy the site" or "Unsplash, for photos", and flags any key that's missing.
 5. **Fallback:** if MiroMiro fails or its key runs out, the old simple outline is used and you get a short notice.
@@ -19,6 +20,7 @@
 - `chat.ts`: when the clone header is set or `detectCloneUrl` matches, use MiroMiro first and `buildSiteBlueprint` as the fallback. Save the blueprint to the brain/progress note.
 - Plan mode tools: add `list_saved_credentials` (names, notes, service) and include `vaultPromptSection()` in `buildPlanSystemPrompt`.
 - Vault hygiene: migrate the secret out of the `notes` text into the encrypted value, and make the prompt builder hide anything that looks like `KEY=value` in notes.
+- Add a `miromiro` entry to `integrations-catalog.ts` (multi-key, ordered), with a test in `admin-integrations.functions.ts` that calls `/brand?url=example.com` and returns credits left from `X-Quota-*`. Import the existing vault key as key #1.
 
 ### MiroMiro calls used (from its public docs)
 - Base `https://miromiro.app/api/v1`, every call is `GET ?url=...` with header `Authorization: Bearer mm_live_...`. The free plan gives 300 credits a month.
