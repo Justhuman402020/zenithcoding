@@ -101,6 +101,7 @@ export const Route = createFileRoute("/api/public/chat")({
           .join(" ") ?? "";
         // Plan mode thinks and proposes; build mode writes files.
         const planMode = (request.headers.get("x-forge-mode") ?? "build").toLowerCase() === "plan";
+        const cloneMode = request.headers.get("x-forge-clone") === "1";
         const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
         const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
         trace.log("request.parsed", {
@@ -557,15 +558,31 @@ export const Route = createFileRoute("/api/public/chat")({
           }
           return missing;
         };
-        // Website cloner: compact blueprint of a linked site.
+        // Website cloner: compact blueprint of a linked site. Clone mode (third
+        // ⚡ button) or a "clone <url>" message triggers it. MiroMiro (saved admin
+        // key) gives a rich design read; the simple fetcher is the fallback.
         const { detectCloneUrl, buildSiteBlueprint } = await import("@/lib/site-cloner.server");
-        const cloneUrl = detectCloneUrl(lastUserText);
-        const blueprint = cloneUrl ? await buildSiteBlueprint(cloneUrl) : null;
-        if (cloneUrl) trace.log("clone.blueprint", { detail: { url: cloneUrl, ok: Boolean(blueprint) } });
+        const anyUrl = lastUserText.match(/https?:\/\/[^\s<>"')]+/i)?.[0]?.replace(/[.,;]+$/, "") ?? null;
+        const cloneUrl = detectCloneUrl(lastUserText) ?? (cloneMode ? anyUrl : null);
+        let blueprint: string | null = null;
+        let cloneSource = "simple";
+        if (cloneUrl) {
+          const { cloneSiteWithMiroMiro } = await import("@/lib/miromiro.server");
+          const miro = await cloneSiteWithMiroMiro(cloneUrl).catch(() => null);
+          if (miro) {
+            blueprint = miro.blueprint;
+            cloneSource = "miromiro";
+            if (miro.creditsLeft != null && miro.creditsLeft < 30) {
+              trace.log("clone.quota_low", { detail: { creditsLeft: miro.creditsLeft } });
+            }
+          }
+          if (!blueprint) blueprint = await buildSiteBlueprint(cloneUrl);
+        }
+        if (cloneUrl) trace.log("clone.blueprint", { detail: { url: cloneUrl, ok: Boolean(blueprint), source: cloneSource } });
         const cloneContext = blueprint
           ? `\n\n## Design blueprint of the site to replicate\n${blueprint}\nBuild a responsive page matching this layout, colors, navigation and text. Write original code; use the listed image URLs where fitting.`
           : cloneUrl
-            ? `\n\nThe user linked ${cloneUrl} to replicate, but it could not be fetched. Build your best matching page and say in one line that the site couldn't be read.`
+            ? `\n\nThe user linked ${cloneUrl} to replicate, but it could not be read. Build your best matching page and say in one line that the site couldn't be read.`
             : "";
         const visualContext = visualBrief ? `\n\n## Visual planner brief\n${visualBrief}\nThis brief was created by the image reader. You are the coding boss: use it as the source of truth and edit the files now. Do not spend tokens re-describing the image.` : "";
         const { vaultPromptSection } = await import("@/lib/admin-vault.server");

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Eye, Loader2, RefreshCw, Zap } from "lucide-react";
+import { Check, Eye, Globe, Loader2, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,6 +8,7 @@ import { getEditorModelControls, refreshEditorModelControls, type EditorModelOpt
 import { MODEL_STORAGE_KEY } from "@/lib/ai-providers";
 
 export const VISION_MODEL_STORAGE_KEY = "forge:vision-model";
+export const CLONE_MODE_STORAGE_KEY = "forge:clone-mode";
 
 function Picker({ kind, items, selected, onSelect, refreshing, onRefresh }: { kind: "vision" | "coding"; items: EditorModelOption[]; selected: string; onSelect: (item: EditorModelOption) => void; refreshing: boolean; onRefresh: () => void }) {
   const isVision = kind === "vision";
@@ -45,9 +46,11 @@ export function ChatModelControls() {
   const [refreshing, setRefreshing] = useState(false);
   const [visionSelected, setVisionSelected] = useState("");
   const [codingSelected, setCodingSelected] = useState("");
+  const [cloneMode, setCloneMode] = useState(false);
   useEffect(() => {
     setVisionSelected(localStorage.getItem(VISION_MODEL_STORAGE_KEY) ?? "");
     setCodingSelected(localStorage.getItem(MODEL_STORAGE_KEY) ?? "");
+    setCloneMode(localStorage.getItem(CLONE_MODE_STORAGE_KEY) === "1");
     void load({}).then(setData).catch(() => {});
   }, [load]);
   const coding = useMemo(() => {
@@ -59,6 +62,23 @@ export function ChatModelControls() {
     try { const next = await refresh({}); setData(next); toast.success("Working models refreshed"); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not refresh models"); } finally { setRefreshing(false); }
   }
   return <div className="inline-flex items-center gap-1" aria-label="Model controls">
+    <Button
+      type="button"
+      variant={cloneMode ? "default" : "outline"}
+      size="icon"
+      className="h-8 w-8 rounded-full shrink-0"
+      title={cloneMode ? "Clone-a-site mode is ON — paste a link and I'll copy its design. Tap to turn off." : "Clone a site: turn on, then paste a website link to copy its design"}
+      aria-label="Clone a site mode"
+      aria-pressed={cloneMode}
+      onClick={() => {
+        const next = !cloneMode;
+        setCloneMode(next);
+        localStorage.setItem(CLONE_MODE_STORAGE_KEY, next ? "1" : "0");
+        toast.success(next ? "Clone mode on — paste a website link in your next message" : "Clone mode off");
+      }}
+    >
+      <Globe className="h-4 w-4" />
+    </Button>
     <Picker kind="vision" items={data?.vision ?? []} selected={visionSelected} refreshing={refreshing} onRefresh={doRefresh} onSelect={(item) => { const key = `${item.provider}:${item.model}`; localStorage.setItem(VISION_MODEL_STORAGE_KEY, key); setVisionSelected(key); toast.success(`${item.label} will read the next image`); }} />
     <Picker kind="coding" items={coding} selected={codingSelected} refreshing={refreshing} onRefresh={doRefresh} onSelect={(item) => { const key = `${item.provider}:${item.model}`; localStorage.setItem(MODEL_STORAGE_KEY, key); setCodingSelected(key); toast.success(`${item.label} selected for coding`); }} />
   </div>;

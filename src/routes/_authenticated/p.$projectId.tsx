@@ -84,7 +84,7 @@ import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react
 import { BrainPanel } from "@/components/BrainPanel";
 import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
-import { ChatModelControls, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
+import { ChatModelControls, CLONE_MODE_STORAGE_KEY, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
 import { stopChatJobs } from "@/lib/chat-stop.functions";
 import { useServerFn as useStopServerFn, useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
@@ -838,6 +838,7 @@ function ProjectEditor() {
           if (visionRef) headers["x-forge-vision-model"] = visionRef;
           headers["x-forge-mode"] = modeRef.current;
           headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
+          if (window.localStorage.getItem(CLONE_MODE_STORAGE_KEY) === "1") headers["x-forge-clone"] = "1";
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
         },
