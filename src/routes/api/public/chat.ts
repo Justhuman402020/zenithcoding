@@ -37,6 +37,15 @@ import {
 export { createGroqProvider };
 
 // Extra-provider model lists, reused across requests so replies start faster.
+// Text-only copy of the conversation for restarts (images were already
+// turned into a written brief on the first run).
+function compactMessages0(messages: UIMessage[]) {
+  return compactChatMessages(messages).map((m: any) => ({
+    ...m,
+    parts: (m.parts ?? []).filter((p: any) => p.type === "text"),
+  }));
+}
+
 const extraModelCache = new Map<string, { at: number; models: any[] }>();
 
 export const Route = createFileRoute("/api/public/chat")({
@@ -47,7 +56,16 @@ export const Route = createFileRoute("/api/public/chat")({
         const token = auth.replace(/^Bearer\s+/i, "");
         const projectId = request.headers.get("x-project-id");
         console.log("[chat] POST", { hasToken: !!token, projectId });
-        if (!token) return new Response("Unauthorized: missing token", { status: 401 });
+        // Server-side restarts (from /api/public/jobs/resume) carry a one-time
+        // internal token instead of a user sign-in, and are never charged again.
+        const resumeUser = request.headers.get("x-forge-resume-user");
+        let isResume = false;
+        if (resumeUser) {
+          const { verifyResumeToken } = await import("@/lib/job-resume.server");
+          isResume = await verifyResumeToken(request.headers.get("x-forge-resume-token"));
+          if (!isResume) return new Response("Unauthorized", { status: 401 });
+        }
+        if (!token && !isResume) return new Response("Unauthorized: missing token", { status: 401 });
         if (!projectId) return new Response("Missing project", { status: 400 });
 
         const { providers: providerRegistry, keys: providerKeys } = await loadProviderRegistry();
@@ -58,17 +76,24 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const supabaseUrl = process.env.SUPABASE_URL!;
         const supabasePublishable = process.env.SUPABASE_PUBLISHABLE_KEY!;
-        const supabase = createClient(supabaseUrl, supabasePublishable, {
-          global: { headers: { Authorization: `Bearer ${token}` } },
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-
-        const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
-        if (userErr || !userRes.user) {
-          console.log("[chat] getUser failed", userErr?.message);
-          return new Response(`Unauthorized: ${userErr?.message ?? "no user"}`, { status: 401 });
+        let supabase: any;
+        let userId: string;
+        if (isResume) {
+          const { supabaseAdmin: adminClient } = await import("@/integrations/supabase/client.server");
+          supabase = adminClient;
+          userId = resumeUser!;
+        } else {
+          supabase = createClient(supabaseUrl, supabasePublishable, {
+            global: { headers: { Authorization: `Bearer ${token}` } },
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
+          if (userErr || !userRes.user) {
+            console.log("[chat] getUser failed", userErr?.message);
+            return new Response(`Unauthorized: ${userErr?.message ?? "no user"}`, { status: 401 });
+          }
+          userId = userRes.user.id;
         }
-        const userId = userRes.user.id;
 
         const trace = createTrace({ projectId, userId });
         const traceHeaders = { "x-forge-trace-id": trace.traceId };
@@ -84,6 +109,7 @@ export const Route = createFileRoute("/api/public/chat")({
           .from("projects")
           .select("id,name,description")
           .eq("id", projectId)
+          .eq("user_id", userId)
           .maybeSingle();
         if (!proj) {
           trace.log("project.lookup", { status: "error", message: "project not found" });
@@ -135,7 +161,9 @@ export const Route = createFileRoute("/api/public/chat")({
         // Admins build for free — their jobs must never be blocked by credits.
         // Casual replies above already returned, so they never reach this debit.
         // Run the credit checks together to shave a round-trip before replying.
-        const [, unlimited] = await Promise.all([ensureWelcomeGrant(userId), hasUnlimitedCredits(userId)]);
+        const [, unlimitedCredits] = await Promise.all([ensureWelcomeGrant(userId), hasUnlimitedCredits(userId)]);
+        // Server restarts continue an already-paid build: never charge twice.
+        const unlimited = unlimitedCredits || isResume;
         if (unlimited) {
           trace.log("credits.debit", { detail: { unlimited: true } });
         } else {
@@ -189,6 +217,22 @@ export const Route = createFileRoute("/api/public/chat")({
               .select("id")
               .single();
         const jobId = createdJob?.id;
+        // Save what's needed to restart this build on the server if the worker
+        // is cut off after the phone disconnects, then arm the restart check.
+        if (jobId && !planMode) {
+          const resumePayload = {
+            messages: compactMessages0(body.messages),
+            headers: Object.fromEntries(
+              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model"]
+                .map((h) => [h, request.headers.get(h)])
+                .filter(([, v]) => v != null),
+            ),
+          };
+          void (async () => {
+            await supabaseAdmin.from("chat_jobs").update({ resume_payload: resumePayload as any, ...(isResume ? {} : { auto_resumes: 0 }) }).eq("id", jobId);
+            await supabaseAdmin.rpc("arm_job_resume" as any);
+          })().catch(() => undefined);
+        }
 
         // Snapshot current files BEFORE the AI mutates anything, so the user
         // can one-click revert to this stable version if the build fails.
