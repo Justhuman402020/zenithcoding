@@ -76,7 +76,7 @@ export async function vaultPromptSection(): Promise<string> {
       .slice(0, 6000)}`;
   }
   if (vault.length) {
-    out += `\n\n## Saved credentials in the admin vault\nUse the attach_credential tool to copy one into this project's secrets (values are never shown to you):\n${vault
+    out += `\n\n## Saved credentials in the admin vault\nYou may use these freely. Tools: list_saved_credentials (see all), attach_credential (copy one into this project's secrets), save_credential (add or edit a key, label, URL, ID or note), delete_credential (only if asked). Key values are never shown to you:\n${vault
       .map((v) => `- "${v.label}" (${v.kind}${v.base_url ? `, url ${v.base_url}` : ""}${v.account_id ? ", has ID" : ""})${v.notes ? ` — note: ${v.notes}` : ""}`)
       .join("\n")}`;
   }
