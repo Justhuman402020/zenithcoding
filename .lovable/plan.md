@@ -20,5 +20,9 @@
 - Plan mode tools: add `list_saved_credentials` (names, notes, service) and include `vaultPromptSection()` in `buildPlanSystemPrompt`.
 - Vault hygiene: migrate the secret out of the `notes` text into the encrypted value, and make the prompt builder hide anything that looks like `KEY=value` in notes.
 
-### Open item
-- I need MiroMiro's API address and request format (a link to their docs is enough). Until then I'll build everything around it and plug the exact call in once you share it.
+### MiroMiro calls used (from its public docs)
+- Base `https://miromiro.app/api/v1`, every call is `GET ?url=...` with header `Authorization: Bearer mm_live_...`. The free plan gives 300 credits a month.
+- Clone flow, in order: `/brand` (logo, color roles, fonts), `/extract?fields=colors,fontSizes,spacing,borderRadiuses` (design tokens, 10 credits), `/images`, then `/code?framework=jsx` for the main sections.
+- Add `render=1` only when the plain fetch comes back nearly empty (React-style sites). It costs 5 extra credits.
+- Read the `X-Quota-*` headers and show the credits left on the third icon. When the credits run out, fall back to the simple outline.
+- No live test that spends your MiroMiro credits unless you say so.
