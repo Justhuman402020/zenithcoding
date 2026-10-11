@@ -100,7 +100,95 @@ export function createIntegrationTools(opts: { projectId: string; userId: string
         return error ? { ok: false, error: error.message } : { ok: true, saved: secretName };
       },
     }),
+    list_saved_credentials: tool({
+      description:
+        "List every saved API key / credential in the admin vault: label, kind, base URL, whether it has an ID, notes. Key values stay hidden; use attach_credential to put one into this project.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const { listVault } = await import("./admin-vault.server");
+        const rows = await listVault();
+        log("tool.list_saved_credentials", { count: rows.length });
+        return {
+          ok: true,
+          credentials: rows.map((r) => ({
+            label: r.label,
+            kind: r.kind,
+            base_url: r.base_url,
+            has_id: !!r.account_id,
+            notes: (r.notes ?? "").replace(/[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/g, "[hidden]"),
+          })),
+        };
+      },
+    }),
+    save_credential: tool({
+      description:
+        "Add a new saved credential to the admin vault or edit an existing one (matched by label). Only include fields you want to change. Use when the user gives you a new key or asks to update/rename/annotate a saved key. Admins only.",
+      inputSchema: z.object({
+        label: z.string().min(1).max(120),
+        newLabel: z.string().min(1).max(120).optional(),
+        key: z.string().min(1).max(20000).optional(),
+        kind: z.string().max(60).optional(),
+        base_url: z.string().max(500).optional(),
+        account_id: z.string().max(500).optional(),
+        notes: z.string().max(4000).optional(),
+      }),
+      execute: async (input) => {
+        if (!(await isAdmin(opts.userId))) return { ok: false, error: "Only the admin can change saved keys." };
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { encryptSecret } = await import("./secrets-crypto.server");
+        const { data: existing } = await supabaseAdmin
+          .from("admin_credentials")
+          .select("id")
+          .ilike("label", input.label.trim())
+          .limit(1)
+          .maybeSingle();
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (input.newLabel) patch.label = input.newLabel.trim();
+        if (input.key) patch.key_encrypted = await encryptSecret(input.key.trim());
+        if (input.kind !== undefined) patch.kind = input.kind;
+        if (input.base_url !== undefined) patch.base_url = input.base_url || null;
+        if (input.account_id !== undefined) patch.account_id = input.account_id || null;
+        if (input.notes !== undefined) patch.notes = input.notes || null;
+        if (existing) {
+          const { error } = await supabaseAdmin.from("admin_credentials").update(patch as any).eq("id", existing.id);
+          log("tool.save_credential", { ok: !error, mode: "update" });
+          return error ? { ok: false, error: error.message } : { ok: true, updated: input.newLabel ?? input.label };
+        }
+        if (!input.key) return { ok: false, error: `No saved key named "${input.label}". Provide key to create it.` };
+        const { error } = await supabaseAdmin.from("admin_credentials").insert({
+          label: input.label.trim(),
+          kind: input.kind || "api_key",
+          base_url: input.base_url || null,
+          account_id: input.account_id || null,
+          notes: input.notes || null,
+          key_encrypted: patch.key_encrypted as string,
+          created_by: opts.userId,
+        });
+        log("tool.save_credential", { ok: !error, mode: "create" });
+        return error ? { ok: false, error: error.message } : { ok: true, created: input.label };
+      },
+    }),
+    delete_credential: tool({
+      description: "Delete a saved credential from the admin vault by label. Only when the user explicitly asks. Admins only.",
+      inputSchema: z.object({ label: z.string().min(1) }),
+      execute: async ({ label }) => {
+        if (!(await isAdmin(opts.userId))) return { ok: false, error: "Only the admin can delete saved keys." };
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { error, count } = await supabaseAdmin
+          .from("admin_credentials")
+          .delete({ count: "exact" })
+          .ilike("label", label.trim());
+        log("tool.delete_credential", { ok: !error });
+        return error ? { ok: false, error: error.message } : { ok: true, deleted: count ?? 0 };
+      },
+    }),
   };
+}
+
+async function isAdmin(userId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin.from("user_roles").select("id").eq("user_id", userId).eq("role", "admin").maybeSingle();
+  return !!data;
 }
 
 async function projectSecret(projectId: string, keys: string[]) {
