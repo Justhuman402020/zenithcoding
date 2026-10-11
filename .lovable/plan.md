@@ -22,9 +22,10 @@
 - Vault hygiene: migrate the secret out of the `notes` text into the encrypted value, and make the prompt builder hide anything that looks like `KEY=value` in notes.
 - Add a `miromiro` entry to `integrations-catalog.ts` (multi-key, ordered), with a test in `admin-integrations.functions.ts` that calls `/brand?url=example.com` and returns credits left from `X-Quota-*`. Import the existing vault key as key #1.
 
-### MiroMiro calls used (from its public docs)
-- Base `https://miromiro.app/api/v1`, every call is `GET ?url=...` with header `Authorization: Bearer mm_live_...`. The free plan gives 300 credits a month.
-- Clone flow, in order: `/brand` (logo, color roles, fonts), `/extract?fields=colors,fontSizes,spacing,borderRadiuses` (design tokens, 10 credits), `/images`, then `/code?framework=jsx` for the main sections.
-- Add `render=1` only when the plain fetch comes back nearly empty (React-style sites). It costs 5 extra credits.
-- Read the `X-Quota-*` headers and show the credits left on the third icon. When the credits run out, fall back to the simple outline.
+### MiroMiro calls used (confirmed from https://miromiro.app/api/docs/introduction)
+- Base `https://miromiro.app/api/v1`, every call is `GET ?url=...` with header `Authorization: Bearer <key>`. Free plan: 300 credits/month, no card.
+- Available endpoints: `/code` (paste-ready Tailwind/HTML/React/Vue per section), `/brand` (colors, fonts, logo, socials), `/extract` (design tokens: colors, font sizes, radii, shadows — as JSON, CSS or Tailwind), `/images`, `/svgs`, `/fonts`, `/videos`, plus Lottie animations.
+- Clone flow, in order: `/brand`, `/extract` (design tokens), `/images`, then `/code?framework=jsx` for the main sections. Save the merged result as the project's "Clone blueprint" in the Brain.
+- Machine-readable OpenAPI 3.1 spec lives at `https://miromiro.app/api/openapi.json` — the integration test can validate against it. MiroMiro also offers a hosted MCP server at `https://miromiro.app/mcp`; we use the REST API directly so your saved key works.
+- Key handling: the MiroMiro card in Admin → Integrations & API keys lets you paste, test, replace or remove keys anytime; when one runs out of credits it's marked "Out of credits" and the next saved key is used automatically.
 - No live test that spends your MiroMiro credits unless you say so.
