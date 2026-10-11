@@ -585,10 +585,11 @@ export const Route = createFileRoute("/api/public/chat")({
             ? `\n\nThe user linked ${cloneUrl} to replicate, but it could not be read. Build your best matching page and say in one line that the site couldn't be read.`
             : "";
         const visualContext = visualBrief ? `\n\n## Visual planner brief\n${visualBrief}\nThis brief was created by the image reader. You are the coding boss: use it as the source of truth and edit the files now. Do not spend tokens re-describing the image.` : "";
-        // Saved admin keys stay private: the agent never sees the vault.
+        const { vaultPromptSection } = await import("@/lib/admin-vault.server");
+        const adminVaultContext = await vaultPromptSection();
         const systemPrompt =
           (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-          sharedContext + assetContext + cloneContext + visualContext;
+          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext;
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];
