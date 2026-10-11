@@ -36,6 +36,9 @@ import {
 
 export { createGroqProvider };
 
+// Extra-provider model lists, reused across requests so replies start faster.
+const extraModelCache = new Map<string, { at: number; models: any[] }>();
+
 export const Route = createFileRoute("/api/public/chat")({
   server: {
     handlers: {
