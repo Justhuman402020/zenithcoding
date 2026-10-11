@@ -131,8 +131,8 @@ export const Route = createFileRoute("/api/public/chat")({
         // Ensure the user has a welcome balance, then debit one credit per message.
         // Admins build for free — their jobs must never be blocked by credits.
         // Casual replies above already returned, so they never reach this debit.
-        await ensureWelcomeGrant(userId);
-        const unlimited = await hasUnlimitedCredits(userId);
+        // Run the credit checks together to shave a round-trip before replying.
+        const [, unlimited] = await Promise.all([ensureWelcomeGrant(userId), hasUnlimitedCredits(userId)]);
         if (unlimited) {
           trace.log("credits.debit", { detail: { unlimited: true } });
         } else {
@@ -151,7 +151,8 @@ export const Route = createFileRoute("/api/public/chat")({
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         // Recover jobs whose request died before its completion handler ran.
         // Healthy jobs refresh updated_at every 15 seconds below.
-        await supabaseAdmin
+        // Stale-job cleanup is housekeeping: don't make the reply wait for it.
+        void supabaseAdmin
           .from("chat_jobs")
           .update({
             status: "failed",
@@ -162,7 +163,8 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .eq("user_id", userId)
           .in("status", ["queued", "running"])
-          .lt("updated_at", new Date(Date.now() - 180_000).toISOString());
+          .lt("updated_at", new Date(Date.now() - 180_000).toISOString())
+          .then(() => undefined, () => undefined);
 
         const { data: existingJob } = await supabase
           .from("chat_jobs")
@@ -188,11 +190,12 @@ export const Route = createFileRoute("/api/public/chat")({
         // Snapshot current files BEFORE the AI mutates anything, so the user
         // can one-click revert to this stable version if the build fails.
         if (needsFileChange) {
-          await trace.time("snapshot.create", async () => {
-            const { data: currentFiles } = await supabase
-              .from("files")
-              .select("path,content")
-              .eq("project_id", projectId);
+          // Read files now (before any edit) but save the snapshot in the background.
+          const { data: currentFiles } = await supabase
+            .from("files")
+            .select("path,content")
+            .eq("project_id", projectId);
+          void trace.time("snapshot.create", async () => {
             await supabase.from("project_snapshots").insert({
               project_id: projectId,
               user_id: userId,
@@ -230,8 +233,18 @@ export const Route = createFileRoute("/api/public/chat")({
         const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id] && !isCloudflareBaseUrl(p.baseURL));
         if (extraProviders.length) {
           const { listProviderModels } = await import("@/lib/model-discovery.server");
-          for (const provider of extraProviders) {
-            const models = await listProviderModels(provider.id, providerKeys[provider.id]!, provider);
+          // Ask every extra provider at once, and reuse answers for 10 minutes.
+          const lists = await Promise.all(
+            extraProviders.map(async (provider) => {
+              const hit = extraModelCache.get(provider.id);
+              if (hit && hit.at > Date.now() - 600_000) return hit.models;
+              const models = await listProviderModels(provider.id, providerKeys[provider.id]!, provider).catch(() => [] as any[]);
+              extraModelCache.set(provider.id, { at: Date.now(), models });
+              return models;
+            }),
+          );
+          for (const [index, provider] of extraProviders.entries()) {
+            const models = lists[index]!;
             for (const model of models.filter((m) => m.tools).slice(0, 3)) {
               if (!fullChain.some((r) => r.provider === provider.id && r.model === model.id)) {
                 fullChain.push({ provider: provider.id, model: model.id });
