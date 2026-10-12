@@ -57,7 +57,6 @@ export const Route = createFileRoute("/api/public/jobs/resume")({
                 headers: {
                   "content-type": "application/json",
                   ...(payload.headers ?? {}),
-                  "x-mode": "build",
                   "x-project-id": job.project_id,
                   "x-forge-request-key": job.request_key,
                   "x-forge-resume-user": job.user_id,

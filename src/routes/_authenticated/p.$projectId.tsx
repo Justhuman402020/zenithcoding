@@ -148,6 +148,7 @@ type LatestJob = {
   steps_done: number;
   files_changed: number;
   rounds: number;
+  auto_resumes?: number;
 };
 
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
@@ -1105,7 +1106,7 @@ function ProjectEditor() {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -2243,7 +2244,8 @@ function ProjectEditor() {
                 if (active && !interrupted) return null;
                 const kind = interrupted ? "interrupted" : (latestJob.outcome ?? (latestJob.status === "completed" ? "finished" : null));
                 if (!kind || kind === "stopped" || kind === "failed") return null;
-                const counts = `${latestJob.steps_done} step${latestJob.steps_done === 1 ? "" : "s"}, ${latestJob.files_changed} file${latestJob.files_changed === 1 ? "" : "s"} changed`;
+                const restarts = latestJob.auto_resumes ?? 0;
+                const counts = `${latestJob.steps_done} step${latestJob.steps_done === 1 ? "" : "s"}, ${latestJob.files_changed} file${latestJob.files_changed === 1 ? "" : "s"} changed${restarts ? ` · restarted ${restarts} time${restarts === 1 ? "" : "s"} by the server` : ""}`;
                 const title =
                   kind === "finished" ? "Finished" : kind === "stopped_early" ? "Stopped early" : kind === "out_of_keys" ? "Out of AI keys" : "Interrupted";
                 const detail =
