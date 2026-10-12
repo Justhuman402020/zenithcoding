@@ -35,6 +35,7 @@ import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/pus
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
 import { Route as ApiPublicAssetIdRouteImport } from './routes/api/public/asset.$id'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as ApiPublicJobsResumeRouteImport } from './routes/api/public/jobs.resume'
 import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
@@ -178,6 +179,11 @@ const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
   path: '/api/public/github/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicJobsResumeRoute = ApiPublicJobsResumeRouteImport.update({
+  id: '/api/public/jobs/resume',
+  path: '/api/public/jobs/resume',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
   id: '/api/public/sites/data',
   path: '/api/public/sites/data',
@@ -237,6 +243,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
@@ -270,6 +277,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
@@ -305,6 +313,7 @@ export interface FileRoutesById {
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
+    | '/api/public/jobs/resume'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/settings'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
+    | '/api/public/jobs/resume'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
+    | '/api/public/jobs/resume'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
@@ -431,6 +443,7 @@ export interface RootRouteChildren {
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
   ApiPublicAssetIdRoute: typeof ApiPublicAssetIdRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
+  ApiPublicJobsResumeRoute: typeof ApiPublicJobsResumeRoute
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
   ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
@@ -623,6 +636,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/jobs/resume': {
+      id: '/api/public/jobs/resume'
+      path: '/api/public/jobs/resume'
+      fullPath: '/api/public/jobs/resume'
+      preLoaderRoute: typeof ApiPublicJobsResumeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sites/data': {
       id: '/api/public/sites/data'
       path: '/api/public/sites/data'
@@ -728,6 +748,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
   ApiPublicAssetIdRoute: ApiPublicAssetIdRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
+  ApiPublicJobsResumeRoute: ApiPublicJobsResumeRoute,
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
   ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,

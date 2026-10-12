@@ -194,6 +194,8 @@ export const Route = createFileRoute("/api/public/chat")({
           .eq("project_id", projectId)
           .eq("user_id", userId)
           .in("status", ["queued", "running"])
+          // Leave cut-off builds alone while the server can still restart them.
+          .or("resume_payload.is.null,auto_resumes.gte.6")
           .lt("updated_at", new Date(Date.now() - 180_000).toISOString())
           .then(() => undefined, () => undefined);
 
