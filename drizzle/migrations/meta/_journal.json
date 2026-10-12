@@ -43,6 +43,13 @@
       "when": 1791681121245,
       "tag": "0005_server_auto_resume_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791768581417,
+      "tag": "0006_chat_jobs_handoff",
+      "breakpoints": true
     }
   ]
 }

@@ -205,6 +205,7 @@ export type Database = {
           created_at: string
           error: string | null
           files_changed: number
+          handoff: Json | null
           id: string
           outcome: string | null
           progress: string | null
@@ -227,6 +228,7 @@ export type Database = {
           created_at?: string
           error?: string | null
           files_changed?: number
+          handoff?: Json | null
           id?: string
           outcome?: string | null
           progress?: string | null
@@ -249,6 +251,7 @@ export type Database = {
           created_at?: string
           error?: string | null
           files_changed?: number
+          handoff?: Json | null
           id?: string
           outcome?: string | null
           progress?: string | null
