@@ -1,3 +1,4 @@
+import { shouldHandoff, emptyBaton, mergeBaton, batonNote } from "@/lib/neuron-budget";
 import { createFileRoute } from "@tanstack/react-router";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
@@ -302,7 +303,9 @@ export const Route = createFileRoute("/api/public/chat")({
           }
         }
         // The editor's Auto-switch toggle: off means use only the chosen model.
-        const editorAuto = request.headers.get("x-forge-auto") !== "off";
+        // The editor toggle decides; the admin setting is only the default when no header is sent.
+        const autoHeader = request.headers.get("x-forge-auto");
+        const editorAuto = autoHeader == null ? autoFallback : autoHeader !== "off";
         // Models that just stopped mid-work go to the back so a retry lands on a different one.
         let orderedChain = fullChain;
         if (editorAuto && fullChain.length > 1) {
@@ -322,13 +325,16 @@ export const Route = createFileRoute("/api/public/chat")({
             /* ordering is best effort */
           }
         }
-        let chain = autoFallback && editorAuto ? orderedChain : fullChain.slice(0, 1);
+        const poolPositions = new Map<string, number>();
+        let chain = editorAuto ? orderedChain : fullChain.slice(0, 1);
         // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
         // unless the user picked a model by hand in the editor. With Auto off the
         // manually picked model is used exactly as chosen — never rerouted to Qwen.
-        if (editorAuto && autoFallback) {
+        if (editorAuto) {
           const { loadCloudflarePool, readCloudflareCodingModel } = await import("@/lib/cloudflare-pool.server");
-          const pool = (await loadCloudflarePool()).filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
+          const fullPool = await loadCloudflarePool();
+          for (const k of fullPool) poolPositions.set(k.id, k.position);
+          const pool = fullPool.filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
           if (pool.length) {
             const codingModel = await readCloudflareCodingModel();
             const poolRefs = pool.map((k) => ({ provider: k.id, model: codingModel }));
@@ -336,9 +342,9 @@ export const Route = createFileRoute("/api/public/chat")({
             const rest = chain.filter((r) => !poolIds.has(r.provider));
             if (requestedRef && !poolIds.has(requestedRef.provider)) {
               // Manual pick stays first; if it stops, the pool (key #1 → #21) takes over.
-              chain = autoFallback ? [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)] : [rest[0] ?? requestedRef];
+              chain = [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)];
             } else {
-              chain = autoFallback ? [...poolRefs, ...rest] : poolRefs;
+              chain = [...poolRefs, ...rest];
             }
           }
         } else {
@@ -402,7 +408,7 @@ export const Route = createFileRoute("/api/public/chat")({
                   : /429|rate limit|quota/i.test(raw)
                     ? " The provider's limit has been reached for now."
                     : "";
-          const lockedRef = !(editorAuto && autoFallback) ? (requestedRef ?? adminRef) : null;
+          const lockedRef = !(editorAuto) ? (requestedRef ?? adminRef) : null;
           const locked = !!lockedRef;
           const message = locked
             ? `The model you picked (${lockedRef!.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
@@ -677,6 +683,9 @@ export const Route = createFileRoute("/api/public/chat")({
           let stoppedEarly = false;
           let stopCause = "";
           let outOfKeys = false;
+          let baton = emptyBaton();
+          const replyLog: string[] = [];
+          const keyNo = (id: string) => poolPositions.get(id) ?? "?";
 
           for (let attempt = 0; attempt < MAX_ATTEMPTS && !userStopped; attempt++) {
             const isGh = /models\.github\.ai/i.test(current.baseURL);
@@ -689,7 +698,9 @@ export const Route = createFileRoute("/api/public/chat")({
             let attemptNeurons = 0;
             let baseNeurons = 0;
             const cfPool = isCf ? await import("@/lib/cloudflare-pool.server") : null;
+            const stepCosts: number[] = [];
             if (cfPool) {
+              // Start from the real count Cloudflare shows; fall back to our own count.
               const { data: u } = await supabaseAdmin
                 .from("cloudflare_neuron_usage" as any)
                 .select("neurons_used")
@@ -697,6 +708,11 @@ export const Route = createFileRoute("/api/public/chat")({
                 .eq("day", cfPool.utcDay())
                 .maybeSingle();
               baseNeurons = Number((u as any)?.neurons_used ?? 0);
+              try {
+                const acct = /accounts\/([^/]+)\//i.exec(current.baseURL)?.[1];
+                const real = acct ? await cfPool.fetchRealNeurons(acct, current.apiKey) : null;
+                if (real != null) baseNeurons = Math.max(baseNeurons, real);
+              } catch { /* estimate stays */ }
             }
             let failure: string | null = null;
             let finished = false;
@@ -737,15 +753,16 @@ export const Route = createFileRoute("/api/public/chat")({
                   recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
                 }
                 if (cfPool) {
-                  attemptNeurons += cfPool.estimateNeurons(step?.usage?.inputTokens, step?.usage?.outputTokens);
-                  // 9k soft cap: let this step finish cleanly, then stop and route
-                  // the very next step to the next key (1,000 Neuron reserve kept).
-                  if (autoFallback && editorAuto && baseNeurons + attemptNeurons >= cfPool.SOFT_CAP_NEURONS) {
-                    handoff = true;
-                  }
+                  const cost = cfPool.estimateNeurons(step?.usage?.inputTokens, step?.usage?.outputTokens);
+                  attemptNeurons += cost;
+                  stepCosts.push(cost);
+                  // Look ahead: stop now if the next step would cross 9,000 (1,000 reserve kept).
+                  if (editorAuto && shouldHandoff(baseNeurons + attemptNeurons, stepCosts)) handoff = true;
+                  const tot = Math.round(baseNeurons + attemptNeurons);
+                  replyLog.push(`Key #${keyNo(current.ref.provider)} · step cost ${cost} · ${tot.toLocaleString()} / 9,000 · ${Math.max(0, 9000 - tot).toLocaleString()} left`);
                   writer?.write({
                     type: "message-metadata",
-                    messageMetadata: { neurons: { key: current.ref.provider, start: Math.round(baseNeurons), used: Math.round(attemptNeurons), cap: cfPool.SOFT_CAP_NEURONS } },
+                    messageMetadata: { neurons: { key: current.ref.provider, keyNo: keyNo(current.ref.provider), start: Math.round(baseNeurons), used: Math.round(attemptNeurons), step: stepCosts[stepCosts.length - 1] ?? 0, cap: cfPool.SOFT_CAP_NEURONS, log: replyLog.slice(-20) } },
                   });
                 }
                 if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
@@ -757,7 +774,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 if (!cfPool) return undefined;
                 const total = Math.round(baseNeurons + attemptNeurons);
                 return {
-                  system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.`,
+                  system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.${baton.items.length || baton.keyLog.length ? `\n\n${batonNote(baton, `Key #${keyNo(current.ref.provider)}`)}` : ""}`,
                 };
               },
               stopWhen: [
@@ -779,7 +796,6 @@ export const Route = createFileRoute("/api/public/chat")({
               onFinish: async ({ finishReason, usage }) => {
                 finished = true;
                 finalReason = finishReason;
-                if (cfPool) await cfPool.addNeurons(current.ref.provider, cfPool.estimateNeurons(usage?.inputTokens, usage?.outputTokens));
                 trace.log("stream.finish", { detail: { finishReason, inputTokens: usage?.inputTokens ?? null, outputTokens: usage?.outputTokens ?? null } });
               },
               onError: ({ error }) => {
@@ -797,18 +813,22 @@ export const Route = createFileRoute("/api/public/chat")({
             await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });
             if (watchdog) clearTimeout(watchdog);
 
+            // Record the sum of every step's cost (not just the last one).
+            if (cfPool && attemptNeurons > 0) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
             if (handoff && cfPool) {
-              // Twin handoff: save usage, reserve the key, pass a compact note to the next key.
-              // onFinish already recorded this attempt's Neurons when the step ended cleanly.
-              if (!finished) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
               await cfPool.markExhausted(current.ref.provider);
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
-              carried.push({
-                role: "user",
-                content: `Handoff note (previous key reached its 9,000 Neuron soft cap after a completed step). You are still Forge — same voice, same plan, same task; the user should not notice a switch. Finished: ${stepNo} step(s). Files already written (trust them — do NOT re-read or rewrite): ${[...progressModel.files].slice(-20).join(", ") || "none"}. Last completed action: ${progressText}. Next: do the next remaining step of the original request only.`,
+              const label = `Key #${keyNo(current.ref.provider)}`;
+              baton = mergeBaton(baton, {
+                files: [...progressModel.files],
+                next: `continue after: ${progressText}`,
+                keyLog: [{ key: label, neurons: Math.round(baseNeurons + attemptNeurons), items: `${attemptStepCount} step(s)` }],
               });
+              carried.push({ role: "user", content: batonNote(baton, "the next key") });
+              writer?.write({ type: "message-metadata", messageMetadata: { handoff: { from: label, neurons: Math.round(baseNeurons + attemptNeurons), files: progressModel.files.size } } });
               trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
               failure = null;
+              attempt -= 1; // a handoff is not a failure and never uses up an attempt
             }
             const success = finished && !failure && !timedOut && !handoff;
             if (success && requiredAssets.length && !assetRetryDone && !userStopped) {
@@ -847,7 +867,7 @@ export const Route = createFileRoute("/api/public/chat")({
               });
               recentCalls.length = 0;
               rounds += 1;
-              if (autoFallback && editorAuto) {
+              if (editorAuto) {
                 const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
                 const next = remaining.length ? await pickAvailableModel(remaining, providerKeys, providerRegistry, gateway) : null;
                 if (!next || !next.ok) {
@@ -882,7 +902,7 @@ export const Route = createFileRoute("/api/public/chat")({
             }
             trace.log("attempt.failover", { status: "error", message: lastError, detail: { attempt, provider: current.ref.provider } });
 
-            if (!(autoFallback && editorAuto)) break;
+            if (!(editorAuto)) break;
             const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
             if (!remaining.length) {
               outOfKeys = true;
