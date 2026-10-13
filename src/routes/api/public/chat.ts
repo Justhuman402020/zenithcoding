@@ -655,9 +655,13 @@ export const Route = createFileRoute("/api/public/chat")({
         const visualContext = visualBrief ? `\n\n## Visual planner brief\n${visualBrief}\nThis brief was created by the image reader. You are the coding boss: use it as the source of truth and edit the files now. Do not spend tokens re-describing the image.` : "";
         const { vaultPromptSection } = await import("@/lib/admin-vault.server");
         const adminVaultContext = await vaultPromptSection();
+        // "/spec", "/plan", "/build"… at the start of a message activates that Brain skill.
+        const { loadBrainNotes } = await import("@/lib/admin-vault.server");
+        const { activeSkillSection } = await import("@/lib/brain-skills");
+        const skillContext = activeSkillSection(lastUserText, await loadBrainNotes());
         const systemPrompt =
           (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext;
+          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext + skillContext;
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];
