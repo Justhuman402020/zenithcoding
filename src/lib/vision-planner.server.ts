@@ -29,9 +29,13 @@ export async function planAttachedImages(args: {
   if (!urls.length) return null;
   const { listProviderModels } = await import("./model-discovery.server");
   const { gatewayBaseURL } = await import("./model-router.server");
+  // Cloudflare is never used for images, in any mode.
+  const { withoutCloudflare } = await import("./cf-pool-routing");
+  const providers = withoutCloudflare(args.providers);
+  const allowed = new Set(providers.map((p) => p.id));
   const candidates: ModelRef[] = [];
-  if (args.preferred) candidates.push(args.preferred);
-  for (const provider of args.providers) {
+  if (args.preferred && allowed.has(args.preferred.provider)) candidates.push(args.preferred);
+  for (const provider of providers) {
     const key = args.keys[provider.id];
     if (!key) continue;
     const models = await listProviderModels(provider.id, key, provider);
@@ -41,7 +45,7 @@ export async function planAttachedImages(args: {
   }
   const failed: ModelRef[] = [];
   for (const ref of candidates) {
-    const provider = args.providers.find((item) => item.id === ref.provider);
+    const provider = providers.find((item) => item.id === ref.provider);
     const apiKey = args.keys[ref.provider];
     if (!provider || !apiKey) continue;
     const baseURL = gatewayBaseURL(args.gateway, ref.provider, provider.baseURL);
