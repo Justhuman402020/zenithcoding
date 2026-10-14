@@ -62,6 +62,7 @@ function IntegrationsPage() {
             ))}
           </div>
         )}
+        <AllSavedKeys />
         <div className="space-y-3 pt-4">
           <h2 className="font-display text-xl">Saved credentials from the Brain</h2>
           <p className="text-sm text-muted-foreground">Every key saved in the Brain vault. Add a note so the agent knows when to use it.</p>
