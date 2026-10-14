@@ -59,7 +59,7 @@ function IntegrationsPage() {
         <div className="space-y-2">
           <h2 className="font-display text-xl">All saved keys</h2>
           <p className="text-sm text-muted-foreground">
-            Every key your agent can use for tasks — from the Brain vault and integrations. AI model keys live in Admin → AI Models and are not listed here.
+            Only keys saved through the Brain section. AI model keys live in Admin → AI Models and are not listed here.
           </p>
           {allKeys.length === 0 ? (
             <p className="text-sm text-muted-foreground">No keys saved yet.</p>
