@@ -138,8 +138,6 @@ export const listAllSavedKeys = createServerFn({ method: "GET" })
       const def = INTEGRATIONS.find((s) => s.id === r.service);
       rows.push({ source: "Integration", label: def?.name ?? r.service, detail: null, updatedAt: r.updated_at ?? null });
     }
-    for (const r of (pool.data ?? []) as any[])
-      rows.push({ source: "Cloudflare pool", label: r.label, detail: r.base_url ?? null, updatedAt: r.created_at ?? null });
     return { keys: rows };
   });
 
