@@ -64,6 +64,10 @@ export function createIntegrationTools(opts: { projectId: string; userId: string
         "Run SQL (DDL like CREATE TABLE IF NOT EXISTS / ALTER TABLE / CREATE POLICY, or DML) on this project's connected Supabase database. Use it when a table is missing instead of telling the user to do it. Always enable RLS and add policies on new tables.",
       inputSchema: z.object({ sql: z.string().min(3).max(50000) }),
       execute: async ({ sql }) => {
+        if (touchesSavedKeys(sql)) {
+          log("tool.execute_sql", { ok: false, blocked: "saved_keys" });
+          return { ok: false, error: "Blocked: agents can't delete, drop, empty or change saved key tables." };
+        }
         const r = await runProjectSql(opts.projectId, sql);
         log("tool.execute_sql", { ok: r.ok });
         return r;
@@ -169,6 +173,13 @@ export function createIntegrationTools(opts: { projectId: string; userId: string
       },
     }),
   };
+}
+
+const KEY_TABLES = /\b(admin_credentials|custom_ai_providers|platform_integration_keys|project_secrets|ai_pool_settings)\b/i;
+const DESTRUCTIVE = /\b(delete|drop|truncate|update|alter|rename)\b/i;
+/** True when SQL could remove or change saved keys. Exported for tests. */
+export function touchesSavedKeys(sql: string) {
+  return KEY_TABLES.test(sql) && DESTRUCTIVE.test(sql);
 }
 
 async function isAdmin(userId: string) {
