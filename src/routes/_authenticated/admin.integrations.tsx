@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { VaultKeyList } from "@/components/VaultKeyList";
 import { INTEGRATIONS, type IntegrationDef } from "@/lib/integrations-catalog";
 import {
+  listAllSavedKeys,
   listIntegrationKeys,
   removeIntegrationKey,
   saveIntegrationKey,
   testIntegrationKey,
+  type SavedKeyRow,
 } from "@/lib/admin-integrations.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/integrations")({
@@ -36,6 +38,9 @@ function IntegrationsPage() {
   const load = useServerFn(listIntegrationKeys);
   const { data, refetch, isLoading } = useQuery({ queryKey: ["admin-integrations"], queryFn: () => load() });
   const saved: Saved = (data as any)?.saved ?? {};
+  const loadAll = useServerFn(listAllSavedKeys);
+  const { data: allKeysData } = useQuery({ queryKey: ["admin-all-saved-keys"], queryFn: () => loadAll() });
+  const allKeys: SavedKeyRow[] = (allKeysData as any)?.keys ?? [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -50,6 +55,28 @@ function IntegrationsPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Paste a key, press the test icon to check it works, then Save. Saved keys stay hidden and encrypted.
           </p>
+        </div>
+        <div className="space-y-2">
+          <h2 className="font-display text-xl">All saved keys</h2>
+          <p className="text-sm text-muted-foreground">
+            Every key your agent can use for tasks — from the Brain vault and integrations. AI model keys live in Admin → AI Models and are not listed here.
+          </p>
+          {allKeys.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No keys saved yet.</p>
+          ) : (
+            <div className="rounded-xl border border-border divide-y divide-border">
+              {allKeys.map((k, i) => (
+                <div key={`${k.source}-${k.label}-${i}`} className="flex items-center gap-3 px-4 py-2.5">
+                  <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{k.label}</div>
+                    {k.detail && <div className="text-xs text-muted-foreground truncate">{k.detail}</div>}
+                  </div>
+                  <span className="text-[11px] rounded-full bg-muted text-muted-foreground px-2 py-0.5 shrink-0">{k.source}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         {isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

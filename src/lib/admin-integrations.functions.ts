@@ -111,6 +111,41 @@ export const listIntegrationKeys = createServerFn({ method: "GET" })
     return { saved };
   });
 
+export type SavedKeyRow = { source: "Brain vault" | "Integration"; label: string; detail: string; updatedAt: string | null };
+
+/** Every saved key for agent tasks: Brain vault + integration keys. AI model keys (Admin → AI Models) are intentionally excluded. */
+export const listAllSavedKeys = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const rows: SavedKeyRow[] = [];
+    const { data: vault } = await supabaseAdmin
+      .from("admin_credentials")
+      .select("label, kind, base_url, account_id, notes, created_at")
+      .order("created_at", { ascending: true });
+    for (const v of (vault ?? []) as any[]) {
+      rows.push({
+        source: "Brain vault",
+        label: v.label,
+        detail: [v.kind, v.base_url, v.account_id ? "has ID" : null, v.notes].filter(Boolean).join(" · "),
+        updatedAt: v.created_at ?? null,
+      });
+    }
+    const { data: integrations } = await supabaseAdmin
+      .from("platform_integration_keys" as any)
+      .select("service, field, updated_at");
+    for (const k of (integrations ?? []) as any[]) {
+      rows.push({
+        source: "Integration",
+        label: `${k.service} — ${k.field}`,
+        detail: "",
+        updatedAt: k.updated_at ?? null,
+      });
+    }
+    return { keys: rows };
+  });
+
 export const testIntegrationKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => valuesSchema.parse(d))
