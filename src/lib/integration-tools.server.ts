@@ -167,6 +167,7 @@ export function createIntegrationTools(opts: { projectId: string; userId: string
         log("tool.save_credential", { ok: !error, mode: "create" });
         return error ? { ok: false, error: error.message } : { ok: true, created: input.label };
       },
+    }),
   };
 }
 
