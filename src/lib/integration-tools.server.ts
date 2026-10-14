@@ -168,20 +168,6 @@ export function createIntegrationTools(opts: { projectId: string; userId: string
         return error ? { ok: false, error: error.message } : { ok: true, created: input.label };
       },
     }),
-    delete_credential: tool({
-      description: "Delete a saved credential from the admin vault by label. Only when the user explicitly asks. Admins only.",
-      inputSchema: z.object({ label: z.string().min(1) }),
-      execute: async ({ label }) => {
-        if (!(await isAdmin(opts.userId))) return { ok: false, error: "Only the admin can delete saved keys." };
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { error, count } = await supabaseAdmin
-          .from("admin_credentials")
-          .delete({ count: "exact" })
-          .ilike("label", label.trim());
-        log("tool.delete_credential", { ok: !error });
-        return error ? { ok: false, error: error.message } : { ok: true, deleted: count ?? 0 };
-      },
-    }),
   };
 }
 
