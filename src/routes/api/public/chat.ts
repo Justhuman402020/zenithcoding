@@ -771,6 +771,14 @@ export const Route = createFileRoute("/api/public/chat")({
                 createPrepareStep(needsFileChange, trace)(opts);
                 if (!cfPool) return undefined;
                 const total = Math.round(baseNeurons + attemptNeurons);
+                // Preflight guard: never send a call whose worst case could pass 9,500.
+                const lastCost = stepCosts.length ? Math.max(stepCosts[stepCosts.length - 1]!, stepCosts.reduce((a, b) => a + b, 0) / stepCosts.length) * 1.25 : 500;
+                if (editorAuto && (total >= 9000 || !preflightAllowed(total, lastCost))) {
+                  handoff = true;
+                  trace.log("pool.preflight_block", { detail: { total, projected: total + lastCost, max: PREFLIGHT_MAX } });
+                  attemptAbort.abort();
+                  return undefined;
+                }
                 return {
                   system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.${baton.items.length || baton.keyLog.length ? `\n\n${batonNote(baton, `Key #${keyNo(current.ref.provider)}`)}` : ""}`,
                 };
