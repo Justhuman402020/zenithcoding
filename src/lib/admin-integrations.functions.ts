@@ -111,6 +111,37 @@ export const listIntegrationKeys = createServerFn({ method: "GET" })
     return { saved };
   });
 
+export type SavedKeyRow = { source: string; label: string; detail: string | null; updatedAt: string | null };
+
+/** One combined, read-only list of every saved API key — values never leave the server. */
+export const listAllSavedKeys = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdminRole(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const rows: SavedKeyRow[] = [];
+    const [creds, custom, integrations, pool] = await Promise.all([
+      supabaseAdmin.from("admin_credentials").select("label, kind, base_url, created_at").order("created_at", { ascending: true }),
+      supabaseAdmin.from("custom_ai_providers").select("label, base_url, created_at").order("created_at", { ascending: true }),
+      supabaseAdmin.from("platform_integration_keys" as any).select("service, field, updated_at"),
+      supabaseAdmin.from("custom_ai_providers").select("label, base_url, created_at").ilike("base_url", "%api.cloudflare.com%"),
+    ]);
+    for (const r of (creds.data ?? []) as any[])
+      rows.push({ source: "Brain vault", label: r.label, detail: r.base_url ?? r.kind ?? null, updatedAt: r.created_at ?? null });
+    for (const r of (custom.data ?? []) as any[])
+      rows.push({ source: "AI provider", label: r.label, detail: r.base_url ?? null, updatedAt: r.created_at ?? null });
+    const seen = new Set<string>();
+    for (const r of (integrations.data ?? []) as any[]) {
+      if (seen.has(r.service)) continue;
+      seen.add(r.service);
+      const def = INTEGRATIONS.find((s) => s.id === r.service);
+      rows.push({ source: "Integration", label: def?.name ?? r.service, detail: null, updatedAt: r.updated_at ?? null });
+    }
+    for (const r of (pool.data ?? []) as any[])
+      rows.push({ source: "Cloudflare pool", label: r.label, detail: r.base_url ?? null, updatedAt: r.created_at ?? null });
+    return { keys: rows };
+  });
+
 export const testIntegrationKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => valuesSchema.parse(d))
