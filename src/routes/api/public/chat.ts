@@ -332,7 +332,6 @@ export const Route = createFileRoute("/api/public/chat")({
           if (!locked) return fail(424, JSON.stringify({ error: "model_unavailable", message: "The Cloudflare pool is off and no non-Cloudflare coding model is selected. Pick one in Admin → Models, or turn the pool on." }), "application/json");
           chain = [locked];
         }
-        void orderedChainHint;
 
 
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
