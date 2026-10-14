@@ -335,6 +335,14 @@ export const Route = createFileRoute("/api/public/chat")({
         }
 
 
+        // One pool run at a time, enforced by a unique index on running pool jobs.
+        if (editorAuto && jobId && !planMode) {
+          const { error: lockErr } = await supabaseAdmin.from("chat_jobs").update({ pool_run: true } as any).eq("id", jobId);
+          if (lockErr) {
+            await supabaseAdmin.from("chat_jobs").update({ status: "failed", error: "Another Cloudflare pool run is already going.", completed_at: new Date().toISOString() }).eq("id", jobId);
+            return fail(409, JSON.stringify({ error: "pool_busy", message: "Another Cloudflare pool run is already going. Wait for it to finish or press Stop." }), "application/json");
+          }
+        }
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
         const gateway = await readAiGatewaySetting();
         let visualBrief = "";
