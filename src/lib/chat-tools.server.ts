@@ -183,6 +183,24 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
           log("tool.write_file", { status: "error", message: failure.error, detail: { path: cleanPath } });
           return failure;
         }
+        // Only complete, valid files are saved. Up to 3 repairs, then pause with a note.
+        const { validateFile, repairDecision, MAX_REPAIRS } = await import("./cf-pool-policy");
+        const check = validateFile(cleanPath, content);
+        if (!check.ok) {
+          const n = (repairCounts.get(cleanPath) ?? 0) + 1;
+          repairCounts.set(cleanPath, n);
+          const pause = repairDecision(n) === "pause";
+          const failure = {
+            ok: false as const,
+            path: cleanPath,
+            error: pause
+              ? `Not saved: ${check.error}. ${MAX_REPAIRS} repair attempts used — stop editing this file, keep the saved version, call update_handoff with what is left, then end your turn.`
+              : `Not saved: ${check.error}. Repair attempt ${n} of ${MAX_REPAIRS}: write the COMPLETE file again.`,
+          };
+          log("tool.write_file", { status: "error", message: failure.error, detail: { path: cleanPath, repair: n } });
+          return failure;
+        }
+        repairCounts.delete(cleanPath);
         const result = await store.write(cleanPath, content);
         log("tool.write_file", {
           status: result.ok ? "ok" : "error",
