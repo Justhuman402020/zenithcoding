@@ -12,3 +12,5 @@ describe("server build restarts", () => {
   });
   it("never restarts finished builds", () => expect(shouldResume({ ...base, status: "completed" }, now)).toBe(false));
 });
+import { AUTO_RESUME_ENABLED } from "../src/routes/api/public/jobs.resume";
+describe("automatic restarts", () => it("stay off", () => expect(AUTO_RESUME_ENABLED).toBe(false)));
