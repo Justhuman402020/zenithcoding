@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { VaultKeyList } from "@/components/VaultKeyList";
 import { INTEGRATIONS, type IntegrationDef } from "@/lib/integrations-catalog";
 import {
+  listAllSavedKeys,
   listIntegrationKeys,
   removeIntegrationKey,
   saveIntegrationKey,
   testIntegrationKey,
+  type SavedKeyRow,
 } from "@/lib/admin-integrations.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/integrations")({
@@ -60,12 +62,43 @@ function IntegrationsPage() {
             ))}
           </div>
         )}
+        <AllSavedKeys />
         <div className="space-y-3 pt-4">
           <h2 className="font-display text-xl">Saved credentials from the Brain</h2>
           <p className="text-sm text-muted-foreground">Every key saved in the Brain vault. Add a note so the agent knows when to use it.</p>
           <VaultKeyList />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Read-only list of every saved key across the Brain vault, AI providers, integrations and the Cloudflare pool. */
+function AllSavedKeys() {
+  const load = useServerFn(listAllSavedKeys);
+  const { data, isLoading } = useQuery({ queryKey: ["admin-all-keys"], queryFn: () => load() });
+  const keys: SavedKeyRow[] = (data as any)?.keys ?? [];
+  return (
+    <div className="space-y-3 pt-4">
+      <h2 className="font-display text-xl">All saved keys ({isLoading ? "…" : keys.length})</h2>
+      <p className="text-sm text-muted-foreground">Every key saved anywhere in Code Haven. Values stay hidden.</p>
+      {isLoading ? (
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      ) : keys.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No keys saved yet.</p>
+      ) : (
+        <div className="rounded-xl border border-border divide-y divide-border">
+          {keys.map((k, i) => (
+            <div key={`${k.source}-${k.label}-${i}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{k.label}</div>
+                {k.detail ? <div className="text-xs text-muted-foreground truncate">{k.detail}</div> : null}
+              </div>
+              <span className="shrink-0 text-[11px] rounded-full bg-muted text-muted-foreground px-2 py-0.5">{k.source}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
