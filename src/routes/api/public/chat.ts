@@ -1,4 +1,5 @@
 import { shouldHandoff, emptyBaton, mergeBaton, batonNote } from "@/lib/neuron-budget";
+import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/lib/cf-pool-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
@@ -302,59 +303,46 @@ export const Route = createFileRoute("/api/public/chat")({
             }
           }
         }
-        // The editor's Auto-switch toggle: off means use only the chosen model.
-        // The editor toggle decides; the admin setting is only the default when no header is sent.
-        const autoHeader = request.headers.get("x-forge-auto");
-        const editorAuto = autoHeader == null ? autoFallback : autoHeader !== "off";
-        // Models that just stopped mid-work go to the back so a retry lands on a different one.
-        let orderedChain = fullChain;
-        if (editorAuto && fullChain.length > 1) {
-          try {
-            const since = new Date(Date.now() - 5 * 60_000).toISOString();
-            const { data: recentFails } = await supabaseAdmin
-              .from("ai_model_status")
-              .select("provider, model")
-              .in("last_status", ["unavailable", "rate_limited"])
-              .gte("updated_at", since);
-            const bad = new Set((recentFails ?? []).map((r: any) => `${r.provider}:${r.model}`));
-            orderedChain = [
-              ...fullChain.filter((r) => !bad.has(`${r.provider}:${r.model}`)),
-              ...fullChain.filter((r) => bad.has(`${r.provider}:${r.model}`)),
-            ];
-          } catch {
-            /* ordering is best effort */
-          }
-        }
+        // The admin-only Cloudflare pool toggle decides (default OFF).
+        // OFF: the selected non-Cloudflare model only, no Cloudflare calls, no silent fallback.
+        // ON: keys 1 → 60 in strict order, handing off at 9,000.
+        const { readPoolSettings } = await import("@/lib/cf-pool-settings.server");
+        const poolSettings = await readPoolSettings();
+        const editorAuto = poolSettings.poolEnabled;
         const poolPositions = new Map<string, number>();
-        let chain = editorAuto ? orderedChain : fullChain.slice(0, 1);
-        // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
-        // unless the user picked a model by hand in the editor. With Auto off the
-        // manually picked model is used exactly as chosen — never rerouted to Qwen.
+        let chain: ModelRef[] = [];
+        let runCap: number | null = null;
         if (editorAuto) {
           const { loadCloudflarePool, readCloudflareCodingModel } = await import("@/lib/cloudflare-pool.server");
-          const fullPool = await loadCloudflarePool();
+          const { orderPool, validateRunCap } = await import("@/lib/cf-pool-policy");
+          const fullPool = orderPool(await loadCloudflarePool());
           for (const k of fullPool) poolPositions.set(k.id, k.position);
-          const pool = fullPool.filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
-          if (pool.length) {
-            const codingModel = await readCloudflareCodingModel();
-            const poolRefs = pool.map((k) => ({ provider: k.id, model: codingModel }));
-            const poolIds = new Set(pool.map((k) => k.id));
-            const rest = chain.filter((r) => !poolIds.has(r.provider));
-            if (requestedRef && !poolIds.has(requestedRef.provider)) {
-              // Manual pick stays first; if it stops, the pool (key #1 → #21) takes over.
-              chain = [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)];
-            } else {
-              chain = [...poolRefs, ...rest];
-            }
-          }
+          const todayRemaining = fullPool.length ? fullPool.reduce((t, k) => t + Math.max(0, 9000 - k.used), 0) : null;
+          const capCheck = validateRunCap(poolSettings.capEnabled, poolSettings.cap, todayRemaining);
+          if (!capCheck.ok) return fail(422, JSON.stringify({ error: "run_cap_invalid", message: capCheck.error }), "application/json");
+          runCap = capCheck.cap;
+          // Retry / Approve-next-key buttons send the position to start from.
+          const from = Math.max(1, Number(request.headers.get("x-forge-pool-from")) || 1);
+          const codingModel = await readCloudflareCodingModel();
+          chain = fullPool.filter((k) => k.position >= from && providerKeys[k.id]).map((k) => ({ provider: k.id, model: codingModel }));
+          if (!chain.length) return fail(424, JSON.stringify({ error: "pool_empty", message: `No saved Cloudflare key from #${from} onward.` }), "application/json");
         } else {
-          // Auto off: lock to the selected model (editor pick, else the AI Models panel pick).
-          // No Qwen pool, no provider switching.
-          const locked = requestedRef ?? adminRef;
-          if (locked) chain = [locked];
+          const { withoutCloudflare } = await import("@/lib/cf-pool-routing");
+          const allowed = new Set(withoutCloudflare(providerRegistry).map((p) => p.id));
+          const locked = requestedRef && allowed.has(requestedRef.provider) ? requestedRef : adminRef && allowed.has(adminRef.provider) ? adminRef : fullChain.find((r) => allowed.has(r.provider)) ?? null;
+          if (!locked) return fail(424, JSON.stringify({ error: "model_unavailable", message: "The Cloudflare pool is off and no non-Cloudflare coding model is selected. Pick one in Admin → Models, or turn the pool on." }), "application/json");
+          chain = [locked];
         }
 
 
+        // One pool run at a time, enforced by a unique index on running pool jobs.
+        if (editorAuto && jobId && !planMode) {
+          const { error: lockErr } = await supabaseAdmin.from("chat_jobs").update({ pool_run: true } as any).eq("id", jobId);
+          if (lockErr) {
+            await supabaseAdmin.from("chat_jobs").update({ status: "failed", error: "Another Cloudflare pool run is already going.", completed_at: new Date().toISOString() }).eq("id", jobId);
+            return fail(409, JSON.stringify({ error: "pool_busy", message: "Another Cloudflare pool run is already going. Wait for it to finish or press Stop." }), "application/json");
+          }
+        }
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
         const gateway = await readAiGatewaySetting();
         let visualBrief = "";
@@ -679,6 +667,12 @@ export const Route = createFileRoute("/api/public/chat")({
           };
         const isClientDrop = (msg: string) => /client (closed|disconnect)|ResponseAborted|BodyStreamBuffer|socket hang up|premature close/i.test(msg);
         let clientDropRetries = 0;
+        let sameKeyRetries = 0;
+        let runUsed = 0;
+        let capHit = false;
+        let pausedAtKey: number | null = null;
+        let stopNote: string | null = null;
+        const ledger: any[] = [];
         const runJob = async (rawWriter?: { merge: (s: ReadableStream<any>) => void; write: (c: any) => void }) => {
           const writer = safeWriter(rawWriter);
           let finalReason: string | undefined;
@@ -703,6 +697,8 @@ export const Route = createFileRoute("/api/public/chat")({
             let baseNeurons = 0;
             const cfPool = isCf ? await import("@/lib/cloudflare-pool.server") : null;
             const stepCosts: number[] = [];
+            let streamedChars = 0;
+            let countSource: "cloudflare" | "estimate" | "uncertain" = "estimate";
             if (cfPool) {
               // Start from the real count Cloudflare shows; fall back to our own count.
               const { data: u } = await supabaseAdmin
@@ -741,7 +737,10 @@ export const Route = createFileRoute("/api/public/chat")({
               messages: [...baseMessages, ...carried],
               tools,
               abortSignal: attemptAbort.signal,
-              onChunk: () => kick(),
+              onChunk: ({ chunk }: any) => {
+                kick();
+                if (chunk?.type === "text-delta" || chunk?.type === "reasoning-delta") streamedChars += String(chunk.text ?? chunk.delta ?? "").length;
+              },
               onStepFinish: (step: any) => {
                 kick();
                 stepNo += 1;
@@ -757,11 +756,14 @@ export const Route = createFileRoute("/api/public/chat")({
                   recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
                 }
                 if (cfPool) {
-                  const cost = cfPool.estimateNeurons(step?.usage?.inputTokens, step?.usage?.outputTokens);
+                  const counted = countCallSync({ model: current.ref.model, inputTokens: step?.usage?.inputTokens, outputTokens: step?.usage?.outputTokens, chars: String(step?.text ?? "").length });
+                  if (counted.source === "uncertain") countSource = "uncertain";
+                  const cost = counted.neurons;
                   attemptNeurons += cost;
                   stepCosts.push(cost);
                   // Look ahead: stop now if the next step would cross 9,000 (1,000 reserve kept).
                   if (editorAuto && shouldHandoff(baseNeurons + attemptNeurons, stepCosts)) handoff = true;
+                  if (runCap != null && runUsed + attemptNeurons >= runCap) { handoff = true; capHit = true; }
                   const tot = Math.round(baseNeurons + attemptNeurons);
                   replyLog.push(`Key #${keyNo(current.ref.provider)} · step cost ${cost} · ${tot.toLocaleString()} / 9,000 · ${Math.max(0, 9000 - tot).toLocaleString()} left`);
                   writer?.write({
@@ -777,6 +779,14 @@ export const Route = createFileRoute("/api/public/chat")({
                 createPrepareStep(needsFileChange, trace)(opts);
                 if (!cfPool) return undefined;
                 const total = Math.round(baseNeurons + attemptNeurons);
+                // Preflight guard: never send a call whose worst case could pass 9,500.
+                const lastCost = stepCosts.length ? Math.max(stepCosts[stepCosts.length - 1]!, stepCosts.reduce((a, b) => a + b, 0) / stepCosts.length) * 1.25 : 500;
+                if (editorAuto && (total >= 9000 || !preflightAllowed(total, lastCost))) {
+                  handoff = true;
+                  trace.log("pool.preflight_block", { detail: { total, projected: total + lastCost, max: PREFLIGHT_MAX } });
+                  attemptAbort.abort();
+                  return undefined;
+                }
                 return {
                   system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.${baton.items.length || baton.keyLog.length ? `\n\n${batonNote(baton, `Key #${keyNo(current.ref.provider)}`)}` : ""}`,
                 };
@@ -817,10 +827,17 @@ export const Route = createFileRoute("/api/public/chat")({
             await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });
             if (watchdog) clearTimeout(watchdog);
 
-            // Record the sum of every step's cost (not just the last one).
+            // Record the sum of every step's cost. Failed calls that streamed text but
+            // reported no tokens are counted from characters, labeled uncertain.
+            if (cfPool && attemptNeurons === 0 && streamedChars > 0) {
+              const { countCall } = await import("@/lib/cf-pool-policy");
+              const c = countCall({ model: current.ref.model, chars: streamedChars });
+              attemptNeurons = c.neurons;
+              countSource = "uncertain";
+            }
             if (cfPool && attemptNeurons > 0) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
+            runUsed += attemptNeurons;
             if (handoff && cfPool) {
-              await cfPool.markExhausted(current.ref.provider);
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
               const label = `Key #${keyNo(current.ref.provider)}`;
               baton = mergeBaton(baton, {
@@ -828,7 +845,12 @@ export const Route = createFileRoute("/api/public/chat")({
                 next: `continue after: ${progressText}`,
                 keyLog: [{ key: label, neurons: Math.round(baseNeurons + attemptNeurons), items: `${attemptStepCount} step(s)` }],
               });
-              carried.push({ role: "user", content: batonNote(baton, "the next key") });
+              const { handoffNote } = await import("@/lib/cf-pool-policy");
+              const nextPos = (Number(keyNo(current.ref.provider)) || 0) + 1;
+              carried.push({
+                role: "user",
+                content: `${batonNote(baton, `Key #${nextPos}`)}\n\n${handoffNote({ completed: [...progressModel.files], remaining: "the rest of the original request", lastError, next: `continue after: ${progressText}`, position: nextPos })}`,
+              });
               writer?.write({ type: "message-metadata", messageMetadata: { handoff: { from: label, neurons: Math.round(baseNeurons + attemptNeurons), files: progressModel.files.size } } });
               trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
               failure = null;
@@ -899,15 +921,42 @@ export const Route = createFileRoute("/api/public/chat")({
 
             // Keep the finished steps so the next key continues where this stopped.
             if (attemptSteps.length) carried = [...carried, ...attemptSteps];
-            if (!handoff) await recordModelStatus(current.ref, isCf || /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
-            if (!handoff && isCf && /429|rate.?limit|quota|neuron|too many requests|daily|exhaust/i.test(lastError)) {
-              const { markExhausted } = await import("@/lib/cloudflare-pool.server");
-              await markExhausted(current.ref.provider);
-            }
+            if (!handoff) await recordModelStatus(current.ref, /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
             trace.log("attempt.failover", { status: "error", message: lastError, detail: { attempt, provider: current.ref.provider } });
 
             if (!(editorAuto)) break;
-            const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
+            const P = await import("@/lib/cf-pool-policy");
+            const pos = Number(keyNo(current.ref.provider)) || 0;
+            if (!handoff) {
+              // Only a confirmed daily-allocation error counts as quota; a bare 429 never marks a key used up.
+              const kind = P.classifyError(/\b429\b/.test(lastError) ? 429 : null, lastError);
+              const decision = P.onKeyError(kind, sameKeyRetries);
+              if (decision.action === "retry") {
+                sameKeyRetries += 1;
+                ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: `rate limited — retry ${decision.attempt} of ${P.SAME_KEY_RETRIES} in 60s`, successor: pos, retries: sameKeyRetries }));
+                setProgress(`Key #${pos} rate limited · retry ${decision.attempt}/${P.SAME_KEY_RETRIES} in 60s`);
+                await new Promise((r) => setTimeout(r, decision.delayMs));
+                lastError = null;
+                attempt -= 1;
+                continue;
+              }
+              if (decision.action === "pause") {
+                pausedAtKey = pos;
+                ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: `paused: ${lastError.slice(0, 200)}`, successor: null, retries: sameKeyRetries }));
+                break;
+              }
+            }
+            // Handoff or confirmed quota → next key in strict order. Re-check the toggle and cap.
+            const live = await readPoolSettings();
+            const stop = P.runStopReason({ runUsed, cap: runCap, poolEnabled: live.poolEnabled, userStopped, taskDone: false, atLastKey: !P.nextKey(chain.map((r) => ({ position: Number(keyNo(r.provider)) || 0 })), pos) });
+            ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: handoff ? (capHit ? "run cap reached" : "handoff at 9,000") : `quota: ${lastError.slice(0, 160)}`, successor: stop ? null : pos + 1, retries: sameKeyRetries }));
+            sameKeyRetries = 0;
+            if (stop) {
+              stopNote = stop;
+              if (stop === "last_key") outOfKeys = true;
+              break;
+            }
+            const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`) && (Number(keyNo(r.provider)) || 0) > pos);
             if (!remaining.length) {
               outOfKeys = true;
               break;
@@ -935,16 +984,28 @@ export const Route = createFileRoute("/api/public/chat")({
           const truncated = finalReason === "length";
           const fileCount = progressModel.files.size;
           const counts = `${stepNo} step${stepNo === 1 ? "" : "s"}, ${fileCount} file${fileCount === 1 ? "" : "s"} changed`;
-          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" = userStopped
+          const isPaused = pausedAtKey != null || stopNote === "cap" || stopNote === "toggle_off";
+          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" | "paused" = userStopped
             ? "stopped"
             : succeeded && !stoppedEarly
               ? "finished"
-              : outOfKeys
-                ? "out_of_keys"
-                : succeeded && stoppedEarly
-                  ? "stopped_early"
-                  : "failed";
-          const jobStats = { outcome, steps_done: stepNo, files_changed: fileCount, rounds, trace_id: trace.traceId };
+              : isPaused
+                ? "paused"
+                : outOfKeys
+                  ? "out_of_keys"
+                  : succeeded && stoppedEarly
+                    ? "stopped_early"
+                    : "failed";
+          if (outcome === "paused") {
+            lastError =
+              stopNote === "cap" ? `Run cap of ${runCap?.toLocaleString()} Neurons reached (${Math.round(runUsed).toLocaleString()} used).`
+              : stopNote === "toggle_off" ? "The Cloudflare pool was turned off."
+              : `Key #${pausedAtKey} paused: ${lastError ?? "error"}. Tap Retry or Approve next key.`;
+          }
+          const jobStats = {
+            outcome, steps_done: stepNo, files_changed: fileCount, rounds, trace_id: trace.traceId,
+            pool_run: false, pool_ledger: ledger.length ? ledger : null, paused_at_key: pausedAtKey,
+          } as any;
           if (outcome === "finished") {
             const finalText =
               (replyTexts.join("\n\n").trim() || (truncated ? "" : `Finished: ${counts}.`)) +

@@ -172,24 +172,33 @@ export type Database = {
       }
       ai_pool_settings: {
         Row: {
+          cloudflare_pool_enabled: boolean
           coding_model: string
           id: string
+          run_cap: number
+          run_cap_enabled: boolean
           updated_at: string
           updated_by: string | null
           vision_model: string | null
           vision_provider: string | null
         }
         Insert: {
+          cloudflare_pool_enabled?: boolean
           coding_model?: string
           id?: string
+          run_cap?: number
+          run_cap_enabled?: boolean
           updated_at?: string
           updated_by?: string | null
           vision_model?: string | null
           vision_provider?: string | null
         }
         Update: {
+          cloudflare_pool_enabled?: boolean
           coding_model?: string
           id?: string
+          run_cap?: number
+          run_cap_enabled?: boolean
           updated_at?: string
           updated_by?: string | null
           vision_model?: string | null
@@ -208,6 +217,9 @@ export type Database = {
           handoff: Json | null
           id: string
           outcome: string | null
+          paused_at_key: number | null
+          pool_ledger: Json | null
+          pool_run: boolean
           progress: string | null
           project_id: string
           prompt: string
@@ -231,6 +243,9 @@ export type Database = {
           handoff?: Json | null
           id?: string
           outcome?: string | null
+          paused_at_key?: number | null
+          pool_ledger?: Json | null
+          pool_run?: boolean
           progress?: string | null
           project_id: string
           prompt?: string
@@ -254,6 +269,9 @@ export type Database = {
           handoff?: Json | null
           id?: string
           outcome?: string | null
+          paused_at_key?: number | null
+          pool_ledger?: Json | null
+          pool_run?: boolean
           progress?: string | null
           project_id?: string
           prompt?: string

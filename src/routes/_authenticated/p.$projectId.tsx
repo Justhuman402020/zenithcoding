@@ -149,7 +149,42 @@ type LatestJob = {
   files_changed: number;
   rounds: number;
   auto_resumes?: number;
+  pool_ledger?: any[] | null;
+  paused_at_key?: number | null;
 };
+
+function PoolLedger({ rows }: { rows: any[] }) {
+  if (!rows.length) return null;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px] tabular-nums">
+        <thead className="text-muted-foreground">
+          <tr className="text-left">
+            {["Key", "Files", "This turn", "At handoff", "Left", "Source", "As of (Lagos)", "Reason", "Next", "Retries"].map((h) => (
+              <th key={h} className="pr-2 font-normal">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t align-top">
+              <td className="pr-2">#{r.key}</td>
+              <td className="pr-2" title={(r.filesDone ?? []).join(", ")}>{(r.filesDone ?? []).length}</td>
+              <td className="pr-2">{Number(r.neuronsThisTurn ?? 0).toLocaleString()}</td>
+              <td className="pr-2">{Number(r.totalAtHandoff ?? 0).toLocaleString()}</td>
+              <td className="pr-2">{Number(r.remaining ?? 0).toLocaleString()}</td>
+              <td className="pr-2">{r.source}</td>
+              <td className="pr-2 whitespace-nowrap">{r.lagos}</td>
+              <td className="pr-2">{r.reason}</td>
+              <td className="pr-2">{r.successor ? `#${r.successor}` : "—"}</td>
+              <td>{r.retries}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
@@ -399,6 +434,7 @@ function ProjectEditor() {
   const queueLoadedRef = useRef(false);
   const drainingRef = useRef(false);
   const autoContinueRef = useRef(0);
+  const poolFromRef = useRef<number | null>(null);
   const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
@@ -839,6 +875,10 @@ function ProjectEditor() {
           if (visionRef) headers["x-forge-vision-model"] = visionRef;
           headers["x-forge-mode"] = modeRef.current;
           headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
+          if (poolFromRef.current) {
+            headers["x-forge-pool-from"] = String(poolFromRef.current);
+            poolFromRef.current = null;
+          }
           if (window.localStorage.getItem(CLONE_MODE_STORAGE_KEY) === "1") headers["x-forge-clone"] = "1";
           if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
@@ -1106,7 +1146,7 @@ function ProjectEditor() {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes,pool_ledger,paused_at_key")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -2243,6 +2283,32 @@ function ProjectEditor() {
                 const interrupted = active && !isActiveChatJob(latestJob);
                 if (active && !interrupted) return null;
                 const kind = interrupted ? "interrupted" : (latestJob.outcome ?? (latestJob.status === "completed" ? "finished" : null));
+                if (kind === "paused") {
+                  const at = latestJob.paused_at_key ?? 1;
+                  const resume = async (from: number) => {
+                    setDismissedJobId(latestJob.id);
+                    setMode("build");
+                    modeRef.current = "build";
+                    poolFromRef.current = from;
+                    requestKeyRef.current = crypto.randomUUID();
+                    await sendMessage({ text: "Continue exactly where you stopped. Read the handoff note, do not repeat finished work, and finish the remaining steps." });
+                  };
+                  return (
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="block text-[10px] uppercase text-muted-foreground">Last build · paused</span>
+                          <span className="block text-xs text-muted-foreground">{latestJob.error}</span>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button type="button" size="sm" variant="outline" onClick={() => resume(at)}>Retry key #{at}</Button>
+                          <Button type="button" size="sm" onClick={() => resume(at + 1)}>Approve key #{at + 1}</Button>
+                        </div>
+                      </div>
+                      <PoolLedger rows={latestJob.pool_ledger ?? []} />
+                    </div>
+                  );
+                }
                 if (!kind || kind === "stopped" || kind === "failed") return null;
                 const restarts = latestJob.auto_resumes ?? 0;
                 const counts = `${latestJob.steps_done} step${latestJob.steps_done === 1 ? "" : "s"}, ${latestJob.files_changed} file${latestJob.files_changed === 1 ? "" : "s"} changed${restarts ? ` · restarted ${restarts} time${restarts === 1 ? "" : "s"} by the server` : ""}`;

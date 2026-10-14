@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CloudflarePoolPanel, NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { CloudflareModelSettings } from "@/components/CloudflareModelSettings";
+import { CloudflarePoolToggle } from "@/components/CloudflarePoolToggle";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -264,19 +265,7 @@ function AdminModelsPage() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border p-4">
-        <div>
-          <div className="font-medium text-sm">Automatic switching</div>
-          <div className="text-xs text-muted-foreground">Keeps jobs running when a model hits its free limit.</div>
-        </div>
-        <Button
-          variant={data?.autoFallback ? "default" : "outline"}
-          size="sm"
-          onClick={() => onToggleFallback(!data?.autoFallback)}
-        >
-          {data?.autoFallback ? "On" : "Off"}
-        </Button>
-      </div>
+      <CloudflarePoolToggle />
 
       <div className="rounded-xl border p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">

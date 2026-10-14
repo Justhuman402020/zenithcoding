@@ -50,6 +50,13 @@
       "when": 1791768581417,
       "tag": "0006_chat_jobs_handoff",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792002299892,
+      "tag": "0007_cloudflare_pool_toggle_cap_ledger",
+      "breakpoints": true
     }
   ]
 }

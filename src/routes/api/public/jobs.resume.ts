@@ -4,6 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 // after the user's device disconnected, continuing from where they stopped.
 export const MAX_AUTO_RESUMES = 6;
 export const STALE_AFTER_MS = 90_000;
+/** Automatic restarts are off by admin request; paused runs wait for Retry / Approve. */
+export const AUTO_RESUME_ENABLED = false;
 
 export function shouldResume(job: { status: string; auto_resumes: number; updated_at: string; resume_payload: unknown }, now = Date.now()) {
   if (job.status !== "queued" && job.status !== "running") return false;
@@ -19,6 +21,7 @@ export const Route = createFileRoute("/api/public/jobs/resume")({
         const token = request.headers.get("x-resume-token");
         const { verifyResumeToken } = await import("@/lib/job-resume.server");
         if (!(await verifyResumeToken(token))) return new Response("Unauthorized", { status: 401 });
+        if (!AUTO_RESUME_ENABLED) return Response.json({ ok: true, resumed: 0, disabled: true });
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const cutoff = new Date(Date.now() - STALE_AFTER_MS).toISOString();
         const { data: candidates } = await (supabaseAdmin as any)
