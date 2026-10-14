@@ -120,16 +120,17 @@ export const listAllSavedKeys = createServerFn({ method: "GET" })
     await assertAdminRole(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const rows: SavedKeyRow[] = [];
-    const [creds, custom, integrations, pool] = await Promise.all([
+    const [creds, custom, integrations] = await Promise.all([
       supabaseAdmin.from("admin_credentials").select("label, kind, base_url, created_at").order("created_at", { ascending: true }),
       supabaseAdmin.from("custom_ai_providers").select("label, base_url, created_at").order("created_at", { ascending: true }),
       supabaseAdmin.from("platform_integration_keys" as any).select("service, field, updated_at"),
-      supabaseAdmin.from("custom_ai_providers").select("label, base_url, created_at").ilike("base_url", "%api.cloudflare.com%"),
     ]);
     for (const r of (creds.data ?? []) as any[])
       rows.push({ source: "Brain vault", label: r.label, detail: r.base_url ?? r.kind ?? null, updatedAt: r.created_at ?? null });
-    for (const r of (custom.data ?? []) as any[])
-      rows.push({ source: "AI provider", label: r.label, detail: r.base_url ?? null, updatedAt: r.created_at ?? null });
+    for (const r of (custom.data ?? []) as any[]) {
+      const isCf = /api\.cloudflare\.com/i.test(r.base_url ?? "");
+      rows.push({ source: isCf ? "Cloudflare pool" : "AI provider", label: r.label, detail: r.base_url ?? null, updatedAt: r.created_at ?? null });
+    }
     const seen = new Set<string>();
     for (const r of (integrations.data ?? []) as any[]) {
       if (seen.has(r.service)) continue;
