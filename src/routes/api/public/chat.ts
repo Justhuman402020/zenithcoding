@@ -302,57 +302,37 @@ export const Route = createFileRoute("/api/public/chat")({
             }
           }
         }
-        // The editor's Auto-switch toggle: off means use only the chosen model.
-        // The editor toggle decides; the admin setting is only the default when no header is sent.
-        const autoHeader = request.headers.get("x-forge-auto");
-        const editorAuto = autoHeader == null ? autoFallback : autoHeader !== "off";
-        // Models that just stopped mid-work go to the back so a retry lands on a different one.
-        let orderedChain = fullChain;
-        if (editorAuto && fullChain.length > 1) {
-          try {
-            const since = new Date(Date.now() - 5 * 60_000).toISOString();
-            const { data: recentFails } = await supabaseAdmin
-              .from("ai_model_status")
-              .select("provider, model")
-              .in("last_status", ["unavailable", "rate_limited"])
-              .gte("updated_at", since);
-            const bad = new Set((recentFails ?? []).map((r: any) => `${r.provider}:${r.model}`));
-            orderedChain = [
-              ...fullChain.filter((r) => !bad.has(`${r.provider}:${r.model}`)),
-              ...fullChain.filter((r) => bad.has(`${r.provider}:${r.model}`)),
-            ];
-          } catch {
-            /* ordering is best effort */
-          }
-        }
+        // The admin-only Cloudflare pool toggle decides (default OFF).
+        // OFF: the selected non-Cloudflare model only, no Cloudflare calls, no silent fallback.
+        // ON: keys 1 → 60 in strict order, handing off at 9,000.
+        const { readPoolSettings } = await import("@/lib/cf-pool-settings.server");
+        const poolSettings = await readPoolSettings();
+        const editorAuto = poolSettings.poolEnabled;
         const poolPositions = new Map<string, number>();
-        let chain = editorAuto ? orderedChain : fullChain.slice(0, 1);
-        // Cloudflare key pool leads automatic coding (Qwen), key #1 → #2 → … #21,
-        // unless the user picked a model by hand in the editor. With Auto off the
-        // manually picked model is used exactly as chosen — never rerouted to Qwen.
+        let chain: ModelRef[] = [];
+        let runCap: number | null = null;
         if (editorAuto) {
           const { loadCloudflarePool, readCloudflareCodingModel } = await import("@/lib/cloudflare-pool.server");
-          const fullPool = await loadCloudflarePool();
+          const { orderPool, validateRunCap } = await import("@/lib/cf-pool-policy");
+          const fullPool = orderPool(await loadCloudflarePool());
           for (const k of fullPool) poolPositions.set(k.id, k.position);
-          const pool = fullPool.filter((k) => k.status !== "exhausted" && providerKeys[k.id]);
-          if (pool.length) {
-            const codingModel = await readCloudflareCodingModel();
-            const poolRefs = pool.map((k) => ({ provider: k.id, model: codingModel }));
-            const poolIds = new Set(pool.map((k) => k.id));
-            const rest = chain.filter((r) => !poolIds.has(r.provider));
-            if (requestedRef && !poolIds.has(requestedRef.provider)) {
-              // Manual pick stays first; if it stops, the pool (key #1 → #21) takes over.
-              chain = [rest[0] ?? requestedRef, ...poolRefs, ...rest.slice(1)];
-            } else {
-              chain = [...poolRefs, ...rest];
-            }
-          }
+          const todayRemaining = fullPool.length ? fullPool.reduce((t, k) => t + Math.max(0, 9000 - k.used), 0) : null;
+          const capCheck = validateRunCap(poolSettings.capEnabled, poolSettings.cap, todayRemaining);
+          if (!capCheck.ok) return fail(422, JSON.stringify({ error: "run_cap_invalid", message: capCheck.error }), "application/json");
+          runCap = capCheck.cap;
+          // Retry / Approve-next-key buttons send the position to start from.
+          const from = Math.max(1, Number(request.headers.get("x-forge-pool-from")) || 1);
+          const codingModel = await readCloudflareCodingModel();
+          chain = fullPool.filter((k) => k.position >= from && providerKeys[k.id]).map((k) => ({ provider: k.id, model: codingModel }));
+          if (!chain.length) return fail(424, JSON.stringify({ error: "pool_empty", message: `No saved Cloudflare key from #${from} onward.` }), "application/json");
         } else {
-          // Auto off: lock to the selected model (editor pick, else the AI Models panel pick).
-          // No Qwen pool, no provider switching.
-          const locked = requestedRef ?? adminRef;
-          if (locked) chain = [locked];
+          const { withoutCloudflare } = await import("@/lib/cf-pool-routing");
+          const allowed = new Set(withoutCloudflare(providerRegistry).map((p) => p.id));
+          const locked = requestedRef && allowed.has(requestedRef.provider) ? requestedRef : adminRef && allowed.has(adminRef.provider) ? adminRef : fullChain.find((r) => allowed.has(r.provider)) ?? null;
+          if (!locked) return fail(424, JSON.stringify({ error: "model_unavailable", message: "The Cloudflare pool is off and no non-Cloudflare coding model is selected. Pick one in Admin → Models, or turn the pool on." }), "application/json");
+          chain = [locked];
         }
+        void orderedChainHint;
 
 
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
