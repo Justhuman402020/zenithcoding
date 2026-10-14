@@ -658,6 +658,12 @@ export const Route = createFileRoute("/api/public/chat")({
           };
         const isClientDrop = (msg: string) => /client (closed|disconnect)|ResponseAborted|BodyStreamBuffer|socket hang up|premature close/i.test(msg);
         let clientDropRetries = 0;
+        let sameKeyRetries = 0;
+        let runUsed = 0;
+        let capHit = false;
+        let pausedAtKey: number | null = null;
+        let stopNote: string | null = null;
+        const ledger: any[] = [];
         const runJob = async (rawWriter?: { merge: (s: ReadableStream<any>) => void; write: (c: any) => void }) => {
           const writer = safeWriter(rawWriter);
           let finalReason: string | undefined;
@@ -682,6 +688,8 @@ export const Route = createFileRoute("/api/public/chat")({
             let baseNeurons = 0;
             const cfPool = isCf ? await import("@/lib/cloudflare-pool.server") : null;
             const stepCosts: number[] = [];
+            let streamedChars = 0;
+            let countSource: "cloudflare" | "estimate" | "uncertain" = "estimate";
             if (cfPool) {
               // Start from the real count Cloudflare shows; fall back to our own count.
               const { data: u } = await supabaseAdmin
@@ -720,7 +728,10 @@ export const Route = createFileRoute("/api/public/chat")({
               messages: [...baseMessages, ...carried],
               tools,
               abortSignal: attemptAbort.signal,
-              onChunk: () => kick(),
+              onChunk: ({ chunk }: any) => {
+                kick();
+                if (chunk?.type === "text-delta" || chunk?.type === "reasoning-delta") streamedChars += String(chunk.text ?? chunk.delta ?? "").length;
+              },
               onStepFinish: (step: any) => {
                 kick();
                 stepNo += 1;
@@ -736,11 +747,14 @@ export const Route = createFileRoute("/api/public/chat")({
                   recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
                 }
                 if (cfPool) {
-                  const cost = cfPool.estimateNeurons(step?.usage?.inputTokens, step?.usage?.outputTokens);
+                  const counted = countCallSync({ model: current.ref.model, inputTokens: step?.usage?.inputTokens, outputTokens: step?.usage?.outputTokens, chars: String(step?.text ?? "").length });
+                  if (counted.source === "uncertain") countSource = "uncertain";
+                  const cost = counted.neurons;
                   attemptNeurons += cost;
                   stepCosts.push(cost);
                   // Look ahead: stop now if the next step would cross 9,000 (1,000 reserve kept).
                   if (editorAuto && shouldHandoff(baseNeurons + attemptNeurons, stepCosts)) handoff = true;
+                  if (runCap != null && runUsed + attemptNeurons >= runCap) { handoff = true; capHit = true; }
                   const tot = Math.round(baseNeurons + attemptNeurons);
                   replyLog.push(`Key #${keyNo(current.ref.provider)} · step cost ${cost} · ${tot.toLocaleString()} / 9,000 · ${Math.max(0, 9000 - tot).toLocaleString()} left`);
                   writer?.write({
@@ -796,10 +810,17 @@ export const Route = createFileRoute("/api/public/chat")({
             await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });
             if (watchdog) clearTimeout(watchdog);
 
-            // Record the sum of every step's cost (not just the last one).
+            // Record the sum of every step's cost. Failed calls that streamed text but
+            // reported no tokens are counted from characters, labeled uncertain.
+            if (cfPool && attemptNeurons === 0 && streamedChars > 0) {
+              const { countCall } = await import("@/lib/cf-pool-policy");
+              const c = countCall({ model: current.ref.model, chars: streamedChars });
+              attemptNeurons = c.neurons;
+              countSource = "uncertain";
+            }
             if (cfPool && attemptNeurons > 0) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
+            runUsed += attemptNeurons;
             if (handoff && cfPool) {
-              await cfPool.markExhausted(current.ref.provider);
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
               const label = `Key #${keyNo(current.ref.provider)}`;
               baton = mergeBaton(baton, {
@@ -807,7 +828,12 @@ export const Route = createFileRoute("/api/public/chat")({
                 next: `continue after: ${progressText}`,
                 keyLog: [{ key: label, neurons: Math.round(baseNeurons + attemptNeurons), items: `${attemptStepCount} step(s)` }],
               });
-              carried.push({ role: "user", content: batonNote(baton, "the next key") });
+              const { handoffNote } = await import("@/lib/cf-pool-policy");
+              const nextPos = (Number(keyNo(current.ref.provider)) || 0) + 1;
+              carried.push({
+                role: "user",
+                content: `${batonNote(baton, `Key #${nextPos}`)}\n\n${handoffNote({ completed: [...progressModel.files], remaining: "the rest of the original request", lastError, next: `continue after: ${progressText}`, position: nextPos })}`,
+              });
               writer?.write({ type: "message-metadata", messageMetadata: { handoff: { from: label, neurons: Math.round(baseNeurons + attemptNeurons), files: progressModel.files.size } } });
               trace.log("attempt.handoff", { detail: { attempt, provider: current.ref.provider, neurons: baseNeurons + attemptNeurons } });
               failure = null;
@@ -878,15 +904,42 @@ export const Route = createFileRoute("/api/public/chat")({
 
             // Keep the finished steps so the next key continues where this stopped.
             if (attemptSteps.length) carried = [...carried, ...attemptSteps];
-            if (!handoff) await recordModelStatus(current.ref, isCf || /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
-            if (!handoff && isCf && /429|rate.?limit|quota|neuron|too many requests|daily|exhaust/i.test(lastError)) {
-              const { markExhausted } = await import("@/lib/cloudflare-pool.server");
-              await markExhausted(current.ref.provider);
-            }
+            if (!handoff) await recordModelStatus(current.ref, /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
             trace.log("attempt.failover", { status: "error", message: lastError, detail: { attempt, provider: current.ref.provider } });
 
             if (!(editorAuto)) break;
-            const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`));
+            const P = await import("@/lib/cf-pool-policy");
+            const pos = Number(keyNo(current.ref.provider)) || 0;
+            if (!handoff) {
+              // Only a confirmed daily-allocation error counts as quota; a bare 429 never marks a key used up.
+              const kind = P.classifyError(/\b429\b/.test(lastError) ? 429 : null, lastError);
+              const decision = P.onKeyError(kind, sameKeyRetries);
+              if (decision.action === "retry") {
+                sameKeyRetries += 1;
+                ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: `rate limited — retry ${decision.attempt} of ${P.SAME_KEY_RETRIES} in 60s`, successor: pos, retries: sameKeyRetries }));
+                setProgress(`Key #${pos} rate limited · retry ${decision.attempt}/${P.SAME_KEY_RETRIES} in 60s`);
+                await new Promise((r) => setTimeout(r, decision.delayMs));
+                lastError = null;
+                attempt -= 1;
+                continue;
+              }
+              if (decision.action === "pause") {
+                pausedAtKey = pos;
+                ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: `paused: ${lastError.slice(0, 200)}`, successor: null, retries: sameKeyRetries }));
+                break;
+              }
+            }
+            // Handoff or confirmed quota → next key in strict order. Re-check the toggle and cap.
+            const live = await readPoolSettings();
+            const stop = P.runStopReason({ runUsed, cap: runCap, poolEnabled: live.poolEnabled, userStopped, taskDone: false, atLastKey: !P.nextKey(chain.map((r) => ({ position: Number(keyNo(r.provider)) || 0 })), pos) });
+            ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: handoff ? (capHit ? "run cap reached" : "handoff at 9,000") : `quota: ${lastError.slice(0, 160)}`, successor: stop ? null : pos + 1, retries: sameKeyRetries }));
+            sameKeyRetries = 0;
+            if (stop) {
+              stopNote = stop;
+              if (stop === "last_key") outOfKeys = true;
+              break;
+            }
+            const remaining = chain.filter((r) => !tried.has(`${r.provider}:${r.model}`) && (Number(keyNo(r.provider)) || 0) > pos);
             if (!remaining.length) {
               outOfKeys = true;
               break;
