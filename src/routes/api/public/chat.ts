@@ -968,16 +968,28 @@ export const Route = createFileRoute("/api/public/chat")({
           const truncated = finalReason === "length";
           const fileCount = progressModel.files.size;
           const counts = `${stepNo} step${stepNo === 1 ? "" : "s"}, ${fileCount} file${fileCount === 1 ? "" : "s"} changed`;
-          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" = userStopped
+          const isPaused = pausedAtKey != null || stopNote === "cap" || stopNote === "toggle_off";
+          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" | "paused" = userStopped
             ? "stopped"
             : succeeded && !stoppedEarly
               ? "finished"
-              : outOfKeys
-                ? "out_of_keys"
-                : succeeded && stoppedEarly
-                  ? "stopped_early"
-                  : "failed";
-          const jobStats = { outcome, steps_done: stepNo, files_changed: fileCount, rounds, trace_id: trace.traceId };
+              : isPaused
+                ? "paused"
+                : outOfKeys
+                  ? "out_of_keys"
+                  : succeeded && stoppedEarly
+                    ? "stopped_early"
+                    : "failed";
+          if (outcome === "paused") {
+            lastError =
+              stopNote === "cap" ? `Run cap of ${runCap?.toLocaleString()} Neurons reached (${Math.round(runUsed).toLocaleString()} used).`
+              : stopNote === "toggle_off" ? "The Cloudflare pool was turned off."
+              : `Key #${pausedAtKey} paused: ${lastError ?? "error"}. Tap Retry or Approve next key.`;
+          }
+          const jobStats = {
+            outcome, steps_done: stepNo, files_changed: fileCount, rounds, trace_id: trace.traceId,
+            pool_run: false, pool_ledger: ledger.length ? ledger : null, paused_at_key: pausedAtKey,
+          } as any;
           if (outcome === "finished") {
             const finalText =
               (replyTexts.join("\n\n").trim() || (truncated ? "" : `Finished: ${counts}.`)) +
