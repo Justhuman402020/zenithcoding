@@ -116,6 +116,7 @@ export function createMemoryFileStore(initial: Record<string, string> = {}): Pro
 
 export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLogger) {
   const log = (phase: string, options?: Parameters<TraceLogger["log"]>[1]) => trace?.log(phase, options);
+  const repairCounts = new Map<string, number>();
 
   return {
     list_files: tool({
