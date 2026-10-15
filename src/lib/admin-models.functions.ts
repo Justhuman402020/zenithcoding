@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertModelsAdmin, isModelsAdmin } from "./admin-auth.server";
 import { PROVIDERS } from "./ai-providers";
+import { classifyAccess, newCatalogIds, summarizeByModel, isSelectable } from "./model-access";
+const isCloudflareBaseUrl = (url: string) => /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(url);
 
 export type ModelBoardRow = {
   provider: string;
@@ -27,6 +29,8 @@ export type ModelBoardRow = {
   remainingRequests: number | null;
   limitRequests: number | null;
   resetAt: string | null;
+  access: "free" | "paid" | "unavailable";
+  isNew: boolean;
 };
 
 export const getModelAccess = createServerFn({ method: "GET" })
@@ -105,7 +109,11 @@ export const getModelBoard = createServerFn({ method: "GET" })
         const remaining =
           (status?.remaining_requests as number | null) ??
           (model.freeDaily != null ? Math.max(model.freeDaily - used, 0) : null);
+        const lastStatus = (status?.last_status as string | null) ?? null;
+        const lastError = (status?.last_error as string | null) ?? null;
         rows.push({
+          access: classifyAccess({ model: model.id, cloudflare: isCloudflareBaseUrl(provider.baseURL), lastStatus, lastError }),
+          isNew: false,
           provider: provider.id,
           providerLabel: provider.label,
           model: model.id,
@@ -146,7 +154,21 @@ export const getModelBoard = createServerFn({ method: "GET" })
     order(usable).forEach((row, i) => (row.codingRank = i + 1));
     order(usable.filter((r) => r.vision)).forEach((row, i) => (row.imageRank = i + 1));
 
-    return { rows, providers, autoFallback, active };
+    // "New" = appeared in Cloudflare's catalog since the last check, until dismissed.
+    const cfIds = rows.filter((r) => isCloudflareBaseUrl(registry.find((p) => p.id === r.provider)?.baseURL ?? "")).map((r) => r.model);
+    const { data: seenRows } = await supabaseAdmin.from("model_catalog_seen" as any).select("model_id, dismissed");
+    const seen = ((seenRows ?? []) as any[]);
+    const { toInsert, markNew } = newCatalogIds(cfIds, seen.map((r) => r.model_id));
+    if (toInsert.length) {
+      await supabaseAdmin.from("model_catalog_seen" as any).upsert(toInsert.map((id) => ({ model_id: id, dismissed: !markNew })) as any);
+    }
+    const fresh = new Set([...seen.filter((r) => !r.dismissed).map((r) => r.model_id), ...(markNew ? toInsert : [])]);
+    for (const r of rows) r.isNew = fresh.has(r.model) && cfIds.includes(r.model);
+    const summaries = summarizeByModel(
+      rows.filter((r) => r.keyConfigured).map((r) => ({ model: r.model, keyId: r.provider, keyLabel: r.providerLabel, access: r.access, error: r.lastError })),
+    );
+
+    return { rows, providers, autoFallback, active, summaries };
   });
 
 
@@ -162,6 +184,15 @@ export const setActiveModel = createServerFn({ method: "POST" })
     if (!PROVIDERS.some((p) => p.id === data.provider) && !data.provider.startsWith("custom-")) {
       throw new Error("Unknown provider");
     }
+    {
+      const { supabaseAdmin: sa } = await import("@/integrations/supabase/client.server");
+      const { data: st } = await sa.from("ai_model_status").select("last_status,last_error").eq("provider", data.provider).eq("model", data.model).maybeSingle();
+      const { loadProviderRegistry } = await import("./model-router.server");
+      const { providers: reg } = await loadProviderRegistry();
+      const base = reg.find((p) => p.id === data.provider)?.baseURL ?? "";
+      const access = classifyAccess({ model: data.model, cloudflare: isCloudflareBaseUrl(base), lastStatus: (st as any)?.last_status ?? null, lastError: (st as any)?.last_error ?? null });
+      if (!isSelectable(access)) throw new Error(access === "paid" ? "This model needs a paid plan on this key" : "This key returned an error for this model");
+    }
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("ai_model_settings").upsert({
@@ -176,6 +207,16 @@ export const setActiveModel = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+
+export const dismissNewModel = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { model: string }) => z.object({ model: z.string().min(1) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertModelsAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("model_catalog_seen" as any).upsert({ model_id: data.model, dismissed: true } as any);
+    return { ok: true };
+  });
 
 export const setAutoFallback = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

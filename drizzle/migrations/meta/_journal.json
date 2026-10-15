@@ -57,6 +57,13 @@
       "when": 1792002299892,
       "tag": "0007_cloudflare_pool_toggle_cap_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792024060231,
+      "tag": "0008_model_catalog_seen",
+      "breakpoints": true
     }
   ]
 }
