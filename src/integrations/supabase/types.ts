@@ -563,6 +563,24 @@ export type Database = {
         }
         Relationships: []
       }
+      model_catalog_seen: {
+        Row: {
+          dismissed: boolean
+          first_seen_at: string
+          model_id: string
+        }
+        Insert: {
+          dismissed?: boolean
+          first_seen_at?: string
+          model_id: string
+        }
+        Update: {
+          dismissed?: boolean
+          first_seen_at?: string
+          model_id?: string
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           active: boolean
