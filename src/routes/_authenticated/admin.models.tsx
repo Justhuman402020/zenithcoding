@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   addProviderKey,
+  dismissNewModel,
   getAiGateway,
   getModelBoard,
   removeProviderKey,
@@ -66,6 +67,12 @@ function statusLabel(status: string | null) {
   if (status === "unavailable") return "Unavailable";
   return "Not used yet";
 }
+
+const ACCESS_TAG: Record<string, { text: string; cls: string }> = {
+  free: { text: "Free", cls: "border-emerald-500/40 text-emerald-500" },
+  paid: { text: "Paid only", cls: "border-amber-500/40 text-amber-500" },
+  unavailable: { text: "Unavailable", cls: "border-destructive/40 text-destructive" },
+};
 
 function AdminModelsPage() {
   const navigate = useNavigate();
@@ -216,6 +223,13 @@ function AdminModelsPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not switch model");
     }
+  }
+
+  const dismissNew = useServerFn(dismissNewModel);
+  const [openModel, setOpenModel] = useState<string | null>(null);
+  async function onDismissNew(model: string) {
+    await dismissNew({ data: { model } }).catch(() => null);
+    refetch();
   }
 
   async function onToggleFallback(enabled: boolean) {
@@ -427,6 +441,43 @@ function AdminModelsPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          {data?.summaries?.length ? (
+            <div className="rounded-xl border overflow-hidden">
+              <div className="px-4 py-2.5 bg-muted/40 text-sm font-semibold">All keys summary</div>
+              <div className="divide-y max-h-96 overflow-y-auto">
+                {data.summaries
+                  .filter((s) => !query || s.model.toLowerCase().includes(query.toLowerCase()))
+                  .map((s) => (
+                    <div key={s.model} className="px-4 py-2">
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between gap-3 text-left"
+                        onClick={() => setOpenModel(openModel === s.model ? null : s.model)}
+                      >
+                        <span className="text-xs font-medium truncate">{s.model}</span>
+                        <span className="text-[11px] shrink-0">
+                          <span className="text-emerald-500">{s.free} free</span> ·{" "}
+                          <span className="text-amber-500">{s.paid} paid</span> ·{" "}
+                          <span className="text-destructive">{s.errors} errors</span>
+                        </span>
+                      </button>
+                      {openModel === s.model ? (
+                        <ul className="mt-2 space-y-1">
+                          {s.keys.map((k) => (
+                            <li key={k.keyId} className="flex items-center justify-between gap-2 text-[11px]">
+                              <span className="truncate">{k.keyLabel}</span>
+                              <span className={`rounded px-1.5 border ${ACCESS_TAG[k.access].cls}`} title={k.error ?? ""}>
+                                {ACCESS_TAG[k.access].text}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ) : null}
           {[...groups.entries()].map(([providerId, rows]) => {
             const summary = summaries.get(providerId);
             const expanded = open[providerId] ?? false;
@@ -491,6 +542,19 @@ function AdminModelsPage() {
                           </span>
                         ) : null}
 
+                        <span className={`text-[10px] rounded px-1.5 py-0.5 border ${ACCESS_TAG[row.access].cls}`}>
+                          {ACCESS_TAG[row.access].text}
+                        </span>
+                        {row.isNew ? (
+                          <button
+                            type="button"
+                            onClick={() => onDismissNew(row.model)}
+                            className="text-[10px] rounded px-1.5 py-0.5 border border-primary/40 text-primary"
+                            title="Dismiss"
+                          >
+                            New ✕
+                          </button>
+                        ) : null}
                         {row.active ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-primary">
                             <CheckCircle2 className="h-3 w-3" /> Active
@@ -515,10 +579,10 @@ function AdminModelsPage() {
                     <Button
                       size="sm"
                       variant={row.active ? "secondary" : "outline"}
-                      disabled={row.active || !row.keyConfigured}
+                      disabled={row.active || !row.keyConfigured || row.access !== "free"}
                       onClick={() => activate(row.provider, row.model, row.label)}
                     >
-                      {row.active ? "In use" : "Use this"}
+                      {row.active ? "In use" : row.access === "paid" ? "Paid only" : row.access === "unavailable" ? "Unavailable" : "Use this"}
                     </Button>
                   </div>
                 ))}

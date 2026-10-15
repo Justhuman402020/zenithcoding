@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertModelsAdmin, isModelsAdmin } from "./admin-auth.server";
 import { PROVIDERS } from "./ai-providers";
 import { classifyAccess, newCatalogIds, summarizeByModel, isSelectable } from "./model-access";
-import { isCloudflareBaseUrl } from "./cloudflare-pool.server";
+const isCloudflareBaseUrl = (url: string) => /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(url);
 
 export type ModelBoardRow = {
   provider: string;
