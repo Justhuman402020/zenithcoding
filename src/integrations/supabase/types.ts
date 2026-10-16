@@ -729,6 +729,8 @@ export type Database = {
       }
       ollama_keys: {
         Row: {
+          active: boolean
+          active_model: string | null
           base_url: string
           created_at: string
           id: string
@@ -737,6 +739,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active?: boolean
+          active_model?: string | null
           base_url?: string
           created_at?: string
           id?: string
@@ -745,6 +749,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active?: boolean
+          active_model?: string | null
           base_url?: string
           created_at?: string
           id?: string
@@ -1552,6 +1558,24 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          theme: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          theme?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          theme?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
