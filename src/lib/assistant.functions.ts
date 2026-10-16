@@ -243,6 +243,13 @@ export const listChatProjects = auth({ method: "GET" }).middleware([requireSupab
 export const listProjectFiles = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: files } = await (context.supabase as any).from("files").select("path,content").eq("project_id", data.projectId).order("path").limit(500);
-    return ((files ?? []) as any[]).map((f) => ({ path: f.path as string, text: String(f.content).slice(0, 20000) }));
+    const all: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error } = await (context.supabase as any).from("files").select("path,content").eq("project_id", data.projectId).order("path").range(from, from + 999);
+      if (error) throw new Error(error.message);
+      all.push(...(page ?? []));
+      if (!page || page.length < 1000) break;
+    }
+    all.sort((a, b) => String(a.path).localeCompare(String(b.path), undefined, { sensitivity: "base" }));
+    return all.map((f) => ({ path: f.path as string, text: String(f.content) }));
   });
