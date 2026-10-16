@@ -47,3 +47,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Store the global Cloudflare coding model in the database so every pool key follows one admin-selected working free-tier model.
 - Global agent rules and admin credentials live in service-role-only tables; the agent sees vault names only and copies values into project secrets via a tool, so raw keys never enter prompts.
 - Cloudflare pool rules (order, quota vs rate-limit, 9k handoff, 9.5k preflight, run cap, counting, file validation) live as pure functions in src/lib/cf-pool-policy.ts; chat.ts only calls them — keeps every rule unit-testable without provider calls.
+- Site themes are pure data in src/lib/themes.ts (SVG doodles + CSS vars applied on <html>); the saved choice lives in user_settings so it follows the owner across devices.
