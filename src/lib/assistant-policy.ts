@@ -36,3 +36,12 @@ export function decide(status: EditStatus, answer: "yes" | "no"): EditStatus {
 export function ollamaBase(url: string): string {
   return url.replace(/\/+$/, "").replace(/\/(v1|api)$/, "");
 }
+
+/** True for .env-style files whose values must never reach the chat. */
+export function isEnvFile(path: string): boolean {
+  return /(^|\/)\.env(\.|$)/i.test(path) || /(^|\/)\.dev\.vars$/i.test(path);
+}
+/** Keeps variable names, hides values. */
+export function redactEnv(text: string): string {
+  return text.split("\n").map((l) => /^\s*(export\s+)?[A-Za-z_][\w.]*\s*=/.test(l) ? l.replace(/=.*/, "=•••• (hidden)") : l).join("\n");
+}

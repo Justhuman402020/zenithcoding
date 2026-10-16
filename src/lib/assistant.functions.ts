@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
+import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -59,7 +59,7 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
       let budget = 24000;
       for (const f of list) {
         if (budget <= 0) break;
-        const chunk = String(f.content).slice(0, Math.min(4000, budget));
+        const chunk = (isEnvFile(f.path) ? redactEnv(String(f.content)) : String(f.content)).slice(0, Math.min(4000, budget));
         budget -= chunk.length;
         parts.push(`--- ${f.path}\n${chunk}`);
       }
