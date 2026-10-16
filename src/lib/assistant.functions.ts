@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
+import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -59,7 +59,7 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
       let budget = 24000;
       for (const f of list) {
         if (budget <= 0) break;
-        const chunk = String(f.content).slice(0, Math.min(4000, budget));
+        const chunk = (isEnvFile(f.path) ? redactEnv(String(f.content)) : String(f.content)).slice(0, Math.min(4000, budget));
         budget -= chunk.length;
         parts.push(`--- ${f.path}\n${chunk}`);
       }
@@ -177,7 +177,7 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
   .handler(async ({ data, context }) => {
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
     if (!chat?.ollama_key_id || !chat.model) throw new Error("Pick an Ollama key and model, then tap Initialize");
-    const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${a.text}`).join("");
+    const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at").limit(60);
     const ctxText = await buildContext(context as Ctx, chat.project_id);
@@ -243,6 +243,13 @@ export const listChatProjects = auth({ method: "GET" }).middleware([requireSupab
 export const listProjectFiles = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: files } = await (context.supabase as any).from("files").select("path,content").eq("project_id", data.projectId).order("path").limit(500);
-    return ((files ?? []) as any[]).map((f) => ({ path: f.path as string, text: String(f.content).slice(0, 20000) }));
+    const all: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error } = await (context.supabase as any).from("files").select("path,content").eq("project_id", data.projectId).order("path").range(from, from + 999);
+      if (error) throw new Error(error.message);
+      all.push(...(page ?? []));
+      if (!page || page.length < 1000) break;
+    }
+    all.sort((a, b) => String(a.path).localeCompare(String(b.path), undefined, { sensitivity: "base" }));
+    return all.map((f) => ({ path: f.path as string, text: String(f.content) }));
   });

@@ -150,8 +150,9 @@
 @layer base {
   * { border-color: var(--color-border); }
   body {
-    background-color: var(--theme-base, #1d2733);
+    background-color: var(--theme-base, #0d100f);
     background-image: var(--theme-doodle, none);
+    background-size: var(--theme-size, auto);
     background-attachment: fixed;
     color: var(--color-foreground);
     font-family: var(--font-sans);

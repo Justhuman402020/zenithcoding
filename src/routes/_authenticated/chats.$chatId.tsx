@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Paperclip, Plus, Power, PowerOff, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Power, PowerOff, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
+import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
 import { addOllamaKey, checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listOllamaModels, listProjectFiles, setKeyActive, sendChatMessage, setupChat } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
@@ -147,7 +148,8 @@ function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; 
   const filesFn = useServerFn(listProjectFiles);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"root" | "projects" | "chats" | "files">("root");
+  const [view, setView] = useState<"root" | "projects" | "chats" | "files" | "projectFiles">("root");
+  const [filesProject, setFilesProject] = useState<{ id: string; label: string } | null>(null);
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<Array<{ id: string; label: string; text?: string }>>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -155,7 +157,22 @@ function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; 
     setView(v); setQ(""); setRows([]);
     if (v === "projects") setRows((await projectsFn()).map((p) => ({ id: p.id, label: p.name })));
     if (v === "chats") setRows((await chatsFn()).filter((c) => c.id !== chatId).map((c) => ({ id: c.id, label: c.title })));
-    if (v === "files") { if (!projectId) { toast.error("Pick a project first"); setView("root"); return; } setRows((await filesFn({ data: { projectId } })).map((f) => ({ id: f.path, label: f.path, text: f.text }))); }
+    if (v === "files") setRows((await projectsFn()).map((p) => ({ id: p.id, label: p.name })));
+  }
+  async function openProjectFiles(p: { id: string; label: string }) {
+    setFilesProject(p); setView("projectFiles"); setQ(""); setRows([]);
+    try { setRows((await filesFn({ data: { projectId: p.id } })).map((f) => ({ id: f.path, label: f.path, text: f.text }))); } catch (e: any) { toast.error(e.message); }
+  }
+  async function downloadZip() {
+    if (!filesProject) return;
+    const files = rows.length ? rows : (await filesFn({ data: { projectId: filesProject.id } })).map((f) => ({ id: f.path, label: f.path, text: f.text }));
+    const { zipSync, strToU8 } = await import("fflate");
+    const tree: Record<string, Uint8Array> = {};
+    for (const f of files) tree[f.id.replace(/^\/+/, "")] = strToU8(f.text ?? "");
+    const blob = new Blob([zipSync(tree)], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${filesProject.label.replace(/[^\w.-]+/g, "-") || "project"}.zip`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
   const root = [
     { k: "projects" as const, icon: FolderKanban, label: "Projects" },
@@ -174,12 +191,14 @@ function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; 
             {shownRoot.map((r) => <button key={r.k} onClick={() => go(r.k)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted"><r.icon className="h-5 w-5" /><span className="flex-1">{r.label}</span><ChevronRight className="h-4 w-4 text-muted-foreground" /></button>)}
             {(!q || "attach files".includes(q.toLowerCase())) && <button onClick={() => fileRef.current?.click()} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted"><Paperclip className="h-5 w-5" /><span>Attach files</span></button>}
           </> : <>
-            <button onClick={() => setView("root")} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><ArrowLeft className="h-3 w-3" />Back</button>
+            <button onClick={() => setView(view === "projectFiles" ? "files" : "root")} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><ArrowLeft className="h-3 w-3" />Back</button>
+            {view === "projectFiles" && <div className="flex items-center justify-between gap-2 px-3 pb-2"><span className="truncate text-xs text-muted-foreground">{filesProject?.label} · {rows.length} files</span><Button size="sm" variant="outline" onClick={() => void downloadZip()}><Download className="h-4 w-4 mr-1" />Download as zip</Button></div>}
             {shownRows.length === 0 && <div className="px-3 py-4 text-xs text-muted-foreground">Nothing here.</div>}
             {shownRows.map((r) => <button key={r.id} onClick={() => {
               if (view === "projects") { onProject(r.id); toast.success(`Reading ${r.label}…`); }
               if (view === "chats") navigate({ to: "/chats/$chatId", params: { chatId: r.id } });
-              if (view === "files") onAttach({ name: r.label, text: r.text ?? "" });
+              if (view === "files") { void openProjectFiles(r); return; }
+              if (view === "projectFiles") onAttach({ name: r.label, text: isEnvFile(r.label) ? redactEnv(r.text ?? "").slice(0, 20000) : (r.text ?? "").slice(0, 20000) });
               setOpen(false); setView("root");
             }} className={`flex w-full items-center gap-2 truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${r.id === projectId ? "text-primary" : ""}`}>{r.label}</button>)}
           </>}

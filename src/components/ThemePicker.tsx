@@ -45,7 +45,7 @@ export function ThemePicker() {
         <SheetHeader><SheetTitle>Select theme</SheetTitle></SheetHeader>
         <div className="mt-4 grid grid-cols-3 gap-3">
           {THEMES.map((t) => (
-            <button key={t.id} onClick={() => preview(t.id)} className={`relative aspect-[3/4] overflow-hidden rounded-xl border-2 ${pick === t.id ? "border-primary" : "border-transparent"}`} style={{ backgroundColor: t.base, backgroundImage: doodleUrl(t) }}>
+            <button key={t.id} onClick={() => preview(t.id)} className={`relative aspect-[3/4] overflow-hidden rounded-xl border-2 ${pick === t.id ? "border-primary" : "border-transparent"}`} style={{ backgroundColor: t.base, backgroundImage: doodleUrl(t), backgroundSize: t.id === "math" ? "300px auto" : "120px 120px" }}>
               <div className="absolute right-2 top-3 h-3 w-12 rounded-full" style={{ background: t.primary }} />
               <div className="absolute left-2 top-8 h-3 w-10 rounded-full" style={{ background: t.card }} />
               <div className="absolute inset-x-0 bottom-2 text-center text-2xl">{t.emoji}</div>

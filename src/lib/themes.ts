@@ -1,3 +1,4 @@
+import mathWallpaper from "@/assets/math-wallpaper.jpg.asset.json";
 // Site themes: drawn SVG doodle backgrounds + color tokens. No images, no network.
 export type SiteTheme = {
   id: string; name: string; emoji: string;
@@ -6,7 +7,7 @@ export type SiteTheme = {
 };
 
 export const THEMES: SiteTheme[] = [
-  { id: "math", name: "Mathematics", emoji: "📐", base: "#1d2733", card: "#26323f", primary: "#5aa9e6", primaryFg: "#0b1520", fg: "#eef3f8", muted: "#9fb0c2", accent: "#2f4256", ink: "rgba(255,255,255,0.09)", glyphs: ["∑", "π", "√x", "x²", "∫", "÷", "∞", "△", "≠", "f(x)", "θ", "±", "%", "7", "3"] },
+  { id: "math", name: "Mathematics", emoji: "📐", base: "#0d100f", card: "#181d1b", primary: "#7fd1b9", primaryFg: "#08120e", fg: "#eef4f1", muted: "#9fb3aa", accent: "#24302b", ink: "rgba(255,255,255,0.09)", glyphs: ["∑", "π", "√x", "x²", "∫", "÷", "∞", "△", "≠", "f(x)", "θ", "±", "%", "7", "3"] },
   { id: "space", name: "Space", emoji: "🪐", base: "#14112b", card: "#1f1a40", primary: "#a78bfa", primaryFg: "#120e26", fg: "#f1eeff", muted: "#a8a1cf", accent: "#2d2660", ink: "rgba(255,255,255,0.10)", glyphs: ["✦", "☾", "🪐", "★", "✧", "☄", "◯", "·"] },
   { id: "party", name: "Party", emoji: "🎉", base: "#2a1630", card: "#3a1f43", primary: "#ff6fb5", primaryFg: "#2a0b1c", fg: "#fff0f8", muted: "#d4a8c4", accent: "#4d2a57", ink: "rgba(255,255,255,0.10)", glyphs: ["🎈", "✶", "♪", "🎁", "✿", "♥", "◆"] },
   { id: "forest", name: "Forest", emoji: "🌿", base: "#13261c", card: "#1b3326", primary: "#5fd38d", primaryFg: "#082012", fg: "#ecfaf1", muted: "#98c2a8", accent: "#244432", ink: "rgba(255,255,255,0.09)", glyphs: ["🌿", "❦", "🍃", "✿", "☘", "⌘", "·"] },
@@ -22,6 +23,7 @@ export const themeById = (id?: string | null) => THEMES.find((t) => t.id === id)
 
 /** Builds a tiled doodle SVG as a CSS url(). Deterministic layout per theme. */
 export function doodleUrl(t: SiteTheme): string {
+  if (t.id === "math") return `url("${mathWallpaper.url}")`;
   const size = 240;
   let seed = [...t.id].reduce((a, c) => a + c.charCodeAt(0), 7);
   const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
@@ -58,6 +60,7 @@ export function applyTheme(id: string) {
   r.setProperty("--secondary", t.accent);
   r.setProperty("--sidebar", t.card);
   r.setProperty("--theme-doodle", doodleUrl(t));
+  r.setProperty("--theme-size", t.id === "math" ? "904px auto" : "240px 240px");
 }
 export const readLocalTheme = () => (typeof localStorage === "undefined" ? DEFAULT_THEME : localStorage.getItem(KEY) || DEFAULT_THEME);
 export const writeLocalTheme = (id: string) => { try { localStorage.setItem(KEY, id); } catch { /* ignore */ } };
