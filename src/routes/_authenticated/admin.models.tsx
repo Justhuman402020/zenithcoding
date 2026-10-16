@@ -1,3 +1,4 @@
+import { listOllamaKeys } from "@/lib/assistant.functions";
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -601,6 +602,23 @@ function AdminModelsPage() {
         </div>
 
       )}
+      <ChatKeysReadOnly />
     </div>
+  );
+}
+
+function ChatKeysReadOnly() {
+  const fn = useServerFn(listOllamaKeys);
+  const [keys, setKeys] = useState<Awaited<ReturnType<typeof listOllamaKeys>>>([]);
+  useEffect(() => { fn().then(setKeys).catch(() => {}); }, [fn]);
+  return (
+    <section className="mt-8 rounded-xl border bg-card p-4">
+      <h2 className="font-semibold">Chat helper keys (view only)</h2>
+      <p className="text-xs text-muted-foreground">Managed from the Chat page. Nothing can be deleted here.</p>
+      <ul className="mt-3 space-y-1 text-sm">
+        {keys.length === 0 && <li className="text-muted-foreground">None yet.</li>}
+        {keys.map((k) => <li key={k.id} className="flex justify-between gap-2"><span>{k.label}</span><span className="text-muted-foreground">{k.active ? `Active · ${k.active_model}` : "Not active"}</span></li>)}
+      </ul>
+    </section>
   );
 }
