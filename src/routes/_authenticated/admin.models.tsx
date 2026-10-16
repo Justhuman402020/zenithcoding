@@ -1,4 +1,4 @@
-import { listOllamaKeys } from "@/lib/assistant.functions";
+import { addOllamaKey, listOllamaKeys, listOllamaModels, setKeyActive } from "@/lib/assistant.functions";
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -609,16 +609,49 @@ function AdminModelsPage() {
 
 function ChatKeysReadOnly() {
   const fn = useServerFn(listOllamaKeys);
+  const addFn = useServerFn(addOllamaKey);
+  const activeFn = useServerFn(setKeyActive);
+  const modelsFn = useServerFn(listOllamaModels);
   const [keys, setKeys] = useState<Awaited<ReturnType<typeof listOllamaKeys>>>([]);
-  useEffect(() => { fn().then(setKeys).catch(() => {}); }, [fn]);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [label, setLabel] = useState(""); const [baseUrl, setBaseUrl] = useState(""); const [apiKey, setApiKey] = useState("");
+  const reload = () => fn().then(setKeys).catch(() => {});
+  useEffect(() => { void reload(); }, [fn]);
+  async function load(id: string) {
+    setOpenKey(id); setModels([]); setModel(""); setBusy(true);
+    const r = await modelsFn({ data: { keyId: id } }).catch((e) => ({ models: [] as string[], error: e.message as string }));
+    setBusy(false); setModels(r.models); if (r.error) toast.error(r.error);
+  }
   return (
     <section className="mt-8 rounded-xl border bg-card p-4">
-      <h2 className="font-semibold">Chat helper keys (view only)</h2>
-      <p className="text-xs text-muted-foreground">Managed from the Chat page. Nothing can be deleted here.</p>
-      <ul className="mt-3 space-y-1 text-sm">
-        {keys.length === 0 && <li className="text-muted-foreground">None yet.</li>}
-        {keys.map((k) => <li key={k.id} className="flex justify-between gap-2"><span>{k.label}</span><span className="text-muted-foreground">{k.active ? `Active · ${k.active_model}` : "Not active"}</span></li>)}
-      </ul>
+      <h2 className="font-semibold">Chat helper keys</h2>
+      <p className="text-xs text-muted-foreground">Keys for the Chat page (e.g. Ollama). Separate from Brain keys. The chat only reads these — it can't add, change or delete them.</p>
+      <div className="mt-3 space-y-2">
+        {keys.length === 0 && <p className="text-sm text-muted-foreground">None yet.</p>}
+        {keys.map((k) => <div key={k.id} className="rounded-lg border p-2">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 text-sm">{k.label}<span className="block truncate text-xs text-muted-foreground">{k.base_url} · {k.active ? `Active: ${k.active_model}` : "Not active"}</span></div>
+            {k.cloudflare ? <span className="text-xs text-muted-foreground">Cloudflare can't be the chat model</span>
+              : k.active ? <Button size="sm" variant="outline" onClick={async () => { await activeFn({ data: { id: k.id, model: null } }); void reload(); }}>Deactivate</Button>
+              : <Button size="sm" variant="outline" onClick={() => load(k.id)}>Activate</Button>}
+          </div>
+          {openKey === k.id && <div className="mt-2 space-y-2">
+            {busy && <p className="text-xs text-muted-foreground">Loading models…</p>}
+            {models.length > 0 && <div className="grid max-h-48 gap-1 overflow-y-auto">{models.map((m) => <button key={m} onClick={() => setModel(m)} className={`rounded-md px-3 py-2 text-left text-sm ${model === m ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{m}</button>)}</div>}
+            <Button size="sm" className="w-full" disabled={!model} onClick={async () => { try { await activeFn({ data: { id: k.id, model } }); setOpenKey(null); void reload(); toast.success(`${model} activated`); } catch (e: any) { toast.error(e.message); } }}>Activate {model}</Button>
+          </div>}
+        </div>)}
+      </div>
+      <div className="mt-3 grid gap-2 rounded-lg border p-3">
+        <div className="text-sm font-medium">Add a chat key</div>
+        <Input placeholder="Name" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <Input placeholder="Base URL (optional, default Ollama)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+        <Input placeholder="API token or access token" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+        <Button size="sm" disabled={!label || !apiKey} onClick={async () => { try { await addFn({ data: { label, apiKey, baseUrl: baseUrl.trim() } }); setLabel(""); setBaseUrl(""); setApiKey(""); void reload(); toast.success("Key saved"); } catch (e: any) { toast.error(e.message); } }}>Save key</Button>
+      </div>
     </section>
   );
 }
