@@ -338,6 +338,15 @@ export const Route = createFileRoute("/api/public/chat")({
 
         // One pool run at a time, enforced by a unique index on running pool jobs.
         if (editorAuto && jobId && !planMode) {
+          // A dead run (no heartbeat for 3 minutes) must never hold the pool lock.
+          // Automatic restarts are off, so nothing will ever revive it.
+          await supabaseAdmin
+            .from("chat_jobs")
+            .update({ status: "failed", pool_run: false, progress: "Stopped before completion", error: "The previous build stopped unexpectedly.", completed_at: new Date().toISOString() } as any)
+            .eq("pool_run" as any, true)
+            .in("status", ["queued", "running"])
+            .lt("updated_at", new Date(Date.now() - 180_000).toISOString())
+            .then(() => undefined, () => undefined);
           const { error: lockErr } = await supabaseAdmin.from("chat_jobs").update({ pool_run: true } as any).eq("id", jobId);
           if (lockErr) {
             await supabaseAdmin.from("chat_jobs").update({ status: "failed", error: "Another Cloudflare pool run is already going.", completed_at: new Date().toISOString() }).eq("id", jobId);
