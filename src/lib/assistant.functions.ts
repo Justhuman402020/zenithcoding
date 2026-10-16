@@ -73,7 +73,7 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
 const auth = createServerFn;
 
 export const listOllamaKeys = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
-  const { data } = await context.supabase.from("ollama_keys").select("id,label,base_url,created_at").order("created_at");
+  const { data } = await (context.supabase as any).from("ollama_keys").select("id,label,base_url,created_at").order("created_at");
   return (data ?? []) as Array<{ id: string; label: string; base_url: string; created_at: string }>;
 });
 
@@ -83,7 +83,7 @@ export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabase
     const base = ollamaBase(data.baseUrl || "https://ollama.com");
     assertChatUrlAllowed(base);
     const { encryptSecret } = await import("./secrets-crypto.server");
-    const { error } = await context.supabase.from("ollama_keys").insert({ user_id: context.userId, label: data.label, base_url: base, key_encrypted: await encryptSecret(data.apiKey) });
+    const { error } = await (context.supabase as any).from("ollama_keys").insert({ user_id: context.userId, label: data.label, base_url: base, key_encrypted: await encryptSecret(data.apiKey) });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -91,7 +91,7 @@ export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabase
 export const removeOllamaKey = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await context.supabase.from("ollama_keys").delete().eq("id", data.id);
+    await (context.supabase as any).from("ollama_keys").delete().eq("id", data.id);
     return { ok: true };
   });
 
@@ -107,12 +107,12 @@ export const listOllamaModels = auth({ method: "POST" }).middleware([requireSupa
   });
 
 export const listChats = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
-  const { data } = await context.supabase.from("assistant_chats").select("id,title,project_id,model,updated_at,projects(name)").order("updated_at", { ascending: false });
+  const { data } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,model,updated_at,projects(name)").order("updated_at", { ascending: false });
   return (data ?? []).map((c: any) => ({ id: c.id as string, title: c.title as string, projectName: (c.projects?.name ?? null) as string | null, model: c.model as string | null, updatedAt: c.updated_at as string }));
 });
 
 export const createChat = auth({ method: "POST" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
-  const { data, error } = await context.supabase.from("assistant_chats").insert({ user_id: context.userId }).select("id").single();
+  const { data, error } = await (context.supabase as any).from("assistant_chats").insert({ user_id: context.userId }).select("id").single();
   if (error) throw new Error(error.message);
   return { id: data.id as string };
 });
@@ -120,24 +120,24 @@ export const createChat = auth({ method: "POST" }).middleware([requireSupabaseAu
 export const deleteChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await context.supabase.from("assistant_chats").delete().eq("id", data.id);
+    await (context.supabase as any).from("assistant_chats").delete().eq("id", data.id);
     return { ok: true };
   });
 
 export const renameChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), title: z.string().min(1).max(120) }).parse(d))
   .handler(async ({ data, context }) => {
-    await context.supabase.from("assistant_chats").update({ title: data.title }).eq("id", data.id);
+    await (context.supabase as any).from("assistant_chats").update({ title: data.title }).eq("id", data.id);
     return { ok: true };
   });
 
 export const getChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: chat } = await context.supabase.from("assistant_chats").select("id,title,project_id,ollama_key_id,model,initialized_at,projects(name)").eq("id", data.id).maybeSingle();
+    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,ollama_key_id,model,initialized_at,projects(name)").eq("id", data.id).maybeSingle();
     if (!chat) throw new Error("Chat not found");
-    const { data: messages } = await context.supabase.from("assistant_messages").select("id,role,content,parts,created_at").eq("chat_id", data.id).order("created_at");
-    const { data: edits } = await context.supabase.from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at").eq("chat_id", data.id).order("created_at");
+    const { data: messages } = await (context.supabase as any).from("assistant_messages").select("id,role,content,parts,created_at").eq("chat_id", data.id).order("created_at");
+    const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at").eq("chat_id", data.id).order("created_at");
     return {
       chat: { id: chat.id as string, title: chat.title as string, projectId: chat.project_id as string | null, projectName: ((chat as any).projects?.name ?? null) as string | null, keyId: chat.ollama_key_id as string | null, model: chat.model as string | null, initialized: !!chat.initialized_at },
       messages: (messages ?? []) as Array<{ id: string; role: string; content: string; parts: any; created_at: string }>,
@@ -152,17 +152,17 @@ export const setupChat = auth({ method: "POST" }).middleware([requireSupabaseAut
     if (data.projectId !== undefined) patch.project_id = data.projectId;
     if (data.keyId) patch.ollama_key_id = data.keyId;
     if (data.model) patch.model = data.model;
-    await context.supabase.from("assistant_chats").update(patch).eq("id", data.id);
+    await (context.supabase as any).from("assistant_chats").update(patch).eq("id", data.id);
     if (data.initialize) {
-      const { data: chat } = await context.supabase.from("assistant_chats").select("project_id,ollama_key_id,model,projects(name)").eq("id", data.id).single();
+      const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model,projects(name)").eq("id", data.id).single();
       if (!chat.ollama_key_id || !chat.model) throw new Error("Pick an Ollama key and model first");
       const ctxText = await buildContext(context as Ctx, chat.project_id);
       const reply = await ollamaChat(context as Ctx, chat.ollama_key_id, chat.model, [
         { role: "system", content: ctxText },
         { role: "user", content: "Read everything above and reply in 2-3 short sentences that you are ready, naming the project and what it is." },
       ]);
-      await context.supabase.from("assistant_chats").update({ initialized_at: new Date().toISOString(), title: chat.projects?.name ? `${chat.projects.name} chat` : "General chat" }).eq("id", data.id);
-      await context.supabase.from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: reply || "Ready — I know this project." });
+      await (context.supabase as any).from("assistant_chats").update({ initialized_at: new Date().toISOString(), title: chat.projects?.name ? `${chat.projects.name} chat` : "General chat" }).eq("id", data.id);
+      await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: reply || "Ready — I know this project." });
     }
     return { ok: true };
   });
@@ -170,11 +170,11 @@ export const setupChat = auth({ method: "POST" }).middleware([requireSupabaseAut
 export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), text: z.string().min(1).max(20000), attachments: z.array(z.object({ name: z.string().max(200), text: z.string().max(20000) })).max(5).optional() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: chat } = await context.supabase.from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
+    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
     if (!chat?.ollama_key_id || !chat.model) throw new Error("Pick an Ollama key and model, then tap Initialize");
     const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${a.text}`).join("");
-    await context.supabase.from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
-    const { data: history } = await context.supabase.from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at").limit(60);
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
+    const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at").limit(60);
     const ctxText = await buildContext(context as Ctx, chat.project_id);
     let reply: string;
     try {
@@ -183,22 +183,22 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
       reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
     const { text, edit } = parseEditProposal(reply);
-    await context.supabase.from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send." });
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send." });
     if (edit && chat.project_id) {
-      await context.supabase.from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit });
+      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit });
     }
-    await context.supabase.from("assistant_chats").update({ updated_at: new Date().toISOString() }).eq("id", data.id);
+    await (context.supabase as any).from("assistant_chats").update({ updated_at: new Date().toISOString() }).eq("id", data.id);
     return { ok: true };
   });
 
 export const decideEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), answer: z.enum(["yes", "no"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: req } = await context.supabase.from("assistant_edit_requests").select("status,chat_id").eq("id", data.id).single();
+    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id").eq("id", data.id).single();
     const next = decide(req.status as EditStatus, data.answer);
     const requestKey = next === "approved" ? crypto.randomUUID() : null;
-    await context.supabase.from("assistant_edit_requests").update({ status: next === "approved" ? "running" : next, request_key: requestKey, updated_at: new Date().toISOString() }).eq("id", data.id);
-    await context.supabase.from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: next === "approved" ? "Editing files now with Cloudflare… I'll let you know when the files are done and the typecheck runs." : "Okay, I won't send that edit." });
+    await (context.supabase as any).from("assistant_edit_requests").update({ status: next === "approved" ? "running" : next, request_key: requestKey, updated_at: new Date().toISOString() }).eq("id", data.id);
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: next === "approved" ? "Editing files now with Cloudflare… I'll let you know when the files are done and the typecheck runs." : "Okay, I won't send that edit." });
     return { status: next, requestKey };
   });
 
@@ -206,16 +206,16 @@ export const decideEdit = auth({ method: "POST" }).middleware([requireSupabaseAu
 export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: req } = await context.supabase.from("assistant_edit_requests").select("*").eq("id", data.id).single();
+    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("*").eq("id", data.id).single();
     if (req.status !== "running" || !req.request_key) return { status: req.status as EditStatus, progress: null as string | null };
-    const { data: job } = await context.supabase.from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply").eq("request_key", req.request_key).maybeSingle();
+    const { data: job } = await (context.supabase as any).from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply").eq("request_key", req.request_key).maybeSingle();
     if (!job) return { status: "running" as EditStatus, progress: "Starting Cloudflare…" };
     if (job.status === "queued" || job.status === "running") return { status: "running" as EditStatus, progress: job.progress ?? "Working…" };
-    const { data: trace } = job.trace_id ? await context.supabase.from("chat_traces").select("phase,status,message").eq("trace_id", job.trace_id).order("seq").limit(200) : { data: [] };
+    const { data: trace } = job.trace_id ? await (context.supabase as any).from("chat_traces").select("phase,status,message").eq("trace_id", job.trace_id).order("seq").limit(200) : { data: [] };
     const log = ((trace ?? []) as any[]).map((t) => `${t.phase} [${t.status}] ${t.message ?? ""}`.trim());
     const ok = job.status === "completed" || job.outcome === "finished";
     const report = { jobStatus: job.status, outcome: job.outcome, steps: job.steps_done, files: job.files_changed, error: job.error, log };
-    const { data: chat } = await context.supabase.from("assistant_chats").select("ollama_key_id,model").eq("id", req.chat_id).single();
+    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("ollama_key_id,model").eq("id", req.chat_id).single();
     let summary = `${ok ? "✅ Done" : "⚠️ Stopped"}: ${job.steps_done} steps, ${job.files_changed} files changed.${job.error ? ` Error: ${job.error}` : ""}`;
     try {
       if (chat?.ollama_key_id && chat.model) {
@@ -225,19 +225,19 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
         ]);
       }
     } catch { /* keep plain summary */ }
-    await context.supabase.from("assistant_edit_requests").update({ status: ok ? "done" : "failed", chat_job_id: job.id, report, updated_at: new Date().toISOString() }).eq("id", data.id);
-    await context.supabase.from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: summary, parts: { editId: data.id, log } });
+    await (context.supabase as any).from("assistant_edit_requests").update({ status: ok ? "done" : "failed", chat_job_id: job.id, report, updated_at: new Date().toISOString() }).eq("id", data.id);
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: summary, parts: { editId: data.id, log } });
     return { status: (ok ? "done" : "failed") as EditStatus, progress: null };
   });
 
 export const listChatProjects = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
-  const { data } = await context.supabase.from("projects").select("id,name,updated_at").eq("user_id", context.userId).order("updated_at", { ascending: false }).limit(100);
+  const { data } = await (context.supabase as any).from("projects").select("id,name,updated_at").eq("user_id", context.userId).order("updated_at", { ascending: false }).limit(100);
   return (data ?? []) as Array<{ id: string; name: string; updated_at: string }>;
 });
 
 export const listProjectFiles = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: files } = await context.supabase.from("files").select("path,content").eq("project_id", data.projectId).order("path").limit(500);
+    const { data: files } = await (context.supabase as any).from("files").select("path,content").eq("project_id", data.projectId).order("path").limit(500);
     return ((files ?? []) as any[]).map((f) => ({ path: f.path as string, text: String(f.content).slice(0, 20000) }));
   });

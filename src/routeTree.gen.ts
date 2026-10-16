@@ -29,6 +29,8 @@ import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authent
 import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
 import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
+import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats.index'
+import { Route as AuthenticatedChatsChatIdRouteImport } from './routes/_authenticated/chats.$chatId'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
@@ -148,6 +150,17 @@ const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
+  id: '/chats/',
+  path: '/chats/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedChatsChatIdRoute =
+  AuthenticatedChatsChatIdRouteImport.update({
+    id: '/chats/$chatId',
+    path: '/chats/$chatId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   id: '/p/$projectId',
   path: '/p/$projectId',
@@ -236,10 +249,12 @@ export interface FileRoutesByFullPath {
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/chats/': typeof AuthenticatedChatsIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
@@ -270,10 +285,12 @@ export interface FileRoutesByTo {
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
+  '/chats': typeof AuthenticatedChatsIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
@@ -306,10 +323,12 @@ export interface FileRoutesById {
   '/_authenticated/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
@@ -342,10 +361,12 @@ export interface FileRouteTypes {
     | '/admin/integrations'
     | '/admin/models'
     | '/admin/users'
+    | '/chats/$chatId'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
     | '/admin/'
+    | '/chats/'
     | '/p/$projectId/settings'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
@@ -376,10 +397,12 @@ export interface FileRouteTypes {
     | '/admin/integrations'
     | '/admin/models'
     | '/admin/users'
+    | '/chats/$chatId'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
     | '/admin'
+    | '/chats'
     | '/p/$projectId/settings'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
@@ -411,10 +434,12 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/integrations'
     | '/_authenticated/admin/models'
     | '/_authenticated/admin/users'
+    | '/_authenticated/chats/$chatId'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
     | '/_authenticated/admin/'
+    | '/_authenticated/chats/'
     | '/_authenticated/p/$projectId/settings'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
@@ -594,6 +619,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/chats/': {
+      id: '/_authenticated/chats/'
+      path: '/chats'
+      fullPath: '/chats/'
+      preLoaderRoute: typeof AuthenticatedChatsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chats/$chatId': {
+      id: '/_authenticated/chats/$chatId'
+      path: '/chats/$chatId'
+      fullPath: '/chats/$chatId'
+      preLoaderRoute: typeof AuthenticatedChatsChatIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/p/$projectId': {
       id: '/_authenticated/p/$projectId'
       path: '/p/$projectId'
@@ -711,8 +750,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminIntegrationsRoute: typeof AuthenticatedAdminIntegrationsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+  AuthenticatedChatsChatIdRoute: typeof AuthenticatedChatsChatIdRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+  AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -724,8 +765,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminIntegrationsRoute: AuthenticatedAdminIntegrationsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+  AuthenticatedChatsChatIdRoute: AuthenticatedChatsChatIdRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+  AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
