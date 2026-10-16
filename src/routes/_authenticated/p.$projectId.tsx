@@ -1023,6 +1023,11 @@ function ProjectEditor() {
     if (switchCountdown >= 5) {
       setSwitchCountdown(null);
       requestKeyRef.current = crypto.randomUUID();
+      // Resume on the key after the one that stopped, never back at key #1.
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const pos = (messages[i] as { role: string; metadata?: { keyPos?: number | null } }).metadata?.keyPos;
+        if (messages[i]!.role === "assistant" && typeof pos === "number") { poolFromRef.current = pos + 1; break; }
+      }
       void sendMessage({
         text: "The previous model stopped mid-work (limit reached). Read \"Where the last session stopped\" and continue exactly where it stopped. Do not repeat finished work, and finish the remaining steps.",
       });
@@ -1030,7 +1035,7 @@ function ProjectEditor() {
     }
     const t = setTimeout(() => setSwitchCountdown((c) => (c === null ? null : c + 1)), 1000);
     return () => clearTimeout(t);
-  }, [switchCountdown, autoSwitch, sendMessage]);
+  }, [switchCountdown, autoSwitch, sendMessage, messages]);
 
   const handleStop = useCallback(() => {
     userStoppedRef.current = true;
