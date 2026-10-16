@@ -71,6 +71,13 @@
       "when": 1792122445054,
       "tag": "0009_assistant_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792123159617,
+      "tag": "0010_themes_and_chat_key_activation",
+      "breakpoints": true
     }
   ]
 }
