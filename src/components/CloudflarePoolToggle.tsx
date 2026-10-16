@@ -12,6 +12,7 @@ export function CloudflarePoolToggle() {
   const save = useServerFn(savePoolSettings);
   const { data, refetch } = useQuery({ queryKey: ["cf-pool-settings"], queryFn: () => load() });
   const [cap, setCap] = useState("");
+  const [editingCap, setEditingCap] = useState(false);
   useEffect(() => setCap(data?.cap ? String(data.cap) : ""), [data?.cap]);
 
   async function apply(next: { enabled: boolean; capEnabled: boolean; cap: number }) {
@@ -52,13 +53,24 @@ export function CloudflarePoolToggle() {
             {data?.todayRemaining != null ? ` Today's remaining: ${data.todayRemaining.toLocaleString()}.` : ""}
           </div>
         </div>
-        {capEnabled ? (
+        {capEnabled || editingCap ? (
           <Input className="w-28" inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, ""))} placeholder="e.g. 5000" />
         ) : null}
-        {capEnabled ? (
-          <Button size="sm" variant="outline" onClick={() => apply({ enabled, capEnabled: true, cap: Number(cap) || 0 })}>Save cap</Button>
+        {capEnabled || editingCap ? (
+          <Button size="sm" variant="outline" onClick={() => { setEditingCap(false); apply({ enabled, capEnabled: true, cap: Number(cap) || 0 }); }}>Save cap</Button>
         ) : null}
-        <Button size="sm" variant={capEnabled ? "default" : "outline"} onClick={() => apply({ enabled, capEnabled: !capEnabled, cap: capEnabled ? 0 : Number(cap) || 0 })}>
+        <Button
+          size="sm"
+          variant={capEnabled ? "default" : "outline"}
+          onClick={() => {
+            if (capEnabled) {
+              setEditingCap(false);
+              apply({ enabled, capEnabled: false, cap: 0 });
+            } else {
+              setEditingCap(true);
+            }
+          }}
+        >
           {capEnabled ? "On" : "Off"}
         </Button>
       </div>
