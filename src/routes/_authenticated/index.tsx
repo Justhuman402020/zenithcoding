@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen } from "lucide-react";
 
-import { X } from "lucide-react";
+import { X, MessageSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -728,6 +728,9 @@ function Dashboard() {
             <nav className="px-2 py-2 space-y-0.5">
               <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
               <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
+              <Link to="/chats" onClick={() => setSidebarOpen(false)} className="block w-full">
+                <SidebarItem icon={MessageSquare} label="Chat" />
+              </Link>
               <AdminNavItem onNavigate={(to = "/admin/users") => { setSidebarOpen(false); void navigate({ to }); }} />
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />

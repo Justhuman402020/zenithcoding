@@ -206,6 +206,152 @@ export type Database = {
         }
         Relationships: []
       }
+      assistant_chats: {
+        Row: {
+          created_at: string
+          id: string
+          initialized_at: string | null
+          model: string | null
+          ollama_key_id: string | null
+          project_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          initialized_at?: string | null
+          model?: string | null
+          ollama_key_id?: string | null
+          project_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          initialized_at?: string | null
+          model?: string | null
+          ollama_key_id?: string | null
+          project_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_chats_ollama_key_id_fkey"
+            columns: ["ollama_key_id"]
+            isOneToOne: false
+            referencedRelation: "ollama_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_chats_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assistant_edit_requests: {
+        Row: {
+          chat_id: string
+          chat_job_id: string | null
+          created_at: string
+          id: string
+          project_id: string
+          prompt: string
+          report: Json | null
+          request_key: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chat_id: string
+          chat_job_id?: string | null
+          created_at?: string
+          id?: string
+          project_id: string
+          prompt: string
+          report?: Json | null
+          request_key?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chat_id?: string
+          chat_job_id?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          prompt?: string
+          report?: Json | null
+          request_key?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_edit_requests_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "assistant_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_edit_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assistant_messages: {
+        Row: {
+          chat_id: string
+          content: string
+          created_at: string
+          id: string
+          parts: Json
+          role: string
+          user_id: string
+        }
+        Insert: {
+          chat_id: string
+          content?: string
+          created_at?: string
+          id?: string
+          parts?: Json
+          role: string
+          user_id: string
+        }
+        Update: {
+          chat_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          parts?: Json
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "assistant_chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_jobs: {
         Row: {
           assistant_reply: string | null
@@ -578,6 +724,33 @@ export type Database = {
           dismissed?: boolean
           first_seen_at?: string
           model_id?: string
+        }
+        Relationships: []
+      }
+      ollama_keys: {
+        Row: {
+          base_url: string
+          created_at: string
+          id: string
+          key_encrypted: string
+          label: string
+          user_id: string
+        }
+        Insert: {
+          base_url?: string
+          created_at?: string
+          id?: string
+          key_encrypted: string
+          label: string
+          user_id: string
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          id?: string
+          key_encrypted?: string
+          label?: string
+          user_id?: string
         }
         Relationships: []
       }
