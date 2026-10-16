@@ -903,7 +903,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 }
                 current = next;
                 tried.add(`${next.ref.provider}:${next.ref.model}`);
-                writer?.write({ type: "message-metadata", messageMetadata: { model: `${next.ref.model.split("/").pop()} · ${next.ref.provider}` } });
+                writer?.write({ type: "message-metadata", messageMetadata: { model: `${next.ref.model.split("/").pop()} · ${next.ref.provider}`, keyPos: poolPositions.get(next.ref.provider) ?? null } });
               }
               setProgress(`Round ${rounds} of ${MAX_ROUNDS} · continuing · ${progressModel.files.size} file(s) changed`);
               finalReason = undefined;
@@ -972,7 +972,7 @@ export const Route = createFileRoute("/api/public/chat")({
             current = next;
             tried.add(`${next.ref.provider}:${next.ref.model}`);
             if (writer) {
-              writer.write({ type: "message-metadata", messageMetadata: { model: `${next.ref.model.split("/").pop()} · ${next.ref.provider}` } });
+              writer.write({ type: "message-metadata", messageMetadata: { model: `${next.ref.model.split("/").pop()} · ${next.ref.provider}`, keyPos: poolPositions.get(next.ref.provider) ?? null } });
             }
             lastError = null;
             finalReason = undefined;
@@ -1073,7 +1073,7 @@ export const Route = createFileRoute("/api/public/chat")({
           execute: async ({ writer }) => {
             writer.write({
               type: "message-metadata",
-              messageMetadata: { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}` },
+              messageMetadata: { model: `${pick.ref.model.split("/").pop()} · ${pick.ref.provider}`, keyPos: poolPositions.get(pick.ref.provider) ?? null },
             });
             // The job is detached from the browser response: a dropped or
             // aborted connection never stops it, and the worker is kept alive
