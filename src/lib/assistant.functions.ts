@@ -53,7 +53,7 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
     const { data: proj } = await ctx.supabase.from("projects").select("name,description").eq("id", projectId).eq("user_id", ctx.userId).maybeSingle();
     if (proj) {
       parts.push(`Selected project: ${proj.name}${proj.description ? ` — ${proj.description}` : ""}`);
-      const { data: files } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).eq("kind", "source").order("path");
+      const { data: files } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).order("path");
       const list = files ?? [];
       parts.push(`Files (${list.length}): ${list.map((f: any) => f.path).join(", ")}`);
       let budget = 24000;
@@ -238,6 +238,6 @@ export const listChatProjects = auth({ method: "GET" }).middleware([requireSupab
 export const listProjectFiles = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: files } = await context.supabase.from("files").select("path,content").eq("project_id", data.projectId).eq("kind", "source").order("path").limit(500);
+    const { data: files } = await context.supabase.from("files").select("path,content").eq("project_id", data.projectId).order("path").limit(500);
     return ((files ?? []) as any[]).map((f) => ({ path: f.path as string, text: String(f.content).slice(0, 20000) }));
   });
