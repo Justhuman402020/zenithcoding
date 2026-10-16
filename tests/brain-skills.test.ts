@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, describe } from "vitest";
 import { findSkill, activeSkillSection } from "../src/lib/brain-skills";
 const cmds = ["spec","plan","build","test","review","simplify","ship"];
 const notes = cmds.map((c) => ({ purpose: `Skill /${c}: x`, body: `body ${c}` }));
