@@ -108,7 +108,8 @@ export const listOllamaModels = auth({ method: "POST" }).middleware([requireSupa
 
 export const listChats = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,model,updated_at,projects(name)").order("updated_at", { ascending: false });
-  return (data ?? []).map((c: any) => ({ id: c.id as string, title: c.title as string, projectName: (c.projects?.name ?? null) as string | null, model: c.model as string | null, updatedAt: c.updated_at as string }));
+  type Row = { id: string; title: string; projectName: string | null; model: string | null; updatedAt: string };
+  return ((data ?? []) as any[]).map((c: any): Row => ({ id: c.id as string, title: c.title as string, projectName: (c.projects?.name ?? null) as string | null, model: c.model as string | null, updatedAt: c.updated_at as string }));
 });
 
 export const createChat = auth({ method: "POST" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {

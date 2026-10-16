@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen } from "lucide-react";
 
-import { X } from "lucide-react";
+import { X, MessageSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { StatusBadge } from "@/components/StatusBadge";
