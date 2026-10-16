@@ -435,6 +435,8 @@ function ProjectEditor() {
   const drainingRef = useRef(false);
   const autoContinueRef = useRef(0);
   const poolFromRef = useRef<number | null>(null);
+  // Key number that just stopped (read from the error text "Key #N ...").
+  const failedKeyRef = useRef<number | null>(null);
   const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
   const thinkingStartRef = useRef<Record<string, number>>({});
@@ -895,6 +897,8 @@ function ProjectEditor() {
     // react to messages) could exceed React's nested-update limit (#185).
     experimental_throttle: 100,
     onError: (err) => {
+      const m = /Key #(\d+)/i.exec(err?.message ?? "");
+      if (m) failedKeyRef.current = Number(m[1]);
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
       if (!userStoppedRef.current && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
@@ -1024,10 +1028,14 @@ function ProjectEditor() {
       setSwitchCountdown(null);
       requestKeyRef.current = crypto.randomUUID();
       // Resume on the key after the one that stopped, never back at key #1.
+      let lastPos = failedKeyRef.current ?? 0;
+      failedKeyRef.current = null;
       for (let i = messages.length - 1; i >= 0; i--) {
         const pos = (messages[i] as { role: string; metadata?: { keyPos?: number | null } }).metadata?.keyPos;
-        if (messages[i]!.role === "assistant" && typeof pos === "number") { poolFromRef.current = pos + 1; break; }
+        if (messages[i]!.role === "assistant" && typeof pos === "number") { lastPos = Math.max(lastPos, pos); break; }
+        if (messages[i]!.role === "user") continue;
       }
+      if (lastPos > 0) poolFromRef.current = lastPos + 1;
       void sendMessage({
         text: "The previous model stopped mid-work (limit reached). Read \"Where the last session stopped\" and continue exactly where it stopped. Do not repeat finished work, and finish the remaining steps.",
       });

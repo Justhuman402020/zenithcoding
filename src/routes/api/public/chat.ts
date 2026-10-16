@@ -324,7 +324,8 @@ export const Route = createFileRoute("/api/public/chat")({
           // Retry / Approve-next-key buttons send the position to start from.
           const from = Math.max(1, Number(request.headers.get("x-forge-pool-from")) || 1);
           const codingModel = await readCloudflareCodingModel();
-          chain = fullPool.filter((k) => k.position >= from && providerKeys[k.id]).map((k) => ({ provider: k.id, model: codingModel }));
+          // Skip keys already at the 9k hand-off line so a restart never lands back on a spent key.
+          chain = fullPool.filter((k) => k.position >= from && k.used < 9000 && providerKeys[k.id]).map((k) => ({ provider: k.id, model: codingModel }));
           if (!chain.length) return fail(424, JSON.stringify({ error: "pool_empty", message: `No saved Cloudflare key from #${from} onward.` }), "application/json");
         } else {
           const { withoutCloudflare } = await import("@/lib/cf-pool-routing");
