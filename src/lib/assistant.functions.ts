@@ -177,7 +177,7 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
   .handler(async ({ data, context }) => {
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
     if (!chat?.ollama_key_id || !chat.model) throw new Error("Pick an Ollama key and model, then tap Initialize");
-    const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${a.text}`).join("");
+    const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at").limit(60);
     const ctxText = await buildContext(context as Ctx, chat.project_id);

@@ -198,7 +198,7 @@ function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; 
               if (view === "projects") { onProject(r.id); toast.success(`Reading ${r.label}…`); }
               if (view === "chats") navigate({ to: "/chats/$chatId", params: { chatId: r.id } });
               if (view === "files") { void openProjectFiles(r); return; }
-              if (view === "projectFiles") onAttach({ name: r.label, text: isEnvFile(r.label) ? redactEnv(r.text ?? "") : (r.text ?? "").slice(0, 20000) });
+              if (view === "projectFiles") onAttach({ name: r.label, text: isEnvFile(r.label) ? redactEnv(r.text ?? "").slice(0, 20000) : (r.text ?? "").slice(0, 20000) });
               setOpen(false); setView("root");
             }} className={`flex w-full items-center gap-2 truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${r.id === projectId ? "text-primary" : ""}`}>{r.label}</button>)}
           </>}
