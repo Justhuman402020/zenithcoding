@@ -82,6 +82,7 @@ import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
 import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react";
 import { BrainPanel } from "@/components/BrainPanel";
+import { SkillMenu } from "@/components/SkillMenu";
 import { AssetsPanel } from "@/components/AssetsPanel";
 import { BackendBadge } from "@/components/BackendBadge";
 import { ChatModelControls, CLONE_MODE_STORAGE_KEY, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
@@ -1441,6 +1442,24 @@ function ProjectEditor() {
     }
   }
 
+  // "/" skill menu: picking a skill sends it straight away.
+  const [skillAutoSend, setSkillAutoSend] = useState(false);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!skillAutoSend) return;
+    setSkillAutoSend(false);
+    void handleSend({ preventDefault() {} } as React.FormEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillAutoSend, input]);
+  function pickSkill(command: string) {
+    const rest = input.replace(/^\s*\/\S*\s*/, "");
+    setInput(`/${command}${rest ? ` ${rest}` : ""}`);
+    setSkillMenuOpen(false);
+    setSkillAutoSend(true);
+  }
+  const slashMatch = /^\s*\/([\w-]*)$/.exec(input);
+  const showSkillMenu = skillMenuOpen || !!slashMatch;
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
@@ -2622,6 +2641,9 @@ function ProjectEditor() {
                   ))}
                 </div>
               )}
+              {showSkillMenu && (
+                <SkillMenu filter={slashMatch?.[1] ?? ""} onPick={pickSkill} />
+              )}
               <div className="flex gap-2 items-end">
                 <input
                   ref={fileInputRef}
@@ -2644,6 +2666,9 @@ function ProjectEditor() {
                 </Button>
                 <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
                   <Camera className="h-4 w-4" />
+                </Button>
+                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0 font-mono text-base" onClick={() => setSkillMenuOpen((o) => !o)} title="Brain skills">
+                  /
                 </Button>
                 <Textarea
                 ref={inputRef}
