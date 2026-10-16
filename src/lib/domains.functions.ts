@@ -54,6 +54,11 @@ export const verifyDomain = createServerFn({ method: "POST" })
         .from("project_domains")
         .update({ verified: true, verified_at: checkedAt, last_check_at: checkedAt, last_check_error: aWwwOk ? null : "Root verified. Add the www A record too so www.yourdomain.com works." })
         .eq("id", row.id);
+      // Once verified, register on Cloudflare for SaaS so SSL + routing come up automatically.
+      try {
+        const { registerAndRecord } = await import("./cloudflare-saas.server");
+        await registerAndRecord(row.id, row.hostname);
+      } catch {}
       return { verified: true, message: aWwwOk ? "Verified" : "Verified (add www A record so www works too)" };
     } catch (e: any) {
       await supabase

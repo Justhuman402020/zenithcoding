@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Coins } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/account/billing")({
-  head: () => ({ meta: [{ title: "Billing — Forge" }] }),
+  head: () => ({ meta: [{ title: "Billing — Code Haven" }] }),
   component: BillingPage,
-  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">Billing error: {error.message}</div>,
+  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">Billing error: {(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-8">Not found</div>,
 });
 

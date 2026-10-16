@@ -116,6 +116,7 @@ export function createMemoryFileStore(initial: Record<string, string> = {}): Pro
 
 export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLogger) {
   const log = (phase: string, options?: Parameters<TraceLogger["log"]>[1]) => trace?.log(phase, options);
+  const repairCounts = new Map<string, number>();
 
   return {
     list_files: tool({
@@ -129,19 +130,38 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
       },
     }),
     read_file: tool({
-      description: "Read the contents of a file in the project.",
-      inputSchema: z.object({ path: z.string() }),
-      execute: async ({ path }) => {
+      description:
+        "Read a file. Returns an explicit character range and continuation position for large files; continue reading until hasMore is false before rewriting it.",
+      inputSchema: z.object({
+        path: z.string(),
+        offset: z.number().int().min(0).optional().describe("Character offset to start from, default 0"),
+        limit: z.number().int().min(1).max(200_000).optional().describe("Characters to return, default 60000"),
+      }),
+      execute: async ({ path, offset = 0, limit = 60_000 }) => {
         const started = Date.now();
         const cleanPath = normalizePath(path);
         const result = await store.read(cleanPath);
+        const full = result.content ?? "";
+        const content = result.error ? undefined : full.slice(offset, offset + limit);
+        const nextOffset = offset + (content?.length ?? 0);
+        const ranged = result.error
+          ? result
+          : {
+              content,
+              path: cleanPath,
+              offset,
+              end: nextOffset,
+              totalBytes: full.length,
+              hasMore: nextOffset < full.length,
+              nextOffset: nextOffset < full.length ? nextOffset : null,
+            };
         log("tool.read_file", {
           status: result.error ? "warn" : "ok",
           durationMs: Date.now() - started,
           message: result.error,
-          detail: { path: cleanPath, bytes: result.content?.length ?? 0 },
+          detail: { path: cleanPath, bytes: content?.length ?? 0, offset, totalBytes: full.length },
         });
-        return result;
+        return ranged;
       },
     }),
     write_file: tool({
@@ -164,6 +184,24 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
           log("tool.write_file", { status: "error", message: failure.error, detail: { path: cleanPath } });
           return failure;
         }
+        // Only complete, valid files are saved. Up to 3 repairs, then pause with a note.
+        const { validateFile, repairDecision, MAX_REPAIRS } = await import("./cf-pool-policy");
+        const check = validateFile(cleanPath, content);
+        if (!check.ok) {
+          const n = (repairCounts.get(cleanPath) ?? 0) + 1;
+          repairCounts.set(cleanPath, n);
+          const pause = repairDecision(n) === "pause";
+          const failure = {
+            ok: false as const,
+            path: cleanPath,
+            error: pause
+              ? `Not saved: ${check.error}. ${MAX_REPAIRS} repair attempts used — stop editing this file, keep the saved version, call update_handoff with what is left, then end your turn.`
+              : `Not saved: ${check.error}. Repair attempt ${n} of ${MAX_REPAIRS}: write the COMPLETE file again.`,
+          };
+          log("tool.write_file", { status: "error", message: failure.error, detail: { path: cleanPath, repair: n } });
+          return failure;
+        }
+        repairCounts.delete(cleanPath);
         const result = await store.write(cleanPath, content);
         log("tool.write_file", {
           status: result.ok ? "ok" : "error",

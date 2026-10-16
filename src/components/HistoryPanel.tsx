@@ -90,7 +90,7 @@ export function HistoryPanel({
           <div className="p-6 text-center">
             <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">
-              No snapshots yet. Forge saves one automatically before each AI build, so you can roll back any time.
+              No snapshots yet. Code Haven saves one automatically before each AI build, so you can roll back any time.
             </p>
           </div>
         ) : (

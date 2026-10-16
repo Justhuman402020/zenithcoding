@@ -104,7 +104,7 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Bought it on Namecheap? Add the domain here first. Forge will show the exact records to copy into Namecheap's Advanced DNS screen.</p>
+        <p className="text-xs text-muted-foreground">Bought it on Namecheap? Add the domain here first. Code Haven will show the exact records to copy into Namecheap's Advanced DNS screen.</p>
       </form>
 
       {loading ? (

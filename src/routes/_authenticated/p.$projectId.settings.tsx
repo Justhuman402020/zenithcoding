@@ -16,9 +16,9 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, Copy, X, Globe, ExternalLink, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId/settings")({
-  head: () => ({ meta: [{ title: "Project settings — Forge" }] }),
+  head: () => ({ meta: [{ title: "Project settings — Code Haven" }] }),
   component: SettingsPage,
-  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{error.message}</div>,
+  errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-8">Not found</div>,
 });
 
@@ -149,7 +149,7 @@ function SettingsPage() {
           <Globe className="h-5 w-5 text-primary mt-0.5" />
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold">Publish & domains</h2>
-            <p className="text-sm text-muted-foreground">First publish the Forge link, then connect your domain.</p>
+            <p className="text-sm text-muted-foreground">First publish the Code Haven link, then connect your domain.</p>
           </div>
           {published ? (
             <span className="inline-flex items-center gap-1 text-xs text-primary"><CheckCircle2 className="h-3.5 w-3.5" /> Live</span>
@@ -157,7 +157,7 @@ function SettingsPage() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="siteSlug">Forge URL name</Label>
+          <Label htmlFor="siteSlug">Code Haven URL name</Label>
           <div className="flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 focus-within:ring-2 focus-within:ring-ring">
             <span className="text-xs text-muted-foreground select-none">/s/</span>
             <Input
@@ -251,6 +251,6 @@ function normalizeSlug(s: string): string {
 }
 
 function suggestSlug(name: string, projectId: string): string {
-  const base = normalizeSlug(name).slice(0, 32);
-  return base.length >= 3 ? base : `site-${projectId.slice(0, 6)}`;
+  const base = normalizeSlug(name).slice(0, 32) || "site";
+  return base.length >= 3 ? `${base}-${projectId.slice(0, 5)}`.slice(0, 40) : `site-${projectId.slice(0, 6)}`;
 }
