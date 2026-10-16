@@ -831,7 +831,14 @@ export const Route = createFileRoute("/api/public/chat")({
             });
 
             if (writer) {
-              writer.merge(result.toUIMessageStream({ sendStart: attempt === 0, sendFinish: false, sendReasoning: true }));
+              // Drop "abort" chunks: a key hand-off or retry aborts one attempt, but the
+              // job keeps going on the server. Passing it on made the editor think the
+              // whole build stopped and resend it, which then collided with the live run.
+              writer.merge(
+                result
+                  .toUIMessageStream({ sendStart: attempt === 0, sendFinish: false, sendReasoning: true })
+                  .pipeThrough(new TransformStream({ transform(chunk, ctl) { if ((chunk as { type?: string }).type !== "abort") ctl.enqueue(chunk); } })),
+              );
             }
             // Drain the stream on the server no matter what the browser does.
             await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });

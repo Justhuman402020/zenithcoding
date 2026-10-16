@@ -899,6 +899,12 @@ function ProjectEditor() {
     onError: (err) => {
       const m = /Key #(\d+)/i.exec(err?.message ?? "");
       if (m) failedKeyRef.current = Number(m[1]);
+      // A build is already running on the server: never resend on top of it.
+      if (/pool_busy|already going/i.test(err?.message ?? "")) {
+        void discardUnansweredMessage();
+        toast.message("A build is still running on the server. It will show here when it finishes.", { id: "forge-chat-error" });
+        return;
+      }
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
       if (!userStoppedRef.current && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
