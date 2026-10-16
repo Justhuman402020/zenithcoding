@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Power, PowerOff, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
-import { addOllamaKey, checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listOllamaModels, listProjectFiles, setKeyActive, sendChatMessage, setupChat } from "@/lib/assistant.functions";
+import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
   head: () => ({ meta: [{ title: "Chat — Code Haven" }, { name: "description", content: "Chat with your Code Haven helper." }, { property: "og:title", content: "Chat — Code Haven" }, { property: "og:description", content: "Chat with your Code Haven helper." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
@@ -217,58 +217,19 @@ function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; 
 
 function OllamaSheet({ open, onOpenChange, chat, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; chat: Data["chat"]; onDone: () => void }) {
   const keysFn = useServerFn(listOllamaKeys);
-  const addFn = useServerFn(addOllamaKey);
-  const activeFn = useServerFn(setKeyActive);
-  const modelsFn = useServerFn(listOllamaModels);
   const setup = useServerFn(setupChat);
   const [keys, setKeys] = useState<Awaited<ReturnType<typeof keysFn>>>([]);
-  const [openKey, setOpenKey] = useState<string | null>(null);
-  const [models, setModels] = useState<string[]>([]);
-  const [model, setModel] = useState("");
   const [pick, setPick] = useState(chat.keyId && chat.model ? `${chat.keyId}|${chat.model}` : "");
-  const [label, setLabel] = useState(""); const [baseUrl, setBaseUrl] = useState(""); const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(false);
-  const reloadKeys = () => keysFn().then(setKeys).catch(() => {});
-  useEffect(() => { if (open) void reloadKeys(); }, [open]);
-  async function loadModels(id: string) {
-    setOpenKey(id); setModels([]); setModel(""); setLoading(true);
-    const r = await modelsFn({ data: { keyId: id } }).catch((e) => ({ models: [] as string[], error: e.message as string }));
-    setLoading(false); setModels(r.models); if (r.error) toast.error(r.error);
-  }
+  useEffect(() => { if (open) keysFn().then(setKeys).catch(() => {}); }, [open]);
   const active = keys.filter((k) => k.active && k.active_model);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto bg-popover">
-        <SheetHeader><SheetTitle>Chat keys & model</SheetTitle></SheetHeader>
+        <SheetHeader><SheetTitle>Chat model</SheetTitle></SheetHeader>
         <div className="mt-4 space-y-4">
           <div className="space-y-2">
-            {keys.length === 0 && <p className="text-sm text-muted-foreground">No keys yet. Add one below.</p>}
-            {keys.map((k) => <div key={k.id} className="rounded-lg border p-2">
-              <div className="flex items-center gap-2">
-                <div className="min-w-0 flex-1 text-sm">{k.label}<span className="block truncate text-xs text-muted-foreground">{k.base_url}{k.active ? ` · active: ${k.active_model}` : ""}</span></div>
-                {k.cloudflare ? <span className="text-xs text-muted-foreground">Cloudflare can't be the chat model</span>
-                  : k.active ? <Button size="sm" variant="outline" onClick={async () => { await activeFn({ data: { id: k.id, model: null } }); void reloadKeys(); }}><PowerOff className="h-4 w-4 mr-1" />Deactivate</Button>
-                  : <Button size="sm" variant="outline" onClick={() => loadModels(k.id)}><Power className="h-4 w-4 mr-1" />Activate</Button>}
-              </div>
-              {openKey === k.id && <div className="mt-2 space-y-2">
-                {loading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading models…</div>}
-                {models.length > 0 && <div className="grid max-h-48 gap-1 overflow-y-auto">
-                  {models.map((m) => <button key={m} onClick={() => setModel(m)} className={`rounded-md px-3 py-2 text-left text-sm ${model === m ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{m}</button>)}
-                </div>}
-                <Button size="sm" className="w-full" disabled={!model} onClick={async () => { try { await activeFn({ data: { id: k.id, model } }); setOpenKey(null); void reloadKeys(); toast.success(`${model} activated`); } catch (e: any) { toast.error(e.message); } }}>Activate {model}</Button>
-              </div>}
-            </div>)}
-          </div>
-          <div className="grid gap-2 rounded-lg border p-3">
-            <div className="text-sm font-medium">Add a key</div>
-            <Input placeholder="Name" value={label} onChange={(e) => setLabel(e.target.value)} />
-            <Input placeholder="Base URL (optional, default Ollama)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-            <Input placeholder="API token or access token" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-            <Button size="sm" disabled={!label || !apiKey} onClick={async () => { try { await addFn({ data: { label, apiKey, baseUrl: baseUrl.trim() } }); setLabel(""); setBaseUrl(""); setApiKey(""); void reloadKeys(); toast.success("Key saved"); } catch (e: any) { toast.error(e.message); } }}>Save key</Button>
-          </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Chat model</div>
-            {active.length === 0 && <p className="text-xs text-muted-foreground">Activate a model on a key first.</p>}
+            {active.length === 0 && <p className="text-sm text-muted-foreground">No active model yet. Add a key and tap Activate in <Link to="/admin/models" className="text-primary underline">Admin → AI Models</Link>.</p>}
             {active.map((k) => { const v = `${k.id}|${k.active_model}`; return <button key={k.id} onClick={() => setPick(v)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${pick === v ? "bg-primary text-primary-foreground" : "border hover:bg-muted"}`}>{k.active_model} <span className="opacity-70">· {k.label}</span></button>; })}
           </div>
           <Button className="w-full" disabled={!pick || loading} onClick={async () => {

@@ -80,6 +80,7 @@ export const listOllamaKeys = auth({ method: "GET" }).middleware([requireSupabas
 export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ label: z.string().min(1).max(80), apiKey: z.string().min(1).max(2000), baseUrl: z.string().url().max(300).optional().or(z.literal("")) }).parse(d))
   .handler(async ({ data, context }) => {
+    if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can change chat keys (Admin → AI Models).");
     const base = ollamaBase(data.baseUrl || "https://ollama.com");
     const { encryptSecret } = await import("./secrets-crypto.server");
     const { error } = await (context.supabase as any).from("ollama_keys").insert({ user_id: context.userId, label: data.label, base_url: base, key_encrypted: await encryptSecret(data.apiKey) });
@@ -91,6 +92,7 @@ export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabase
 export const setKeyActive = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), model: z.string().max(200).nullable() }).parse(d))
   .handler(async ({ data, context }) => {
+    if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can change chat keys (Admin → AI Models).");
     const { data: k } = await (context.supabase as any).from("ollama_keys").select("base_url").eq("id", data.id).maybeSingle();
     if (!k) throw new Error("Key not found");
     if (data.model) assertChatUrlAllowed(k.base_url);
