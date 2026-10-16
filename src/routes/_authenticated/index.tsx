@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen } from "lucide-react";
 
 import { X, MessageSquare } from "lucide-react";
+import { ThemePicker } from "@/components/ThemePicker";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -761,6 +762,7 @@ function Dashboard() {
           <span className="font-display text-lg text-gold">Code Haven</span>
         </div>
         <div className="flex items-center gap-1">
+          <ThemePicker />
           <AdminBadge />
           <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
             <LogOut className="h-4 w-4" />

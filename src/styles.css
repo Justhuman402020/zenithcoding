@@ -150,7 +150,9 @@
 @layer base {
   * { border-color: var(--color-border); }
   body {
-    background-color: var(--color-background);
+    background-color: var(--theme-base, #1d2733);
+    background-image: var(--theme-doodle, none);
+    background-attachment: fixed;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "ss02", "cv11";
