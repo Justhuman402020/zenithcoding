@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
+import { isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -73,25 +73,29 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
 const auth = createServerFn;
 
 export const listOllamaKeys = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
-  const { data } = await (context.supabase as any).from("ollama_keys").select("id,label,base_url,created_at").order("created_at");
-  return (data ?? []) as Array<{ id: string; label: string; base_url: string; created_at: string }>;
+  const { data } = await (context.supabase as any).from("ollama_keys").select("id,label,base_url,created_at,active,active_model").order("created_at");
+  return ((data ?? []) as any[]).map((k) => ({ ...k, cloudflare: isCloudflareUrl(k.base_url) })) as Array<{ id: string; label: string; base_url: string; created_at: string; active: boolean; active_model: string | null; cloudflare: boolean }>;
 });
 
 export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ label: z.string().min(1).max(80), apiKey: z.string().min(1).max(500), baseUrl: z.string().url().max(300).optional() }).parse(d))
+  .inputValidator((d) => z.object({ label: z.string().min(1).max(80), apiKey: z.string().min(1).max(2000), baseUrl: z.string().url().max(300).optional().or(z.literal("")) }).parse(d))
   .handler(async ({ data, context }) => {
     const base = ollamaBase(data.baseUrl || "https://ollama.com");
-    assertChatUrlAllowed(base);
     const { encryptSecret } = await import("./secrets-crypto.server");
     const { error } = await (context.supabase as any).from("ollama_keys").insert({ user_id: context.userId, label: data.label, base_url: base, key_encrypted: await encryptSecret(data.apiKey) });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
 
-export const removeOllamaKey = auth({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
+/** Activate a model on a saved key so it shows in the chat picker. Cloudflare keys can't be activated. */
+export const setKeyActive = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ id: z.string().uuid(), model: z.string().max(200).nullable() }).parse(d))
   .handler(async ({ data, context }) => {
-    await (context.supabase as any).from("ollama_keys").delete().eq("id", data.id);
+    const { data: k } = await (context.supabase as any).from("ollama_keys").select("base_url").eq("id", data.id).maybeSingle();
+    if (!k) throw new Error("Key not found");
+    if (data.model) assertChatUrlAllowed(k.base_url);
+    const { error } = await (context.supabase as any).from("ollama_keys").update({ active: !!data.model, active_model: data.model }).eq("id", data.id);
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
