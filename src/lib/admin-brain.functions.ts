@@ -186,3 +186,12 @@ export const updateCredential = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+// Slash-command skills saved in the Brain, for the "/" menu in the editor chat.
+export const listBrainSkills = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { loadBrainNotes } = await import("./admin-vault.server");
+    const { listSkills } = await import("./brain-skills");
+    return { skills: listSkills(await loadBrainNotes()) };
+  });
