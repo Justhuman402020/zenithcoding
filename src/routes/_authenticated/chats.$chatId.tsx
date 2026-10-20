@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
-import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat } from "@/lib/assistant.functions";
+import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
   head: () => ({ meta: [{ title: "Chat — Code Haven" }, { name: "description", content: "Chat with your Code Haven helper." }, { property: "og:title", content: "Chat — Code Haven" }, { property: "og:description", content: "Chat with your Code Haven helper." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
@@ -29,6 +29,8 @@ function ChatPage() {
   const setup = useServerFn(setupChat);
   const decide = useServerFn(decideEdit);
   const check = useServerFn(checkEdit);
+  const stopFn = useServerFn(stopEdit);
+  const [liveLog, setLiveLog] = useState<Record<string, string[]>>({});
   const [data, setData] = useState<Data | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -132,7 +134,19 @@ function ChatPage() {
                   <Button size="sm" variant="outline" onClick={async () => { await decide({ data: { id: it.e.id, answer: "no" } }); void reload(); }}><X className="h-4 w-4 mr-1" />No</Button>
                 </div>
               </>}
-              {it.e.status === "running" && <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{progress[it.e.id] ?? "Editing files with Cloudflare…"}</div>}
+              {it.e.status === "running" && <>
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  <span className="min-w-0 flex-1">{progress[it.e.id] ?? "Editing files with Cloudflare…"}</span>
+                  <Button size="sm" variant="destructive" onClick={() => stopRunning(it.e.id)}><Square className="h-3.5 w-3.5 mr-1" />Stop</Button>
+                </div>
+                {(liveLog[it.e.id]?.length ?? 0) > 0 && (
+                  <details open className="mt-2 rounded-lg border bg-muted/40 p-2 text-xs">
+                    <summary className="cursor-pointer">Live work log ({liveLog[it.e.id]!.length})</summary>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono">{liveLog[it.e.id]!.join("\n")}</pre>
+                  </details>
+                )}
+              </>}
               {it.e.status === "declined" && <div className="mt-2 text-sm text-muted-foreground">Not sent.</div>}
               {it.e.status === "done" && <div className="mt-2 text-sm text-primary">Finished — summary below.</div>}
               {it.e.status === "failed" && <div className="mt-2 text-sm text-destructive">Stopped — see summary below.</div>}
