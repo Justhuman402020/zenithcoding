@@ -31,7 +31,7 @@ export const Route = createFileRoute("/api/public/jobs/resume")({
         const cutoff = new Date(Date.now() - STALE_AFTER_MS).toISOString();
         const { data: candidates } = await (supabaseAdmin as any)
           .from("chat_jobs")
-          .select("id,project_id,user_id,request_key,status,progress,auto_resumes,updated_at,resume_payload")
+          .select("id,project_id,user_id,request_key,status,progress,auto_resumes,updated_at,resume_payload,outcome,paused_at_key")
           .in("status", ["queued", "running"])
           .not("resume_payload", "is", null)
           .lt("auto_resumes", MAX_AUTO_RESUMES)
