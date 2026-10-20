@@ -4,11 +4,16 @@ import { createFileRoute } from "@tanstack/react-router";
 // after the user's device disconnected, continuing from where they stopped.
 export const MAX_AUTO_RESUMES = 6;
 export const STALE_AFTER_MS = 90_000;
-/** Automatic restarts are off by admin request; paused runs wait for Retry / Approve. */
-export const AUTO_RESUME_ENABLED = false;
+/** On only for builds cut off by a lost connection or device off. Paused runs still wait for Retry / Approve. */
+export const AUTO_RESUME_ENABLED = true;
 
-export function shouldResume(job: { status: string; auto_resumes: number; updated_at: string; resume_payload: unknown }, now = Date.now()) {
+export function shouldResume(
+  job: { status: string; auto_resumes: number; updated_at: string; resume_payload: unknown; outcome?: string | null; paused_at_key?: number | null },
+  now = Date.now(),
+) {
   if (job.status !== "queued" && job.status !== "running") return false;
+  // A paused build (rate limit, Retry / Approve next key) always waits for the owner.
+  if (job.outcome === "paused" || job.paused_at_key != null) return false;
   if (!job.resume_payload) return false;
   if (job.auto_resumes >= MAX_AUTO_RESUMES) return false;
   return now - new Date(job.updated_at).getTime() > STALE_AFTER_MS;
@@ -26,7 +31,7 @@ export const Route = createFileRoute("/api/public/jobs/resume")({
         const cutoff = new Date(Date.now() - STALE_AFTER_MS).toISOString();
         const { data: candidates } = await (supabaseAdmin as any)
           .from("chat_jobs")
-          .select("id,project_id,user_id,request_key,status,progress,auto_resumes,updated_at,resume_payload")
+          .select("id,project_id,user_id,request_key,status,progress,auto_resumes,updated_at,resume_payload,outcome,paused_at_key")
           .in("status", ["queued", "running"])
           .not("resume_payload", "is", null)
           .lt("auto_resumes", MAX_AUTO_RESUMES)

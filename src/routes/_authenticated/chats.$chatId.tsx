@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
-import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat } from "@/lib/assistant.functions";
+import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
   head: () => ({ meta: [{ title: "Chat — Code Haven" }, { name: "description", content: "Chat with your Code Haven helper." }, { property: "og:title", content: "Chat — Code Haven" }, { property: "og:description", content: "Chat with your Code Haven helper." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
@@ -29,6 +29,8 @@ function ChatPage() {
   const setup = useServerFn(setupChat);
   const decide = useServerFn(decideEdit);
   const check = useServerFn(checkEdit);
+  const stopFn = useServerFn(stopEdit);
+  const [liveLog, setLiveLog] = useState<Record<string, string[]>>({});
   const [data, setData] = useState<Data | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,7 +44,7 @@ function ChatPage() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data?.messages.length]);
   useEffect(() => { if (data && !data.chat.initialized) setSettingsOpen(true); }, [data?.chat.initialized]);
 
-  // Watch running Cloudflare edits.
+  // Watch running Cloudflare edits: live log + alert when finished.
   const running = data?.edits.filter((e) => e.status === "running") ?? [];
   useEffect(() => {
     if (!running.length) return;
@@ -50,9 +52,17 @@ function ChatPage() {
       for (const e of running) {
         const r = await check({ data: { id: e.id } }).catch(() => null);
         if (r?.progress) setProgress((p) => ({ ...p, [e.id]: r.progress! }));
-        if (r && r.status !== "running") void reload();
+        if (r?.log?.length) setLiveLog((l) => ({ ...l, [e.id]: r.log }));
+        if (r && r.status !== "running") {
+          const msg = r.status === "done" ? "Cloudflare finished your edit ✅" : "Cloudflare edit stopped — see why below";
+          if (r.status === "done") toast.success(msg); else toast.error(msg);
+          try {
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("Code Haven", { body: msg });
+          } catch { /* notifications not available */ }
+          void reload();
+        }
       }
-    }, 4000);
+    }, 3000);
     return () => clearInterval(t);
   }, [running.map((e) => e.id).join(","), check, reload]);
 
@@ -66,16 +76,23 @@ function ChatPage() {
   }
 
   async function approve(editId: string, prompt: string) {
+    try { if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission(); } catch { /* ignore */ }
     const r = await decide({ data: { id: editId, answer: "yes" } });
     await reload();
     if (r.status !== "approved" || !r.requestKey || !data?.chat.projectId) return;
+    if (r.started) return; // the server started and holds the build
     const { data: s } = await supabase.auth.getSession();
-    // Hand the edit to the project's normal Cloudflare build. It keeps running on the server.
+    // Fallback only: start it from this device.
     void fetch("/api/public/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.session?.access_token ?? ""}`, "x-project-id": data.chat.projectId, "x-forge-mode": "build", "x-forge-auto": "on", "x-forge-request-key": r.requestKey },
-      body: JSON.stringify({ messages: [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: `${prompt}\n\nAfter editing, run a typecheck and fix any errors.` }] }] }),
+      body: JSON.stringify({ messages: [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: `${prompt}\n\nWhen done, make sure every changed file is complete and valid, then end with the checklist.` }] }] }),
     }).then((res) => res.body?.cancel()).catch(() => {});
+  }
+
+  async function stopRunning(editId: string) {
+    await stopFn({ data: { id: editId } }).catch((e) => toast.error(String(e?.message ?? e)));
+    setProgress((p) => ({ ...p, [editId]: "Stopping…" }));
   }
 
   if (!data) return <div className="min-h-screen grid place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -117,7 +134,19 @@ function ChatPage() {
                   <Button size="sm" variant="outline" onClick={async () => { await decide({ data: { id: it.e.id, answer: "no" } }); void reload(); }}><X className="h-4 w-4 mr-1" />No</Button>
                 </div>
               </>}
-              {it.e.status === "running" && <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{progress[it.e.id] ?? "Editing files with Cloudflare…"}</div>}
+              {it.e.status === "running" && <>
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  <span className="min-w-0 flex-1">{progress[it.e.id] ?? "Editing files with Cloudflare…"}</span>
+                  <Button size="sm" variant="destructive" onClick={() => stopRunning(it.e.id)}><Square className="h-3.5 w-3.5 mr-1" />Stop</Button>
+                </div>
+                {(liveLog[it.e.id]?.length ?? 0) > 0 && (
+                  <details open className="mt-2 rounded-lg border bg-muted/40 p-2 text-xs">
+                    <summary className="cursor-pointer">Live work log ({liveLog[it.e.id]!.length})</summary>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono">{liveLog[it.e.id]!.join("\n")}</pre>
+                  </details>
+                )}
+              </>}
               {it.e.status === "declined" && <div className="mt-2 text-sm text-muted-foreground">Not sent.</div>}
               {it.e.status === "done" && <div className="mt-2 text-sm text-primary">Finished — summary below.</div>}
               {it.e.status === "failed" && <div className="mt-2 text-sm text-destructive">Stopped — see summary below.</div>}

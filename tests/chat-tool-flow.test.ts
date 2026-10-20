@@ -210,10 +210,10 @@ describe("Groq chat edit flow", () => {
     expect(store.files.get("index.html")).not.toContain("zenithvideioai");
     expect(text).toMatch(/2630/);
 
-    // every continuation request must still carry all four tool definitions,
+    // every continuation request must still carry all file tool definitions,
     // otherwise Groq rejects the previously-made tool calls mid-build.
     for (const entry of requestLog) {
-      expect(entry.toolNames.sort()).toEqual(["delete_file", "list_files", "read_file", "write_file"]);
+      expect(entry.toolNames.sort()).toEqual(["delete_file", "edit_file", "list_files", "patch_file", "read_file", "write_file"]);
     }
   });
 

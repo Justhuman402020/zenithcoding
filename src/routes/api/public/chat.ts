@@ -1,5 +1,6 @@
 import { shouldHandoff, emptyBaton, mergeBaton, batonNote } from "@/lib/neuron-budget";
 import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/lib/cf-pool-policy";
+import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, trimCarried } from "@/lib/completion-gate";
 import { createFileRoute } from "@tanstack/react-router";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
@@ -339,11 +340,12 @@ export const Route = createFileRoute("/api/public/chat")({
         // One pool run at a time, enforced by a unique index on running pool jobs.
         if (editorAuto && jobId && !planMode) {
           // A dead run (no heartbeat for 3 minutes) must never hold the pool lock.
-          // Automatic restarts are off, so nothing will ever revive it.
+          // A server restart of this same job keeps its own lock.
           await supabaseAdmin
             .from("chat_jobs")
             .update({ status: "failed", pool_run: false, progress: "Stopped before completion", error: "The previous build stopped unexpectedly.", completed_at: new Date().toISOString() } as any)
             .eq("pool_run" as any, true)
+            .neq("id", jobId)
             .in("status", ["queued", "running"])
             .lt("updated_at", new Date(Date.now() - 180_000).toISOString())
             .then(() => undefined, () => undefined);
@@ -691,6 +693,8 @@ export const Route = createFileRoute("/api/public/chat")({
           let stoppedEarly = false;
           let stopCause = "";
           let outOfKeys = false;
+          let gateRetries = 0;
+          let incompleteReason: string | null = null;
           let baton = emptyBaton();
           const replyLog: string[] = [];
           const keyNo = (id: string) => poolPositions.get(id) ?? "?";
@@ -744,7 +748,7 @@ export const Route = createFileRoute("/api/public/chat")({
             const result = streamText({
               model,
               system: systemPrompt,
-              messages: [...baseMessages, ...carried],
+              messages: [...baseMessages, ...trimCarried(carried)],
               tools,
               abortSignal: attemptAbort.signal,
               onChunk: ({ chunk }: any) => {
@@ -756,11 +760,13 @@ export const Route = createFileRoute("/api/public/chat")({
                 stepNo += 1;
                 attemptStepCount += 1;
                 attemptSteps = step?.response?.messages ?? attemptSteps;
-                if (step?.text?.trim()) replyTexts.push(step.text.trim());
+                const visible = stripThinking(String(step?.text ?? ""));
+                if (visible) replyTexts.push(visible);
+                // Only successful writes/edits/deletes count as changed files; reads don't.
+                for (const p of changedPathsFromStep(step)) progressModel.files.add(p);
                 let last = "";
                 for (const c of (step?.toolCalls ?? []) as any[]) {
                   const path = c?.input?.path ?? c?.args?.path;
-                  if (typeof path === "string") progressModel.files.add(path);
                   const name = String(c?.toolName ?? "tool");
                   last = `${name.replace(/_/g, " ")}${typeof path === "string" ? ` ${path}` : ""}`;
                   recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
@@ -897,6 +903,39 @@ export const Route = createFileRoute("/api/public/chat")({
               const hitLimit = loopHit || attemptStepCount >= STEP_LIMIT;
               if (!hitLimit) {
                 stoppedEarly = false;
+                // "Is it really done?" check before calling it Finished.
+                if (!planMode && !userStopped) {
+                  const changedList = [...progressModel.files];
+                  const [{ data: changedRows }, { data: pathRows }] = await Promise.all([
+                    changedList.length
+                      ? supabaseAdmin.from("files").select("path,content").eq("project_id", projectId).in("path", changedList)
+                      : Promise.resolve({ data: [] as any[] }),
+                    supabaseAdmin.from("files").select("path").eq("project_id", projectId),
+                  ]);
+                  const gate = completionGate({
+                    needsFileChange,
+                    changed: changedList.map((p) => ({ path: p, content: (changedRows ?? []).find((r: any) => r.path === p)?.content ?? null })),
+                    allPaths: (pathRows ?? []).map((r: any) => r.path),
+                    finalText: replyTexts[replyTexts.length - 1] ?? "",
+                  });
+                  trace.log("gate.check", { status: gate.ok ? "ok" : "warn", message: gate.ok ? undefined : gate.reason, detail: { changed: changedList.length, retries: gateRetries } });
+                  if (!gate.ok) {
+                    incompleteReason = gate.reason;
+                    if (gateRetries < MAX_GATE_RETRIES) {
+                      gateRetries += 1;
+                      if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+                      carried.push({ role: "user", content: gate.nudge });
+                      recentCalls.length = 0;
+                      setProgress(`Check: ${gate.reason} · sending it back to finish (${gateRetries}/${MAX_GATE_RETRIES})`);
+                      finished = false;
+                      finalReason = undefined;
+                      attempt -= 1;
+                      continue;
+                    }
+                  } else {
+                    incompleteReason = null;
+                  }
+                }
                 break;
               }
               stoppedEarly = true;
@@ -1002,10 +1041,10 @@ export const Route = createFileRoute("/api/public/chat")({
           const fileCount = progressModel.files.size;
           const counts = `${stepNo} step${stepNo === 1 ? "" : "s"}, ${fileCount} file${fileCount === 1 ? "" : "s"} changed`;
           const isPaused = pausedAtKey != null || stopNote === "cap" || stopNote === "toggle_off";
-          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" | "paused" = userStopped
+          const outcome: "finished" | "incomplete" | "stopped_early" | "out_of_keys" | "failed" | "stopped" | "paused" = userStopped
             ? "stopped"
             : succeeded && !stoppedEarly
-              ? "finished"
+              ? incompleteReason ? "incomplete" : "finished"
               : isPaused
                 ? "paused"
                 : outOfKeys
@@ -1049,7 +1088,9 @@ export const Route = createFileRoute("/api/public/chat")({
             const reason =
               outcome === "stopped"
                 ? "Stopped by you"
-                : outcome === "stopped_early"
+                : outcome === "incomplete"
+                  ? `Not finished: ${incompleteReason} · ${counts}. Tap Continue to finish.`
+                  : outcome === "stopped_early"
                   ? `Stopped early by the ${stopCause} after ${rounds} round(s) · ${counts}. Tap Continue to finish.`
                   : outcome === "out_of_keys"
                     ? `Out of saved AI keys before the work finished · ${counts}.${lastError ? ` Last error: ${lastError}` : ""}`
@@ -1072,7 +1113,7 @@ export const Route = createFileRoute("/api/public/chat")({
               });
             }
             await saveProgress({
-              status: userStopped || outcome === "stopped_early" ? "unfinished" : "failed",
+              status: userStopped || outcome === "stopped_early" || outcome === "incomplete" ? "unfinished" : "failed",
               outcome,
               lastRequest: lastUserText.slice(0, 600),
               error: reason.slice(0, 600),
