@@ -42,7 +42,7 @@ function ChatPage() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data?.messages.length]);
   useEffect(() => { if (data && !data.chat.initialized) setSettingsOpen(true); }, [data?.chat.initialized]);
 
-  // Watch running Cloudflare edits.
+  // Watch running Cloudflare edits: live log + alert when finished.
   const running = data?.edits.filter((e) => e.status === "running") ?? [];
   useEffect(() => {
     if (!running.length) return;
@@ -50,9 +50,17 @@ function ChatPage() {
       for (const e of running) {
         const r = await check({ data: { id: e.id } }).catch(() => null);
         if (r?.progress) setProgress((p) => ({ ...p, [e.id]: r.progress! }));
-        if (r && r.status !== "running") void reload();
+        if (r?.log?.length) setLiveLog((l) => ({ ...l, [e.id]: r.log }));
+        if (r && r.status !== "running") {
+          const msg = r.status === "done" ? "Cloudflare finished your edit ✅" : "Cloudflare edit stopped — see why below";
+          if (r.status === "done") toast.success(msg); else toast.error(msg);
+          try {
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("Code Haven", { body: msg });
+          } catch { /* notifications not available */ }
+          void reload();
+        }
       }
-    }, 4000);
+    }, 3000);
     return () => clearInterval(t);
   }, [running.map((e) => e.id).join(","), check, reload]);
 
@@ -66,16 +74,23 @@ function ChatPage() {
   }
 
   async function approve(editId: string, prompt: string) {
+    try { if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission(); } catch { /* ignore */ }
     const r = await decide({ data: { id: editId, answer: "yes" } });
     await reload();
     if (r.status !== "approved" || !r.requestKey || !data?.chat.projectId) return;
+    if (r.started) return; // the server started and holds the build
     const { data: s } = await supabase.auth.getSession();
-    // Hand the edit to the project's normal Cloudflare build. It keeps running on the server.
+    // Fallback only: start it from this device.
     void fetch("/api/public/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.session?.access_token ?? ""}`, "x-project-id": data.chat.projectId, "x-forge-mode": "build", "x-forge-auto": "on", "x-forge-request-key": r.requestKey },
-      body: JSON.stringify({ messages: [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: `${prompt}\n\nAfter editing, run a typecheck and fix any errors.` }] }] }),
+      body: JSON.stringify({ messages: [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: `${prompt}\n\nWhen done, make sure every changed file is complete and valid, then end with the checklist.` }] }] }),
     }).then((res) => res.body?.cancel()).catch(() => {});
+  }
+
+  async function stopRunning(editId: string) {
+    await stopFn({ data: { id: editId } }).catch((e) => toast.error(String(e?.message ?? e)));
+    setProgress((p) => ({ ...p, [editId]: "Stopping…" }));
   }
 
   if (!data) return <div className="min-h-screen grid place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
