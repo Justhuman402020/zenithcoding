@@ -201,12 +201,41 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
 export const decideEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), answer: z.enum(["yes", "no"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id").eq("id", data.id).single();
+    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id,project_id,prompt").eq("id", data.id).single();
     const next = decide(req.status as EditStatus, data.answer);
     const requestKey = next === "approved" ? crypto.randomUUID() : null;
     await (context.supabase as any).from("assistant_edit_requests").update({ status: next === "approved" ? "running" : next, request_key: requestKey, updated_at: new Date().toISOString() }).eq("id", data.id);
-    await (context.supabase as any).from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: next === "approved" ? "Editing files now with Cloudflare… I'll let you know when the files are done and the typecheck runs." : "Okay, I won't send that edit." });
-    return { status: next, requestKey };
+    let started = true;
+    if (next === "approved" && requestKey) {
+      // Only after Yes: the backend itself starts and holds the Cloudflare build,
+      // so it doesn't depend on this phone staying online.
+      const { data: proj } = await (context.supabase as any).from("projects").select("id").eq("id", req.project_id).eq("user_id", context.userId).maybeSingle();
+      if (!proj) throw new Error("Project not found");
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error } = await (supabaseAdmin as any).rpc("start_build_job", {
+        _project: req.project_id, _user: context.userId, _request_key: requestKey,
+        _prompt: `${req.prompt}\n\nWhen done, make sure every changed file is complete and valid, then end with the checklist.`,
+      });
+      if (error) started = false;
+    }
+    await (context.supabase as any).from("assistant_messages").insert({
+      chat_id: req.chat_id, user_id: context.userId, role: "assistant",
+      content: next !== "approved" ? "Okay, I won't send that edit." : started ? "Editing files now with Cloudflare. I'll show the work log here and tell you when it's done." : "Couldn't start Cloudflare from the server — starting it from this device instead.",
+    });
+    return { status: next, requestKey, started };
+  });
+
+/** Stops a running chat edit straight away. */
+export const stopEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,request_key,chat_id").eq("id", data.id).single();
+    if (req?.status !== "running" || !req.request_key) return { ok: false };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("chat_jobs")
+      .update({ status: "failed", progress: "Stopped", error: "Stopped by you", completed_at: new Date().toISOString(), pool_run: false } as any)
+      .eq("request_key", req.request_key).eq("user_id", context.userId).in("status", ["queued", "running"]);
+    return { ok: true };
   });
 
 /** Checks the Cloudflare build; when it ends, Ollama writes you the summary. */
@@ -214,10 +243,16 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("*").eq("id", data.id).single();
-    if (req.status !== "running" || !req.request_key) return { status: req.status as EditStatus, progress: null as string | null };
-    const { data: job } = await (context.supabase as any).from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply").eq("request_key", req.request_key).maybeSingle();
-    if (!job) return { status: "running" as EditStatus, progress: "Starting Cloudflare…" };
-    if (job.status === "queued" || job.status === "running") return { status: "running" as EditStatus, progress: job.progress ?? "Working…" };
+    if (req.status !== "running" || !req.request_key) return { status: req.status as EditStatus, progress: null as string | null, log: [] as string[] };
+    const { data: job } = await (context.supabase as any).from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply,created_at").eq("request_key", req.request_key).maybeSingle();
+    if (!job) return { status: "running" as EditStatus, progress: "Starting Cloudflare…", log: [] as string[] };
+    if (job.status === "queued" || job.status === "running") {
+      // Live work log: this build's trace lines so far.
+      const { data: rows } = await (context.supabase as any).from("chat_traces").select("phase,status,message,detail,created_at")
+        .eq("project_id", req.project_id).gte("created_at", job.created_at).order("created_at", { ascending: false }).limit(40);
+      const log = ((rows ?? []) as any[]).reverse().map((t) => liveLine(t)).filter(Boolean) as string[];
+      return { status: "running" as EditStatus, progress: job.progress ?? "Working…", log };
+    }
     const { data: trace } = job.trace_id ? await (context.supabase as any).from("chat_traces").select("phase,status,message").eq("trace_id", job.trace_id).order("seq").limit(200) : { data: [] };
     const log = ((trace ?? []) as any[]).map((t) => `${t.phase} [${t.status}] ${t.message ?? ""}`.trim());
     const ok = job.status === "completed" || job.outcome === "finished";
