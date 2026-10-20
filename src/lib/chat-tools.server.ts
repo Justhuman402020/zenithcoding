@@ -114,9 +114,67 @@ export function createMemoryFileStore(initial: Record<string, string> = {}): Pro
   };
 }
 
+export type FileEdit = { find: string; replace: string; all?: boolean };
+
+/** Applies find/replace edits. Exact match first, then a whitespace-tolerant match. */
+export function applyEdits(source: string, edits: FileEdit[]): { ok: true; content: string } | { ok: false; error: string } {
+  let out = source;
+  for (let i = 0; i < edits.length; i++) {
+    const { find, replace, all } = edits[i]!;
+    const count = out.split(find).length - 1;
+    if (count === 1 || (count > 1 && all)) {
+      out = all ? out.split(find).join(replace) : out.replace(find, () => replace);
+      continue;
+    }
+    if (count > 1) return { ok: false, error: `Edit ${i + 1}: find text matches ${count} places — add more surrounding lines or set all=true` };
+    // Whitespace-tolerant fallback: collapse runs of spaces/tabs and line-end spaces.
+    const esc = find.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const re = new RegExp(esc, all ? "g" : "");
+    const matches = out.match(new RegExp(esc, "g"))?.length ?? 0;
+    if (matches === 0) return { ok: false, error: `Edit ${i + 1}: find text not found — read_file again and copy the exact text` };
+    if (matches > 1 && !all) return { ok: false, error: `Edit ${i + 1}: find text matches ${matches} places — add more surrounding lines` };
+    out = out.replace(re, () => replace);
+  }
+  return { ok: true, content: out };
+}
+
 export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLogger) {
   const log = (phase: string, options?: Parameters<TraceLogger["log"]>[1]) => trace?.log(phase, options);
   const repairCounts = new Map<string, number>();
+
+  async function runEdits(path: string, edits: FileEdit[], phase: string): Promise<WriteResult & { edits?: number }> {
+    const started = Date.now();
+    const cleanPath = normalizePath(path);
+    if (!cleanPath || cleanPath.includes("..")) return { ok: false, path, error: "Invalid file path" };
+    const current = await store.read(cleanPath);
+    if (current.error || current.content == null) {
+      const failure = { ok: false as const, path: cleanPath, error: `Can't edit: ${current.error ?? "not found"}. Use write_file to create a new file.` };
+      log(phase, { status: "error", message: failure.error, detail: { path: cleanPath } });
+      return failure;
+    }
+    const applied = applyEdits(current.content, edits);
+    if (!applied.ok) {
+      log(phase, { status: "error", message: applied.error, detail: { path: cleanPath } });
+      return { ok: false, path: cleanPath, error: applied.error };
+    }
+    if (applied.content === current.content) return { ok: false, path: cleanPath, error: "Edit changed nothing — the replace text equals the find text" };
+    const { validateFile, repairDecision, MAX_REPAIRS } = await import("./cf-pool-policy");
+    const check = validateFile(cleanPath, applied.content);
+    if (!check.ok) {
+      const n = (repairCounts.get(cleanPath) ?? 0) + 1;
+      repairCounts.set(cleanPath, n);
+      const pause = repairDecision(n) === "pause";
+      const error = pause
+        ? `Not saved: ${check.error}. ${MAX_REPAIRS} repair attempts used — stop editing this file, keep the saved version, then end your turn saying what is left.`
+        : `Not saved: ${check.error} after this edit. Repair attempt ${n} of ${MAX_REPAIRS}: fix the edit and try again.`;
+      log(phase, { status: "error", message: error, detail: { path: cleanPath, repair: n } });
+      return { ok: false, path: cleanPath, error };
+    }
+    repairCounts.delete(cleanPath);
+    const result = await store.write(cleanPath, applied.content);
+    log(phase, { status: result.ok ? "ok" : "error", durationMs: Date.now() - started, message: result.ok ? undefined : result.error, detail: { path: cleanPath, edits: edits.length, bytes: applied.content.length } });
+    return result.ok ? { ...result, edits: edits.length } : result;
+  }
 
   return {
     list_files: tool({
