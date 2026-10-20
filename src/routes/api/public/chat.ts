@@ -1,5 +1,6 @@
 import { shouldHandoff, emptyBaton, mergeBaton, batonNote } from "@/lib/neuron-budget";
 import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/lib/cf-pool-policy";
+import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, trimCarried } from "@/lib/completion-gate";
 import { createFileRoute } from "@tanstack/react-router";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
@@ -744,7 +745,7 @@ export const Route = createFileRoute("/api/public/chat")({
             const result = streamText({
               model,
               system: systemPrompt,
-              messages: [...baseMessages, ...carried],
+              messages: [...baseMessages, ...trimCarried(carried)],
               tools,
               abortSignal: attemptAbort.signal,
               onChunk: ({ chunk }: any) => {
@@ -756,11 +757,13 @@ export const Route = createFileRoute("/api/public/chat")({
                 stepNo += 1;
                 attemptStepCount += 1;
                 attemptSteps = step?.response?.messages ?? attemptSteps;
-                if (step?.text?.trim()) replyTexts.push(step.text.trim());
+                const visible = stripThinking(String(step?.text ?? ""));
+                if (visible) replyTexts.push(visible);
+                // Only successful writes/edits/deletes count as changed files; reads don't.
+                for (const p of changedPathsFromStep(step)) progressModel.files.add(p);
                 let last = "";
                 for (const c of (step?.toolCalls ?? []) as any[]) {
                   const path = c?.input?.path ?? c?.args?.path;
-                  if (typeof path === "string") progressModel.files.add(path);
                   const name = String(c?.toolName ?? "tool");
                   last = `${name.replace(/_/g, " ")}${typeof path === "string" ? ` ${path}` : ""}`;
                   recentCalls.push(`${name}:${JSON.stringify(c?.input ?? c?.args ?? {}).slice(0, 400)}`);
