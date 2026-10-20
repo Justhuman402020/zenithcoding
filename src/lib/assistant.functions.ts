@@ -27,6 +27,14 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
   return String(json?.choices?.[0]?.message?.content ?? "");
 }
 
+/** One readable work-log line from a build trace row. */
+function liveLine(t: { phase: string; status: string; message: string | null; detail: any }): string | null {
+  if (/^(request\.|credits\.|project\.|snapshot\.)/.test(t.phase)) return null;
+  const path = t.detail?.path ? ` ${t.detail.path}` : "";
+  const model = t.detail?.model ? ` ${String(t.detail.model).split("/").pop()}` : "";
+  return `${t.phase.replace(/^tool\./, "")}${path}${model}${t.status === "ok" ? "" : ` [${t.status}]`}${t.message ? ` — ${String(t.message).slice(0, 160)}` : ""}`;
+}
+
 async function isAdmin(ctx: Ctx) {
   const { data } = await ctx.supabase.rpc("has_role", { _user_id: ctx.userId, _role: "admin" });
   return !!data;
@@ -269,7 +277,7 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
     } catch { /* keep plain summary */ }
     await (context.supabase as any).from("assistant_edit_requests").update({ status: ok ? "done" : "failed", chat_job_id: job.id, report, updated_at: new Date().toISOString() }).eq("id", data.id);
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: summary, parts: { editId: data.id, log } });
-    return { status: (ok ? "done" : "failed") as EditStatus, progress: null };
+    return { status: (ok ? "done" : "failed") as EditStatus, progress: null, log: [] as string[] };
   });
 
 export const listChatProjects = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
