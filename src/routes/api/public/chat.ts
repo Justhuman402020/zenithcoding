@@ -1040,10 +1040,10 @@ export const Route = createFileRoute("/api/public/chat")({
           const fileCount = progressModel.files.size;
           const counts = `${stepNo} step${stepNo === 1 ? "" : "s"}, ${fileCount} file${fileCount === 1 ? "" : "s"} changed`;
           const isPaused = pausedAtKey != null || stopNote === "cap" || stopNote === "toggle_off";
-          const outcome: "finished" | "stopped_early" | "out_of_keys" | "failed" | "stopped" | "paused" = userStopped
+          const outcome: "finished" | "incomplete" | "stopped_early" | "out_of_keys" | "failed" | "stopped" | "paused" = userStopped
             ? "stopped"
             : succeeded && !stoppedEarly
-              ? "finished"
+              ? incompleteReason ? "incomplete" : "finished"
               : isPaused
                 ? "paused"
                 : outOfKeys
@@ -1087,7 +1087,9 @@ export const Route = createFileRoute("/api/public/chat")({
             const reason =
               outcome === "stopped"
                 ? "Stopped by you"
-                : outcome === "stopped_early"
+                : outcome === "incomplete"
+                  ? `Not finished: ${incompleteReason} · ${counts}. Tap Continue to finish.`
+                  : outcome === "stopped_early"
                   ? `Stopped early by the ${stopCause} after ${rounds} round(s) · ${counts}. Tap Continue to finish.`
                   : outcome === "out_of_keys"
                     ? `Out of saved AI keys before the work finished · ${counts}.${lastError ? ` Last error: ${lastError}` : ""}`
