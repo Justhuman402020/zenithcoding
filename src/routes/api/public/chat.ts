@@ -692,6 +692,8 @@ export const Route = createFileRoute("/api/public/chat")({
           let stoppedEarly = false;
           let stopCause = "";
           let outOfKeys = false;
+          let gateRetries = 0;
+          let incompleteReason: string | null = null;
           let baton = emptyBaton();
           const replyLog: string[] = [];
           const keyNo = (id: string) => poolPositions.get(id) ?? "?";
@@ -900,6 +902,39 @@ export const Route = createFileRoute("/api/public/chat")({
               const hitLimit = loopHit || attemptStepCount >= STEP_LIMIT;
               if (!hitLimit) {
                 stoppedEarly = false;
+                // "Is it really done?" check before calling it Finished.
+                if (!planMode && !userStopped) {
+                  const changedList = [...progressModel.files];
+                  const [{ data: changedRows }, { data: pathRows }] = await Promise.all([
+                    changedList.length
+                      ? supabaseAdmin.from("files").select("path,content").eq("project_id", projectId).in("path", changedList)
+                      : Promise.resolve({ data: [] as any[] }),
+                    supabaseAdmin.from("files").select("path").eq("project_id", projectId),
+                  ]);
+                  const gate = completionGate({
+                    needsFileChange,
+                    changed: changedList.map((p) => ({ path: p, content: (changedRows ?? []).find((r: any) => r.path === p)?.content ?? null })),
+                    allPaths: (pathRows ?? []).map((r: any) => r.path),
+                    finalText: replyTexts[replyTexts.length - 1] ?? "",
+                  });
+                  trace.log("gate.check", { status: gate.ok ? "ok" : "warn", message: gate.ok ? undefined : gate.reason, detail: { changed: changedList.length, retries: gateRetries } });
+                  if (!gate.ok) {
+                    incompleteReason = gate.reason;
+                    if (gateRetries < MAX_GATE_RETRIES) {
+                      gateRetries += 1;
+                      if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+                      carried.push({ role: "user", content: gate.nudge });
+                      recentCalls.length = 0;
+                      setProgress(`Check: ${gate.reason} · sending it back to finish (${gateRetries}/${MAX_GATE_RETRIES})`);
+                      finished = false;
+                      finalReason = undefined;
+                      attempt -= 1;
+                      continue;
+                    }
+                  } else {
+                    incompleteReason = null;
+                  }
+                }
                 break;
               }
               stoppedEarly = true;
