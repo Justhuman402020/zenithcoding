@@ -212,6 +212,25 @@ export function createProjectFileTools(store: ProjectFileStore, trace?: TraceLog
         return result;
       },
     }),
+    edit_file: tool({
+      description:
+        "Change part of an existing file: replace an exact snippet (find) with new text (replace). Cheapest way to make small changes — prefer this over write_file for edits. Include a few surrounding lines in find so it is unique.",
+      inputSchema: z.object({
+        path: z.string(),
+        find: z.string().min(1).describe("Exact existing text to replace (copy it from read_file)"),
+        replace: z.string().describe("New text"),
+        all: z.boolean().optional().describe("Replace every match instead of requiring a unique one"),
+      }),
+      execute: async ({ path, find, replace, all }) => runEdits(path, [{ find, replace, all }], "tool.edit_file"),
+    }),
+    patch_file: tool({
+      description: "Apply several find/replace edits to one file in a single call. Each find must match exactly once (unless all=true).",
+      inputSchema: z.object({
+        path: z.string(),
+        edits: z.array(z.object({ find: z.string().min(1), replace: z.string(), all: z.boolean().optional() })).min(1).max(40),
+      }),
+      execute: async ({ path, edits }) => runEdits(path, edits, "tool.patch_file"),
+    }),
     delete_file: tool({
       description: "Delete a file from the project.",
       inputSchema: z.object({ path: z.string() }),
