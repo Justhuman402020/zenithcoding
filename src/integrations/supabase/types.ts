@@ -1655,6 +1655,15 @@ export type Database = {
         Args: { _user: string; _ws: string }
         Returns: boolean
       }
+      start_build_job: {
+        Args: {
+          _project: string
+          _prompt: string
+          _request_key: string
+          _user: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "user"
