@@ -1112,7 +1112,7 @@ export const Route = createFileRoute("/api/public/chat")({
               });
             }
             await saveProgress({
-              status: userStopped || outcome === "stopped_early" ? "unfinished" : "failed",
+              status: userStopped || outcome === "stopped_early" || outcome === "incomplete" ? "unfinished" : "failed",
               outcome,
               lastRequest: lastUserText.slice(0, 600),
               error: reason.slice(0, 600),
