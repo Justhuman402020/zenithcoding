@@ -3,7 +3,7 @@ import { Smartphone, Tablet, Monitor, RefreshCw, ExternalLink, Terminal, Trash2 
 
 type Device = "mobile" | "tablet" | "desktop";
 type LogLevel = "log" | "info" | "warn" | "error";
-type LogEntry = { id: number; level: LogLevel; text: string; ts: number };
+type LogEntry = { id: number; level: LogLevel; text: string; ts: number; count: number };
 
 const DEVICE_WIDTH: Record<Device, number | null> = {
   mobile: 390,
@@ -12,6 +12,7 @@ const DEVICE_WIDTH: Record<Device, number | null> = {
 };
 
 const CONSOLE_BRIDGE = `<script>(()=>{
+  const seen={};const rseen={};
   const send=(level,args)=>{
     try{
       const text=args.map(a=>{
@@ -19,6 +20,7 @@ const CONSOLE_BRIDGE = `<script>(()=>{
         if(typeof a==='object'){try{return JSON.stringify(a)}catch(_){return String(a)}}
         return String(a);
       }).join(' ');
+      if(level==='error'){const k=text.slice(0,300);const now=Date.now();const c=seen[k]||(seen[k]={n:0,t:0});c.n++;if(now-c.t<3000||c.n>20)return;c.t=now;}
       parent.postMessage({type:'forge-preview-log',level,text},'*');
     }catch(_){}
   };
@@ -26,8 +28,17 @@ const CONSOLE_BRIDGE = `<script>(()=>{
     const orig=console[level];
     console[level]=function(){send(level,Array.from(arguments));return orig.apply(console,arguments);};
   });
-  window.addEventListener('error',e=>send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+')']));
-  window.addEventListener('unhandledrejection',e=>send('error',['Unhandled rejection: '+(e.reason&&e.reason.message||e.reason)]));
+  const snap=()=>{try{const b=document.body;return{title:document.title,path:location.pathname+location.hash,text:(b&&b.innerText||'').replace(/\\s+/g,' ').trim().slice(0,1500),elements:b?b.getElementsByTagName('*').length:0,empty:!b||!(b.innerText||'').trim()}}catch(_){return null}};
+  const report=(o)=>{const k=String(o.message||'').slice(0,300);const c=rseen[k]||(rseen[k]={n:0,t:0});c.n++;const now=Date.now();if(now-c.t<3000||c.n>20)return;c.t=now;o.count=c.n;try{setTimeout(()=>parent.postMessage(Object.assign({type:'forge-preview-error'},o,{snapshot:snap()}),'*'),50)}catch(_){}};
+  window.addEventListener('error',e=>{
+    if(!e.message&&e.target&&e.target!==window){const u=e.target.src||e.target.href||e.target.tagName;send('error',['Failed to load resource: '+u]);report({kind:'resource',message:'Failed to load resource: '+u});return;}
+    send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)+')'+(e.error&&e.error.stack?'\\n'+e.error.stack:'')]);
+    report({kind:'exception',message:String(e.message),stack:e.error&&e.error.stack||'',file:e.filename||'',line:e.lineno||0,col:e.colno||0});
+  },true);
+  const blankCheck=()=>{try{const b=document.body;const txt=(b&&b.innerText||'').trim();const media=b?b.querySelectorAll('img,svg,canvas,video,iframe').length:0;if(!txt&&!media){report({kind:'blank',message:'Blank page: the preview rendered nothing visible (empty body). The app likely failed to mount or render.'})}}catch(_){}};
+  window.addEventListener('load',()=>{setTimeout(blankCheck,4000)});
+  window.addEventListener('unhandledrejection',e=>{const r=e.reason;send('error',['Unhandled rejection: '+(r&&r.message||r)+(r&&r.stack?'\\n'+r.stack:'')]);report({kind:'rejection',message:'Unhandled rejection: '+(r&&r.message||r),stack:r&&r.stack||''});});
+  const oe=console.error;console.error=function(){try{const a=Array.from(arguments);const er=a.find(x=>x instanceof Error);report({kind:'console',message:a.map(x=>x instanceof Error?x.message:typeof x==='object'?(()=>{try{return JSON.stringify(x)}catch(_){return String(x)}})():String(x)).join(' ').slice(0,1000),stack:er&&er.stack||''})}catch(_){}return oe.apply(console,arguments)};
 })();<\/script>`;
 
 export function injectConsoleBridge(html: string): string {
@@ -58,10 +69,16 @@ export function PreviewFrame({
       const d = e.data as { type?: string; level?: LogLevel; text?: string } | undefined;
       if (d?.type !== "forge-preview-log" || !d.level || !d.text) return;
       counterRef.current += 1;
-      setLogs((cur) => [
-        ...cur.slice(-499),
-        { id: counterRef.current, level: d.level!, text: d.text!, ts: Date.now() },
-      ]);
+      setLogs((cur) => {
+        // Bundle repeats of the same message into one line with a counter.
+        const idx = cur.findIndex((l) => l.level === d.level && l.text === d.text);
+        if (idx !== -1) {
+          const next = cur.slice();
+          next[idx] = { ...next[idx]!, count: next[idx]!.count + 1, ts: Date.now() };
+          return next;
+        }
+        return [...cur.slice(-199), { id: counterRef.current, level: d.level!, text: d.text!, ts: Date.now(), count: 1 }];
+      });
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -187,6 +204,9 @@ export function PreviewFrame({
                 >
                   <span className="opacity-50 mr-2">{l.level.toUpperCase()}</span>
                   {l.text}
+                  {l.count > 1 ? (
+                    <span className="ml-2 rounded-full bg-destructive/15 px-1.5 text-[10px] font-semibold">×{l.count}</span>
+                  ) : null}
                 </div>
               ))
             )}

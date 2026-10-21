@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getCanonicalCallbackUrl } from "@/lib/github-shared";
+import { githubFetch } from "@/lib/github-shared";
+// Every GitHub request in this file carries the required User-Agent.
+const fetch = githubFetch;
 
 function decodeReturnOrigin(s: string): string | null {
   try {

@@ -1,0 +1,90 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791152189661,
+      "tag": "0000_brain_notes_and_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791155554796,
+      "tag": "0001_add_model_preferences_and_visual_briefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791246832422,
+      "tag": "0002_admin_brain_and_vault",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791461180915,
+      "tag": "0003_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791508277806,
+      "tag": "0004_chat_jobs_outcome",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791681121245,
+      "tag": "0005_server_auto_resume_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791768581417,
+      "tag": "0006_chat_jobs_handoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792002299892,
+      "tag": "0007_cloudflare_pool_toggle_cap_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792024060231,
+      "tag": "0008_model_catalog_seen",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792122445054,
+      "tag": "0009_assistant_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792123159617,
+      "tag": "0010_themes_and_chat_key_activation",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792456302662,
+      "tag": "0011_start_build_job",
+      "breakpoints": true
+    }
+  ]
+}
