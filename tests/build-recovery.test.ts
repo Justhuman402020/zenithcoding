@@ -22,4 +22,11 @@ describe("screen-off build recovery", () => {
     await Promise.all(work);
     expect(completed).toBe(true);
   });
+  it("keeps the approved pool restart position without saving browser credentials", () => {
+    const saved = recoveryHeaders(new Headers({ "authorization": "Bearer private-session", "cookie": "private-cookie", "x-forge-mode": "plan", "x-forge-pool-from": "23", "x-forge-approved": "yes" }));
+    expect(saved["x-forge-pool-from"]).toBe("23");
+    expect(saved["x-forge-mode"]).toBe("plan");
+    expect(saved["authorization"]).toBeUndefined();
+    expect(saved["cookie"]).toBeUndefined();
+  });
 });
