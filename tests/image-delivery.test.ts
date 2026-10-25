@@ -6,7 +6,7 @@ describe("image delivery", () => {
     expect(editorRequestChoice("image", true)).toEqual({ mode: "build", engine: "openrouter", imageBuild: true });
   });
   it("routes ordinary Build and Plan to Cloudflare", () => {
-    expect(editorRequestChoice("build", false)).toEqual({ mode: "build", engine: "cloudflare", imageBuild: false });
+    expect(editorRequestChoice("build", false)).toEqual({ mode: "build", engine: "openrouter", imageBuild: false });
     expect(editorRequestChoice("plan", false)).toEqual({ mode: "plan", engine: "cloudflare", imageBuild: false });
   });
   it("keeps an attached image build on VL even with text", () => {

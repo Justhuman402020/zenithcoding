@@ -8,7 +8,8 @@ describe("owner and approved engines", () => {
   });
   it("planning never uses OpenRouter", () => expect(engineFor("plan", "openrouter")).toBe("cloudflare"));
   it("new builds default to the chosen engine", () => expect(engineFor("build", "openrouter")).toBe("openrouter"));
-  it("running builds preserve their engine after a switch", () => expect(engineFor("build", "cloudflare", "openrouter")).toBe("openrouter"));
+  it("builds never switch to Cloudflare, even if Cloudflare is saved", () => expect(engineFor("build", "cloudflare", "cloudflare")).toBe("openrouter"));
+  it("plan stays on Cloudflare", () => expect(engineFor("plan", "openrouter", "openrouter")).toBe("cloudflare"));
   it("shows the 600k allowance separately from the 9500 guard", () => {
     expect(ACCOUNT_ALLOWANCE * ACCOUNT_COUNT).toBe(600000);
     expect(ACCOUNT_GUARD).toBe(9500);
