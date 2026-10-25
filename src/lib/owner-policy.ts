@@ -3,8 +3,9 @@ export function isOwner(user: { email?: string | null; email_confirmed_at?: stri
   return user?.email?.toLowerCase() === OWNER_EMAIL && !!user.email_confirmed_at;
 }
 export type BuildEngine = "openrouter" | "cloudflare";
-export function engineFor(mode: "plan" | "build", saved: BuildEngine, snapshot?: BuildEngine | null): BuildEngine {
-  return mode === "plan" ? "cloudflare" : snapshot ?? saved;
+/** Plan only ever uses Cloudflare; builds only ever use OpenRouter (never switch to Cloudflare). */
+export function engineFor(mode: "plan" | "build", _saved?: BuildEngine, _snapshot?: BuildEngine | null): BuildEngine {
+  return mode === "plan" ? "cloudflare" : "openrouter";
 }
 export const ACCOUNT_ALLOWANCE = 10_000;
 export const ACCOUNT_GUARD = 9_500;

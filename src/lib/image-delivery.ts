@@ -1,10 +1,11 @@
 import type { ModelRef } from "./ai-providers";
 
 export type EditorBuildMode = "plan" | "build" | "image";
+/** Plan always runs on Cloudflare; every build (text or image) runs on OpenRouter. */
 export function editorRequestChoice(mode: EditorBuildMode, hasImages: boolean) {
   return {
     mode: mode === "plan" ? "plan" as const : "build" as const,
-    engine: mode === "image" || (mode === "build" && hasImages) ? "openrouter" as const : "cloudflare" as const,
+    engine: mode === "plan" ? "cloudflare" as const : "openrouter" as const,
     imageBuild: mode === "image" || (mode === "build" && hasImages),
   };
 }

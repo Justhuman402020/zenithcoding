@@ -151,9 +151,9 @@ export async function readAiGatewaySetting(): Promise<AiGatewaySetting> {
 export function gatewayBaseURL(gateway: AiGatewaySetting, providerId: string, fallback: string): string {
   if (!gateway.enabled || !gateway.url) return fallback;
   const base = gateway.url.replace(/\/+$/, "");
-  // Custom providers point at their own server; only known hosted providers
-  // are routed through the gateway.
-  if (providerId.startsWith("custom-")) return fallback;
+  // Custom providers and OpenRouter (incl. the Build key) always go direct —
+  // never through the Cloudflare AI Gateway.
+  if (providerId.startsWith("custom-") || providerId === "build-openrouter" || /openrouter\.ai/i.test(fallback)) return fallback;
   return `${base}/${providerId}`;
 }
 
