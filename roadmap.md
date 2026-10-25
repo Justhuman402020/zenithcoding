@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Stabilize persistent owner sessions and remove public registration; verify owner-only access and session recovery without model calls.
+
 - [x] Add explicit editor Image build routing, preserve image + caption delivery, remove misleading Qwen notices, and expand model About metadata; 30 tests pass and signed-in intercepted image request verified without inference.
 
 - [x] Add full build-key OpenRouter catalog search and model information; verified 467 real models, search/About on desktop and phone, and 27 regression tests without inference.
