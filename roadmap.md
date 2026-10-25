@@ -1,6 +1,7 @@
 # Roadmap
 
-- [ ] Stabilize persistent owner sessions and remove public registration; verify owner-only access and session recovery without model calls.
+- [x] Stop transient owner/device checks redirecting signed-in users; prevent overlapping checks and remove registration controls. Owner browser retained access after reload and offline interruption; 11 tests pass. Account-creation trigger restricts new accounts to the owner.
+- [ ] Verify shared-preview refresh-token rotation across devices: generated auth storage is integration-managed; genuine revoked/missing refresh tokens still require sign-in again.
 
 - [x] Add explicit editor Image build routing, preserve image + caption delivery, remove misleading Qwen notices, and expand model About metadata; 30 tests pass and signed-in intercepted image request verified without inference.
 

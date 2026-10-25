@@ -5,7 +5,8 @@ import { isOwner, sectionTotals } from "./owner-policy";
 import type { RouterModel } from "./openrouter-catalog";
 export const verifyWorkspaceAccess = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data, error } = await context.supabase.rpc("workspace_session_allowed");
-  if (error || !data) throw new Error("Not available");
+  if (error) throw new Error("Access check unavailable");
+  if (!data) throw new Error("Not available");
   return { allowed: true };
 });
 export const getWorkspaceAI = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {

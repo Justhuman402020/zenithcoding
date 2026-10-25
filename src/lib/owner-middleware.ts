@@ -14,10 +14,12 @@ export const ownerFunctionMiddleware = createMiddleware({ type: "function" }).se
     const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
     const token = header.replace(/^Bearer\s+/i, "");
     const { data, error } = await client.auth.getUser(token);
-    if (error || !isOwner(data.user)) throw new Error("Not available");
+    if (error) throw new Error("Session validation unavailable");
+    if (!isOwner(data.user)) throw new Error("Not available");
     const scoped = createClient(url, key, { global: { headers: { Authorization: header } }, auth: { persistSession: false, autoRefreshToken: false } });
     const { data: allowed, error: denied } = await scoped.rpc("workspace_session_allowed");
-    if (denied || !allowed) throw new Error("Not available");
+    if (denied) throw new Error("Access check unavailable");
+    if (!allowed) throw new Error("Not available");
   }
   return next();
 });
