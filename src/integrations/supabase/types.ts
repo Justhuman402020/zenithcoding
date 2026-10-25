@@ -1774,6 +1774,10 @@ export type Database = {
         Returns: number
       }
       workspace_session_allowed: { Args: never; Returns: boolean }
+      workspace_signup_email_allowed: {
+        Args: { candidate_email: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "user"
