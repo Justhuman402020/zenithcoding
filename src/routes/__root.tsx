@@ -17,7 +17,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeBoot } from "@/components/ThemePicker";
 import { Button } from "@/components/ui/button";
-import { isWorkspaceAccessDenied } from "@/lib/session-policy";
+import { authIdentityChanged, isWorkspaceAccessDenied } from "@/lib/session-policy";
 
 function NotFoundComponent() {
   return (
@@ -139,8 +139,14 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
+    let identity: string | null = null;
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextIdentity = session?.user.id ?? null;
+      if (event === "INITIAL_SESSION") { identity = nextIdentity; return; }
       if (!["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) return;
+      const changed = authIdentityChanged(identity, nextIdentity);
+      identity = nextIdentity;
+      if (!changed && event !== "USER_UPDATED") return;
       void router.invalidate();
       if (event !== "SIGNED_OUT") void queryClient.invalidateQueries();
     });

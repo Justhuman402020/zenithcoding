@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isWorkspaceAccessDenied } from "../src/lib/session-policy";
+import { authIdentityChanged, isWorkspaceAccessDenied } from "../src/lib/session-policy";
 import { isOwner } from "../src/lib/owner-policy";
 
 describe("persistent owner access", () => {
+  it("does not restart admission on waking the same signed-in account", () => {
+    expect(authIdentityChanged("owner-id", "owner-id")).toBe(false);
+    expect(authIdentityChanged("owner-id", null)).toBe(true);
+    expect(authIdentityChanged(null, "owner-id")).toBe(true);
+  });
   it("keeps the owner signed in when a connection or service check fails", () => {
     for (const error of [new TypeError("Failed to fetch"), new Error("Network request failed"), new Error("Service unavailable")]) {
       expect(isWorkspaceAccessDenied(error)).toBe(false);

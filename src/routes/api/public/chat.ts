@@ -237,6 +237,17 @@ export const Route = createFileRoute("/api/public/chat")({
               .select("id")
               .single();
         const jobId = createdJob?.id;
+        // A retry from the viewer must observe the saved job, never launch it twice.
+        if (!isResume && existingJob && ["queued", "running"].includes(existingJob.status)) {
+          return createUIMessageStreamResponse({
+            stream: createUIMessageStream({ execute: ({ writer }) => {
+              const id = crypto.randomUUID();
+              writer.write({ type: "text-start", id });
+              writer.write({ type: "text-delta", id, delta: "Your build is running on the server." });
+              writer.write({ type: "text-end", id });
+            } }),
+          });
+        }
         // Save what's needed to restart this build on the server if the worker
         // is cut off after the phone disconnects, then arm the restart check.
         if (jobId && !planMode) {
@@ -358,6 +369,31 @@ export const Route = createFileRoute("/api/public/chat")({
           if (!locked || !allowed.has(locked.provider) || !providerRegistry.some((p) => p.id === locked.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL))) return fail(424, "Select your OpenRouter text/image model in AI Models first.");
           if (!locked) return fail(424, JSON.stringify({ error: "model_unavailable", message: "The Cloudflare pool is off and no non-Cloudflare coding model is selected. Pick one in Admin → Models, or turn the pool on." }), "application/json");
           chain = [locked];
+        }
+
+        // The database owns the initial build connection, not the phone.
+        // Persist all media and the exact selected model before dispatching it.
+        if (!planMode && !isResume) {
+          const selected = chain[0];
+          if (!jobId || !selected) return fail(503, "Could not save the background build.");
+          const { error: savedError } = await supabaseAdmin.from("chat_jobs").update({
+            status: "queued", progress: "Build queued on the server",
+            build_engine: selection.engine, engine_provider: selected.provider, engine_model: selected.model,
+            resume_payload: { messages: body.messages, headers: recoveryHeaders(request.headers, { engine: selection.engine, ...selected }) } as any,
+          }).eq("id", jobId);
+          if (savedError) return fail(503, "Could not save the background build. No model work has started.");
+          const { error: dispatchError } = await (supabaseAdmin as any).rpc("dispatch_saved_build", { _job: jobId });
+          if (dispatchError) return fail(503, "Could not start the background build. No model work has started.");
+          await trace.flush();
+          return createUIMessageStreamResponse({
+            stream: createUIMessageStream({ execute: ({ writer }) => {
+              const id = crypto.randomUUID();
+              writer.write({ type: "text-start", id });
+              writer.write({ type: "text-delta", id, delta: "I'm on it. You can turn your screen off." });
+              writer.write({ type: "text-end", id });
+            } }),
+            headers: { ...traceHeaders, "x-forge-job-id": jobId },
+          });
         }
 
 

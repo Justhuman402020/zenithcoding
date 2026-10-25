@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Move editor builds to a database-owned starter so phone disconnects cannot end the initial build request; preserve owner-only access and explicit approval. Live inference remains approval-gated below.
+
 - [x] Harden screen-off recovery: await saved inputs/timer, retain original media and actual OpenRouter selection, refresh restart claim heartbeat; 25 targeted tests passed without inference.
 - [ ] Verify a real screen-off build finishes on the published runtime: requires explicit approval for live inference; background recovery safeguards verified with synthetic tests only.
 
