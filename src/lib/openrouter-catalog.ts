@@ -9,7 +9,7 @@ export type RouterModel = {
   pricing: Record<string, string>;
   supportedParameters: string[];
   topProvider: { context_length?: number; max_completion_tokens?: number | null; is_moderated?: boolean };
-  details: Record<string, unknown>;
+  details: string;
 };
 
 export function catalogModels(data: Array<Record<string, any>>): RouterModel[] {
@@ -20,7 +20,7 @@ export function catalogModels(data: Array<Record<string, any>>): RouterModel[] {
       description: m.description ?? "", contextLength: m.context_length ?? null,
       inputModalities, outputModalities: m.architecture?.output_modalities ?? [],
       pricing: m.pricing ?? {}, supportedParameters: m.supported_parameters ?? [],
-      topProvider: m.top_provider ?? {}, details: m,
+      topProvider: m.top_provider ?? {}, details: JSON.stringify(m, null, 2),
     };
   });
 }

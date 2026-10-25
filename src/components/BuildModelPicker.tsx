@@ -48,7 +48,7 @@ export function BuildModelPicker({ kind, models, selected, onSelect }: {
           <dt className="text-muted-foreground">Output price</dt><dd>{tokenPrice(about.pricing.completion)}</dd>
         </dl>
         <div><h3 className="text-sm font-medium">Supported parameters</h3><p className="break-words text-sm text-muted-foreground">{about.supportedParameters.join(", ") || "Not provided"}</p></div>
-        <details><summary className="cursor-pointer text-sm">All OpenRouter details</summary><pre className="mt-2 max-w-full whitespace-pre-wrap break-all text-xs">{JSON.stringify(about.details, null, 2)}</pre></details>
+        <details><summary className="cursor-pointer text-sm">All OpenRouter details</summary><pre className="mt-2 max-w-full whitespace-pre-wrap break-all text-xs">{about.details}</pre></details>
         <a href={`https://openrouter.ai/${about.id}`} target="_blank" rel="noreferrer" className="text-sm text-primary underline">View on OpenRouter</a>
       </>}
     </DialogContent></Dialog>
