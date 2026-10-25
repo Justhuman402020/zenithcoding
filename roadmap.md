@@ -1,5 +1,9 @@
 # Roadmap
 
+- [x] Add full build-key OpenRouter catalog search and model information; verified 467 real models, search/About on desktop and phone, and 27 regression tests without inference.
+- [x] Show image support only from declared image inputs and mark Free only when OpenRouter reports zero pricing; validate saved image choices against the activated key catalog.
+- [ ] Verify VL answers with a real image: attachment path corrected and regression-tested; waiting for explicit approval for live image inference.
+
 - [x] Restrict workspace and server requests to the owner; add Security password and device controls.
 - [x] Unify Cloudflare usage ledger and shared neuron log, including plan steps and account totals.
 - [x] Use approved OpenRouter models for chat/image approvals and build engine snapshots, preserving pool rules.

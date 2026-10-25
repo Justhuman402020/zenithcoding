@@ -1,19 +1,9 @@
 import type { UIMessage } from "ai";
 import type { ModelRef, ProviderOption } from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
+import { attachedImageUrls } from "./image-delivery";
 
 export type VisionPlanResult = { brief: string; ref: ModelRef; failed: ModelRef[] };
-
-function imageUrls(messages: UIMessage[]) {
-  const latest = [...messages].reverse().find((message) => message.role === "user");
-  return (latest?.parts ?? []).flatMap((part: any) => {
-    if ((part?.type === "file" || part?.type === "image") && typeof part?.mediaType === "string" && part.mediaType.startsWith("image/")) {
-      const url = part.url ?? part.data ?? part.image;
-      return typeof url === "string" ? [url] : [];
-    }
-    return [];
-  });
-}
 
 const PLANNER_PROMPT = `You are a visual UI planner, not a coding agent. Inspect the supplied image carefully and return a compact implementation brief under 450 words with these exact headings: Layout, Styling, Text, Components, Responsive. Include visible wording, hierarchy, spacing, colors, typography, icons, borders, and structure. Do not write code and do not claim details you cannot see.`;
 
@@ -26,7 +16,7 @@ export async function planAttachedImages(args: {
   gateway: { url: string | null; enabled: boolean };
   onSwitch?: (seconds: number, failed: ModelRef) => Promise<void> | void;
 }): Promise<VisionPlanResult | null> {
-  const urls = imageUrls(args.messages);
+  const urls = attachedImageUrls(args.messages);
   if (!urls.length) return null;
   const { listProviderModels } = await import("./model-discovery.server");
   const { gatewayBaseURL } = await import("./model-router.server");

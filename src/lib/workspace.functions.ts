@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { isOwner, sectionTotals } from "./owner-policy";
+import type { RouterModel } from "./openrouter-catalog";
 export const verifyWorkspaceAccess = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data, error } = await context.supabase.rpc("workspace_session_allowed");
   if (error || !data) throw new Error("Not available");
@@ -18,8 +19,17 @@ export const saveWorkspaceAI = createServerFn({ method: "POST" }).middleware([re
     if (!isOwner(user.user)) throw new Error("Not available");
     const { loadProviderRegistry } = await import("./model-router.server");
     const { providers, keys } = await loadProviderRegistry();
+    const { BUILD_ROUTER_ID, routerModels } = await import("./workspace-ai.server");
     for (const ref of [data.text, data.image]) {
-      if (ref && (!keys[ref.provider] || !providers.some((p) => p.id === ref.provider && /^https:\/\/openrouter\.ai\/api\/v1\/?$/.test(p.baseURL)))) throw new Error("Choose a saved OpenRouter model");
+      if (ref && (ref.provider !== BUILD_ROUTER_ID || !keys[ref.provider] || !providers.some((p) => p.id === ref.provider && /^https:\/\/openrouter\.ai\/api\/v1\/?$/.test(p.baseURL)))) throw new Error("Choose a model from your activated build key");
+    }
+    if (data.text || data.image) {
+      const key = keys[BUILD_ROUTER_ID];
+      if (!key) throw new Error("Activate your build key first");
+      const catalog = await routerModels(key);
+      if (!catalog.ok) throw new Error(catalog.error);
+      for (const ref of [data.text, data.image]) if (ref && !catalog.models.some((m) => m.id === ref.model)) throw new Error("This model is no longer in the build key catalog. Refresh models.");
+      if (data.image && !catalog.models.find((m) => m.id === data.image?.model)?.vision) throw new Error("This model does not declare image input. Choose an image-capable model.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("workspace_ai_settings").upsert({ id: "global", build_engine: data.engine, ...(data.chatEngine ? { chat_engine: data.chatEngine } : {}), text_provider: data.text?.provider ?? null, text_model: data.text?.model ?? null, image_provider: data.image?.provider ?? null, image_model: data.image?.model ?? null, updated_at: new Date().toISOString() });
@@ -39,7 +49,8 @@ export const getNeuronLedger = createServerFn({ method: "GET" }).middleware([req
 });async function ownerOnly(context: any) {
   const { data: user } = await context.supabase.auth.getUser();
   if (!isOwner(user.user)) throw new Error("Not available");
-  return user.user!.id as string;
+  if (!user.user) throw new Error("Not available");
+  return user.user.id;
 }
 export const testBuildRouterKey = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d: { apiKey: string }) => z.object({ apiKey: z.string().min(10).max(300) }).parse(d))
@@ -63,7 +74,7 @@ export const getBuildRouterModels = createServerFn({ method: "GET" }).middleware
   await ownerOnly(context);
   const { routerModels, readBuildRouterKey, BUILD_ROUTER_ID } = await import("./workspace-ai.server");
   const key = await readBuildRouterKey();
-  if (!key) return { active: false, provider: BUILD_ROUTER_ID, models: [] as Array<{ id: string; label: string; vision: boolean }>, error: null as string | null };
+  if (!key) return { active: false, provider: BUILD_ROUTER_ID, models: [] as RouterModel[], error: null as string | null };
   const r = await routerModels(key);
   return { active: true, provider: BUILD_ROUTER_ID, models: r.ok ? r.models : [], error: r.ok ? null : r.error };
 });

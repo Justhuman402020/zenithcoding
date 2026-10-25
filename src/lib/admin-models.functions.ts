@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertModelsAdmin, isModelsAdmin } from "./admin-auth.server";
 import { PROVIDERS } from "./ai-providers";
 import { classifyAccess, newCatalogIds, summarizeByModel, isSelectable } from "./model-access";
+import { routerPriceLabel } from "./openrouter-catalog";
 const isCloudflareBaseUrl = (url: string) => /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(url);
 
 export type ModelBoardRow = {
@@ -112,7 +113,7 @@ export const getModelBoard = createServerFn({ method: "GET" })
         const lastStatus = (status?.last_status as string | null) ?? null;
         const lastError = (status?.last_error as string | null) ?? null;
         rows.push({
-          access: classifyAccess({ model: model.id, cloudflare: isCloudflareBaseUrl(provider.baseURL), lastStatus, lastError }),
+          access: model.routerDetails ? (lastStatus === "unauthorized" || lastStatus === "unavailable" ? "unavailable" : routerPriceLabel(model.routerDetails.pricing) === "Free" ? "free" : routerPriceLabel(model.routerDetails.pricing) === "Paid" ? "paid" : "unavailable") : classifyAccess({ model: model.id, cloudflare: isCloudflareBaseUrl(provider.baseURL), lastStatus, lastError }),
           isNew: false,
           provider: provider.id,
           providerLabel: provider.label,

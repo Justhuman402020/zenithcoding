@@ -52,3 +52,5 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Owner access is revalidated in app function middleware and restrictive session policies; never gate public published sites or signed provider callbacks with workspace access.
 - Workspace planning/build configuration lives separately from manual model selection; approved jobs snapshot their engine/model and use the database starter so retries cannot change engines.
 - All Workers AI inference steps use the normalized Neuron call ledger; aggregate key counters serve budget checks, not a second event history. Routing must never probe Workers AI with inference pings.
+- OpenRouter capability and pricing labels come from authenticated catalog metadata, not name guesses; preserve API order and full details for build-key browsing.
+- Image questions send the actual attachment to the declared vision model; file edits retain the dedicated vision brief pass and running jobs preserve their reader snapshot.

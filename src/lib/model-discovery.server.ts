@@ -12,9 +12,10 @@ import {
 } from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
 import { listModelIds } from "./custom-providers.server";
+import { catalogModels, type RouterModel } from "./openrouter-catalog";
 
 
-export type DiscoveredModel = ModelOption & { curated: boolean };
+export type DiscoveredModel = ModelOption & { curated: boolean; routerDetails?: RouterModel };
 
 type CacheEntry = { at: number; models: DiscoveredModel[] };
 const cache = new Map<string, CacheEntry>();
@@ -40,6 +41,15 @@ export async function listProviderModels(
 
   const cached = cache.get(providerId);
   if (!refresh && cached && Date.now() - cached.at < TTL_MS) return cached.models;
+
+  if (/^https:\/\/openrouter\.ai\/api\/v1\/?$/.test(provider.baseURL)) {
+    const response = await fetch(`${provider.baseURL.replace(/\/$/, "")}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!response.ok) return [];
+    const json = await response.json() as { data?: Array<Record<string, any>> };
+    const models = catalogModels(json.data ?? []).map((m) => ({ id: m.id, label: m.label, hint: m.description, vision: m.vision, tools: m.supportedParameters.includes("tools"), curated: false, routerDetails: m }));
+    cache.set(providerId, { at: Date.now(), models });
+    return models;
+  }
 
 
   const curated = new Map(provider.models.map((m) => [m.id, m]));

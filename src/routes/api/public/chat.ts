@@ -383,7 +383,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
         const gateway = await readAiGatewaySetting();
         let visualBrief = "";
-        if (hasImages && !planMode) {
+        if (hasImages && !planMode && needsFileChange) {
           const selectedVision = parseModelKey(request.headers.get("x-forge-vision-model"));
           const { data: poolSettings } = await supabaseAdmin
             .from("ai_pool_settings")
@@ -394,11 +394,12 @@ export const Route = createFileRoute("/api/public/chat")({
             ? { provider: poolSettings.vision_provider, model: poolSettings.vision_model }
             : null);
           const { planAttachedImages } = await import("@/lib/vision-planner.server");
+          const { imageReaderRef } = await import("@/lib/image-delivery");
           const visualPlan = await planAttachedImages({
             messages: compactMessages,
             providers: providerRegistry.filter((p) => /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL)),
             keys: providerKeys,
-            preferred: engineRef ?? visionPreference,
+            preferred: imageReaderRef(existingJob?.engine_provider ? engineRef : null, selectedVision, engineRef ?? visionPreference),
             strict: true,
             gateway,
             onSwitch: async () => {},
@@ -518,7 +519,12 @@ export const Route = createFileRoute("/api/public/chat")({
         });
 
         // A text-only model would 400 on image parts — drop them rather than fail.
-        const visionOk = modelSupportsVision(pick.ref);
+        const { listProviderModels: listPickedModels } = await import("@/lib/model-discovery.server");
+        const pickedProvider = providerRegistry.find((p) => p.id === pick.ref.provider);
+        const visionOk = hasImages && pickedProvider && /^https:\/\/openrouter\.ai\/api\/v1/.test(pickedProvider.baseURL)
+          ? (await listPickedModels(pick.ref.provider, pick.apiKey, pickedProvider)).find((m) => m.id === pick.ref.model)?.vision === true
+          : modelSupportsVision(pick.ref);
+        if (hasImages && !planMode && !visualBrief && !visionOk) return fail(424, "The selected model does not declare image input. Choose an image-capable OpenRouter model.");
         // GitHub Models' free tier only accepts ~8k input / 4k output tokens per
         // request, so send a much shorter history there or it silently rejects.
         const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);

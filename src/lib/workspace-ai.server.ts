@@ -1,4 +1,5 @@
 import { engineFor, type BuildEngine } from "./owner-policy";
+import { catalogModels } from "./openrouter-catalog";
 export async function readWorkspaceAI() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin.from("workspace_ai_settings").select("*").eq("id", "global").maybeSingle();
@@ -22,8 +23,8 @@ export async function routerModels(apiKey: string) {
   if (!auth.ok) return { ok: false as const, error: auth.status === 401 ? "OpenRouter rejected this key" : `OpenRouter ${auth.status}` };
   const res = await fetch(`${ROUTER_URL}/models`, { headers: { Authorization: `Bearer ${key}` } });
   if (!res.ok) return { ok: false as const, error: `OpenRouter ${res.status}` };
-  const j = (await res.json()) as { data?: Array<{ id: string; name?: string; architecture?: { input_modalities?: string[] } }> };
-  const models = (j.data ?? []).map((m) => ({ id: m.id, label: m.name ?? m.id, vision: !!m.architecture?.input_modalities?.includes("image") }));
+  const j = (await res.json()) as { data?: Array<Record<string, any>> };
+  const models = catalogModels(j.data ?? []);
   return { ok: true as const, models };
 }
 export async function readBuildRouterKey() {
