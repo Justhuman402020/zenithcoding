@@ -99,6 +99,13 @@
       "when": 1792928898321,
       "tag": "0013_chat_engine_revert",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792929221432,
+      "tag": "0014_owner_service_session_support",
+      "breakpoints": true
     }
   ]
 }
