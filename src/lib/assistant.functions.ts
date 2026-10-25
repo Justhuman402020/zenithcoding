@@ -217,11 +217,11 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
     }
     const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
-    const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at").limit(60);
+    const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at", { ascending: false }).limit(60);
     const ctxText = await buildContext(context as Ctx, chat.project_id);
     let reply: string;
     try {
-      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...((history ?? []) as any[]).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })), ...(data.images?.length ? [{ role: "user", content: [{ type: "text", text: data.text }, ...data.images.map((image) => ({ type: "image_url", image_url: { url: image.url } }))] }] : [])], !!data.images?.length);
+      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...((history ?? []).reverse() as any[]).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })), ...(data.images?.length ? [{ role: "user", content: [{ type: "text", text: data.text }, ...data.images.map((image) => ({ type: "image_url", image_url: { url: image.url } }))] }] : [])], !!data.images?.length);
     } catch (e) {
       reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }

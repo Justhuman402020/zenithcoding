@@ -882,7 +882,7 @@ export const Route = createFileRoute("/api/public/chat")({
               const { recordNeuronCall } = await import("@/lib/workspace-ai.server");
               await recordNeuronCall({ user_id: userId, project_id: projectId, request_key: requestKey, section: planMode ? "plan" : "build", provider_id: current.ref.provider, key_number: poolPositions.get(current.ref.provider), model: current.ref.model, neurons: c.neurons, source: c.source, action: "Interrupted call", status: "partial" });
             }
-            if (cfPool && attemptNeurons > 0) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
+            // The ledger trigger atomically updates the daily key total.
             runUsed += attemptNeurons;
             if (handoff && cfPool) {
               if (attemptSteps.length) carried = [...carried, ...attemptSteps];
@@ -1100,7 +1100,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
             }
-            await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText });
+            if (!planMode) await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText });
             await saveProgress({
               status: truncated ? "unfinished" : "finished",
               lastRequest: lastUserText.slice(0, 600),

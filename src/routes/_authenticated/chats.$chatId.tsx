@@ -176,7 +176,7 @@ function ChatPage() {
         <div className="mx-auto max-w-2xl">
           {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-1">{attachments.map((a, i) => <span key={i} className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">{a.name}<button aria-label="Remove" onClick={() => setAttachments((x) => x.filter((_, j) => j !== i))}><X className="h-3 w-3" /></button></span>)}</div>}
           <div className="flex items-end gap-2 rounded-2xl border bg-card p-2">
-            <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={async (id) => { await setup({ data: { id: chatId, projectId: id, initialize: !!(data.chat.keyId && data.chat.model) } }).catch((e) => toast.error(e.message)); void reload(); }} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} />
+            <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={async (id) => { await setup({ data: { id: chatId, projectId: id, initialize: false } }).catch((e) => toast.error(e.message)); void reload(); }} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} />
             <Textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask about your project…" className="min-h-10 max-h-40 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
             <Button size="icon" className="rounded-full shrink-0" disabled={busy || !text.trim()} onClick={submit} aria-label="Send"><ArrowUp className="h-4 w-4" /></Button>
           </div>
