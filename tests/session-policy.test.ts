@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authIdentityChanged, isWorkspaceAccessDenied } from "../src/lib/session-policy";
+import { authIdentityChanged, isSessionRejected, isWorkspaceAccessDenied } from "../src/lib/session-policy";
 import { isOwner } from "../src/lib/owner-policy";
 
 describe("persistent owner access", () => {
@@ -20,5 +20,14 @@ describe("persistent owner access", () => {
     expect(isOwner({ email: "justsamsung99@gmail.com", email_confirmed_at: "2026-10-25" })).toBe(true);
     expect(isOwner({ email: "someone@gmail.com", email_confirmed_at: "2026-10-25" })).toBe(false);
     expect(isOwner({ email: "justsamsung99@gmail.com" })).toBe(false);
+  });
+  it("keeps the saved sign-in when the account check has a connection error", () => {
+    expect(isSessionRejected({ name: "AuthRetryableFetchError", status: 0 })).toBe(false);
+    expect(isSessionRejected(new TypeError("Failed to fetch"))).toBe(false);
+    expect(isSessionRejected(null)).toBe(false);
+  });
+  it("asks for sign-in only when the session is really rejected", () => {
+    expect(isSessionRejected({ name: "AuthApiError", status: 401 })).toBe(true);
+    expect(isSessionRejected({ name: "AuthSessionMissingError", status: 400 })).toBe(true);
   });
 });
