@@ -158,6 +158,15 @@ export async function agreeMetaLicense(baseUrl: string, token: string): Promise<
       signal: AbortSignal.timeout(20000),
     });
     const text = await res.text().catch(() => "");
+    const { countCall } = await import("./cf-pool-policy");
+    const { recordNeuronCall } = await import("./workspace-ai.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: saved } = await supabaseAdmin.from("custom_ai_providers").select("id,pool_position").eq("base_url", baseUrl).maybeSingle();
+    let json: any;
+    try { json = JSON.parse(text); } catch { json = null; }
+    const cost = countCall({ model: CLOUDFLARE_VISION_MODEL, inputTokens: json?.usage?.prompt_tokens, outputTokens: json?.usage?.completion_tokens, chars: String(json?.result?.response ?? "").length });
+    await recordNeuronCall({ section: "chat", provider_id: saved?.id ?? "unsaved-account", key_number: saved?.pool_position ?? undefined, model: CLOUDFLARE_VISION_MODEL, neurons: cost.neurons, source: cost.source, action: "Admin license agreement", status: res.ok ? "ok" : "failed" });
+    if (saved && cost.neurons) await addNeurons(saved.id, cost.neurons);
     // Cloudflare answers the agree call with either success or a "Thank you for agreeing" message.
     if (res.ok || /thank you for agreeing/i.test(text)) return { ok: true, error: null };
     return { ok: false, error: `${res.status}: ${text.slice(0, 200)}` };
