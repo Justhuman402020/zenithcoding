@@ -201,6 +201,9 @@ export async function pickAvailableModel(
     if (!provider || !apiKey) continue;
 
     const baseURL = gateway ? gatewayBaseURL(gateway, ref.provider, provider.baseURL) : provider.baseURL;
+    // Never spend Neurons on routing probes. The pool loop performs budget,
+    // quota-vs-rate-limit and ordered handoff checks on the actual call.
+    if (/api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai/i.test(provider.baseURL)) return { ok: true, ref, apiKey, baseURL };
 
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response;

@@ -6,7 +6,7 @@ export async function readWorkspaceAI() {
 }
 export async function workspacePick(mode: "plan" | "build", snapshot: BuildEngine | null, images: boolean) {
   const settings = await readWorkspaceAI();
-  return { chatEngine: data?.chat_engine ?? "openrouter", engine: images && mode === "build" ? "openrouter" as const : engineFor(mode, settings.engine, snapshot), ref: images ? settings.image : settings.text };
+  return { engine: images && mode === "build" ? "openrouter" as const : engineFor(mode, settings.engine, snapshot), ref: images ? settings.image : settings.text };
 }
 export async function recordNeuronCall(row: { user_id?: string; project_id?: string; chat_id?: string; request_key?: string; section: "chat" | "plan" | "build"; provider_id: string; key_number?: number; model: string; step?: number; input_tokens?: number; output_tokens?: number; neurons: number; source?: string; action?: string; status?: string }) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
