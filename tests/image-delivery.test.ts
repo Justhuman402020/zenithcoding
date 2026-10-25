@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { attachedImageUrls, imageReaderRef } from "../src/lib/image-delivery";
+import { attachedImageUrls, imageReaderRef, editorRequestChoice } from "../src/lib/image-delivery";
 
 describe("image delivery", () => {
+  it("routes Image build with captions to OpenRouter, never Cloudflare", () => {
+    expect(editorRequestChoice("image", true)).toEqual({ mode: "build", engine: "openrouter", imageBuild: true });
+  });
+  it("routes ordinary Build and Plan to Cloudflare", () => {
+    expect(editorRequestChoice("build", false)).toEqual({ mode: "build", engine: "cloudflare", imageBuild: false });
+    expect(editorRequestChoice("plan", false)).toEqual({ mode: "plan", engine: "cloudflare", imageBuild: false });
+  });
+  it("keeps an attached image build on VL even with text", () => {
+    expect(editorRequestChoice("build", true)).toEqual({ mode: "build", engine: "openrouter", imageBuild: true });
+  });
   it("preserves current SDK and legacy image attachments", () => {
     expect(attachedImageUrls([{ role: "user", parts: [
       { type: "file", mediaType: "image/jpeg", url: "data:image/jpeg;base64,YQ==" },

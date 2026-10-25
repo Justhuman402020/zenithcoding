@@ -3,6 +3,7 @@ export type RouterModel = {
   label: string;
   vision: boolean;
   description: string;
+  releasedAt: string | null;
   contextLength: number | null;
   inputModalities: string[];
   outputModalities: string[];
@@ -18,6 +19,7 @@ export function catalogModels(data: Array<Record<string, any>>): RouterModel[] {
     return {
       id: m.id, label: m.name ?? m.id, vision: inputModalities.includes("image"),
       description: m.description ?? "", contextLength: m.context_length ?? null,
+      releasedAt: typeof m.created === "number" && Number.isFinite(m.created) ? new Date(m.created * 1000).toISOString() : null,
       inputModalities, outputModalities: m.architecture?.output_modalities ?? [],
       pricing: m.pricing ?? {}, supportedParameters: m.supported_parameters ?? [],
       topProvider: m.top_provider ?? {}, details: JSON.stringify(m, null, 2),

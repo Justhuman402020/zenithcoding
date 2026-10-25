@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { editorRequestChoice, type EditorBuildMode } from "@/lib/image-delivery";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { NeuronLog } from "@/components/NeuronLog";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -426,8 +427,10 @@ function ProjectEditor() {
     });
   }, []);
   // Plan first (think + approve) or build straight away.
-  const [mode, setMode] = useState<"plan" | "build">("build");
-  const modeRef = useRef<"plan" | "build">("build");
+  const [mode, setMode] = useState<EditorBuildMode>("build");
+  const modeRef = useRef<EditorBuildMode>("build");
+  const requestModeRef = useRef<EditorBuildMode | null>(null);
+  const requestImagesRef = useRef(false);
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
   // Messages typed while Forge is working wait here instead of being lost.
@@ -456,7 +459,7 @@ function ProjectEditor() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem("forge:chat-mode");
-    if (saved === "plan" || saved === "build") {
+    if (saved === "plan" || saved === "build" || saved === "image") {
       setMode(saved);
       modeRef.current = saved;
     }
@@ -877,12 +880,13 @@ function ProjectEditor() {
           if (ref) headers["x-forge-model"] = modelKey(ref);
           const visionRef = window.localStorage.getItem(VISION_MODEL_STORAGE_KEY);
           if (visionRef) headers["x-forge-vision-model"] = visionRef;
-          headers["x-forge-mode"] = modeRef.current;
-          if (modeRef.current === "build") {
-            if (!window.confirm("Send this request to the selected build engine? Yes starts the build.")) throw new Error("Build not approved");
-            headers["x-forge-approved"] = "yes";
-          }
-          headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
+          const choice = editorRequestChoice(requestModeRef.current ?? modeRef.current, requestImagesRef.current);
+          headers["x-forge-mode"] = choice.mode;
+          headers["x-forge-engine"] = choice.engine;
+          if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
+          if (!window.confirm(choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : "Send the image and text to your selected OpenRouter image model?")) throw new Error("Request not approved");
+          headers["x-forge-approved"] = "yes";
+          headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
           if (poolFromRef.current) {
             headers["x-forge-pool-from"] = String(poolFromRef.current);
             poolFromRef.current = null;
@@ -1394,6 +1398,12 @@ function ProjectEditor() {
   // Actually hands one message to the agent. Used both for an immediate send
   // and for a message that waited in the queue while Code Haven was busy.
   async function deliverMessage(text: string, atts: Attachment[]) {
+    if (modeRef.current === "image" && !atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0)) {
+      toast.error("Attach an image for Image build.");
+      return;
+    }
+    requestModeRef.current = modeRef.current;
+    requestImagesRef.current = atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0);
     requestKeyRef.current = crypto.randomUUID();
     autoContinueRef.current = 0;
 
@@ -2481,7 +2491,7 @@ function ProjectEditor() {
               {switchCountdown !== null ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
                   <span>
-                    The model stopped mid-work. Switching to the next Qwen 3.8 key… <strong className="tabular-nums">{switchCountdown}</strong>/5
+                    The model stopped mid-work. Switching to the next approved key… <strong className="tabular-nums">{switchCountdown}</strong>/5
                   </span>
                   <button type="button" className="font-medium underline" onClick={() => setSwitchCountdown(null)}>
                     Cancel
@@ -2581,17 +2591,20 @@ function ProjectEditor() {
                   ))}
                 </div>
               )}
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
                 {([
                   { key: "plan" as const, label: "Plan", icon: Lightbulb, hint: "Think, ask questions, propose a plan first" },
                   { key: "build" as const, label: "Build", icon: HammerIcon, hint: "Build it straight away" },
+                  { key: "image" as const, label: "Image build", icon: ImageIcon, hint: "Use the selected OpenRouter image model" },
                 ]).map((option) => (
-                  <button
+                  <Button
                     key={option.key}
                     type="button"
+                    variant="ghost"
+                    aria-pressed={mode === option.key}
                     title={option.hint}
-                    onClick={() => setMode(option.key)}
+                    onClick={() => { setMode(option.key); modeRef.current = option.key; requestModeRef.current = null; }}
                     className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
                       mode === option.key
                         ? "bg-primary/15 text-primary border border-primary/40"
@@ -2600,11 +2613,8 @@ function ProjectEditor() {
                   >
                     <option.icon className="h-3 w-3" />
                     {option.label}
-                  </button>
+                  </Button>
                 ))}
-                <span className="text-[10px] text-muted-foreground truncate">
-                  {mode === "plan" ? "I'll plan and wait for your approval" : "I'll build it right away"}
-                </span>
               </div>
               {!isStreaming && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
