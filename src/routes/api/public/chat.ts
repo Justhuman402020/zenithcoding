@@ -143,6 +143,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const cloneMode = request.headers.get("x-forge-clone") === "1";
         const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
         const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
+        if (!planMode && needsFileChange && !isResume && request.headers.get("x-forge-approved") !== "yes") return fail(403, "Build approval required");
         trace.log("request.parsed", {
           detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
@@ -235,7 +236,7 @@ export const Route = createFileRoute("/api/public/chat")({
           const resumePayload = {
             messages: compactMessages0(body.messages),
             headers: Object.fromEntries(
-              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-approval"]
+              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-approval", "x-forge-approved"]
                 .map((h) => [h, request.headers.get(h)])
                 .filter(([, v]) => v != null),
             ),

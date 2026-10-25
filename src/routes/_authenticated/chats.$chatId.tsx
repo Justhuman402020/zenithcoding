@@ -109,7 +109,7 @@ function ChatPage() {
           <div className="truncate font-semibold">{data.chat.title}</div>
           <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
-        <NeuronLog /><Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button>
+        <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
       </header>
       <main className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-4">

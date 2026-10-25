@@ -878,6 +878,10 @@ function ProjectEditor() {
           const visionRef = window.localStorage.getItem(VISION_MODEL_STORAGE_KEY);
           if (visionRef) headers["x-forge-vision-model"] = visionRef;
           headers["x-forge-mode"] = modeRef.current;
+          if (modeRef.current === "build") {
+            if (!window.confirm("Send this request to the selected build engine? Yes starts the build.")) throw new Error("Build not approved");
+            headers["x-forge-approved"] = "yes";
+          }
           headers["x-forge-auto"] = autoSwitchRef.current ? "on" : "off";
           if (poolFromRef.current) {
             headers["x-forge-pool-from"] = String(poolFromRef.current);
