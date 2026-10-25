@@ -917,7 +917,7 @@ function ProjectEditor() {
       }
       // A question that never got an answer must not stay in the chat: it would
       // be resent forever and squeeze out the real work.
-      if (!userStoppedRef.current && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
+      if (!userStoppedRef.current && editorRequestChoice(requestModeRef.current ?? modeRef.current, requestImagesRef.current).engine === "cloudflare" && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
         switchTriesRef.current += 1;
         setSwitchCountdown(0);
         return;
@@ -928,7 +928,7 @@ function ProjectEditor() {
     onFinish: ({ isError, isAbort }: { isError?: boolean; isAbort?: boolean }) => {
       // Server watchdog aborted a hung model (35s silence): hand over to the
       // next key with the same countdown used for errors.
-      if (isAbort && !userStoppedRef.current && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
+      if (isAbort && !userStoppedRef.current && editorRequestChoice(requestModeRef.current ?? modeRef.current, requestImagesRef.current).engine === "cloudflare" && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
         switchTriesRef.current += 1;
         setSwitchCountdown(0);
       } else if (!isError && !isAbort) switchTriesRef.current = 0;
