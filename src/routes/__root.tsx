@@ -7,7 +7,10 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { verifyWorkspaceAccess } from "@/lib/workspace.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -91,8 +94,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "Code Haven — AI website builder" },
       { name: "twitter:description", content: "Plan, build, preview, and publish websites with AI coding agents." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d8c760d5-cd86-4ab2-9df1-8b5d7c99c21e" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d8c760d5-cd86-4ab2-9df1-8b5d7c99c21e" },
     ],
     links: [
       {
@@ -134,13 +135,45 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (!["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) return;
+      void router.invalidate();
+      if (event !== "SIGNED_OUT") void queryClient.invalidateQueries();
+    });
+    return () => data.subscription.unsubscribe();
+  }, [router, queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <ThemeBoot />
-      <Outlet />
+      <WorkspaceGate><Outlet /></WorkspaceGate>
       <Toaster position="top-center" richColors />
     </QueryClientProvider>
   );
+}
+
+function WorkspaceGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const verify = useServerFn(verifyWorkspaceAccess);
+  const [allowed, setAllowed] = useState(false);
+  const path = router.state.location.pathname;
+  const privatePath = path === "/" || /^\/(admin|chats|p|account)(\/|$)/.test(path);
+  useEffect(() => {
+    if (!privatePath) return;
+    let live = true;
+    setAllowed(false);
+    async function check() {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) { await router.navigate({ to: "/auth", replace: true }); return; }
+      try { await verify(); if (live) setAllowed(true); }
+      catch { if (live) await router.navigate({ to: "/not-available", replace: true }); }
+    }
+    void check();
+    const timer = setInterval(() => void check(), 30_000);
+    return () => { live = false; clearInterval(timer); };
+  }, [path, privatePath, verify, router]);
+  return !privatePath || allowed ? children : <div className="min-h-screen grid place-items-center text-muted-foreground">Checking access…</div>;
 }

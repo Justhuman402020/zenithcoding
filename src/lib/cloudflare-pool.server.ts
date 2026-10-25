@@ -3,7 +3,7 @@
 // and waterfall to #2, #3… when a key runs out or answers 429.
 
 export const NEURONS_PER_KEY = 10_000;
-export const MAX_POOL_KEYS = 100;
+export const MAX_POOL_KEYS = 60;
 /** Hand off to the next key at 9,000 so every key keeps a 1,000 Neuron reserve. */
 export const SOFT_CAP_NEURONS = 9_000;
 export const CLOUDFLARE_CODING_MODEL = "@cf/qwen/qwen3.8-27b";
@@ -102,9 +102,9 @@ export async function loadCloudflarePool(): Promise<PoolKey[]> {
     const u = byId.get(r.id);
     const realUsed = real[i];
     const source: PoolKey["source"] = realUsed == null ? "estimate" : "cloudflare";
-    const used = realUsed ?? Number(u?.neurons_used ?? 0);
+    const used = Math.max(realUsed ?? 0, Number(u?.neurons_used ?? 0));
     // A 429 from Cloudflare is the truth even if analytics lag behind.
-    const remaining = u?.exhausted ? 0 : Math.max(0, NEURONS_PER_KEY - used);
+    const remaining = u?.exhausted ? 0 : Math.max(0, 9500 - used);
     let status: PoolKey["status"] = remaining <= 0 || used >= SOFT_CAP_NEURONS ? "exhausted" : "waiting";
     if (status === "waiting" && !activeSet) {
       status = "active";
@@ -158,6 +158,14 @@ export async function agreeMetaLicense(baseUrl: string, token: string): Promise<
       signal: AbortSignal.timeout(20000),
     });
     const text = await res.text().catch(() => "");
+    const { countCall } = await import("./cf-pool-policy");
+    const { recordNeuronCall } = await import("./workspace-ai.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: saved } = await supabaseAdmin.from("custom_ai_providers").select("id,pool_position").eq("base_url", baseUrl).maybeSingle();
+    let json: any;
+    try { json = JSON.parse(text); } catch { json = null; }
+    const cost = countCall({ model: CLOUDFLARE_VISION_MODEL, inputTokens: json?.usage?.prompt_tokens, outputTokens: json?.usage?.completion_tokens, chars: String(json?.result?.response ?? "").length });
+    await recordNeuronCall({ section: "chat", provider_id: saved?.id ?? "unsaved-account", key_number: saved?.pool_position ?? undefined, model: CLOUDFLARE_VISION_MODEL, neurons: cost.neurons, source: cost.source, action: "Admin license agreement", status: res.ok ? "ok" : "failed" });
     // Cloudflare answers the agree call with either success or a "Thank you for agreeing" message.
     if (res.ok || /thank you for agreeing/i.test(text)) return { ok: true, error: null };
     return { ok: false, error: `${res.status}: ${text.slice(0, 200)}` };

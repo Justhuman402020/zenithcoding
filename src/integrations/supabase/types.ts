@@ -263,6 +263,8 @@ export type Database = {
           chat_job_id: string | null
           created_at: string
           id: string
+          images: Json
+          kind: string
           project_id: string
           prompt: string
           report: Json | null
@@ -276,6 +278,8 @@ export type Database = {
           chat_job_id?: string | null
           created_at?: string
           id?: string
+          images?: Json
+          kind?: string
           project_id: string
           prompt: string
           report?: Json | null
@@ -289,6 +293,8 @@ export type Database = {
           chat_job_id?: string | null
           created_at?: string
           id?: string
+          images?: Json
+          kind?: string
           project_id?: string
           prompt?: string
           report?: Json | null
@@ -356,8 +362,11 @@ export type Database = {
         Row: {
           assistant_reply: string | null
           auto_resumes: number
+          build_engine: string | null
           completed_at: string | null
           created_at: string
+          engine_model: string | null
+          engine_provider: string | null
           error: string | null
           files_changed: number
           handoff: Json | null
@@ -382,8 +391,11 @@ export type Database = {
         Insert: {
           assistant_reply?: string | null
           auto_resumes?: number
+          build_engine?: string | null
           completed_at?: string | null
           created_at?: string
+          engine_model?: string | null
+          engine_provider?: string | null
           error?: string | null
           files_changed?: number
           handoff?: Json | null
@@ -408,8 +420,11 @@ export type Database = {
         Update: {
           assistant_reply?: string | null
           auto_resumes?: number
+          build_engine?: string | null
           completed_at?: string | null
           created_at?: string
+          engine_model?: string | null
+          engine_provider?: string | null
           error?: string | null
           files_changed?: number
           handoff?: Json | null
@@ -724,6 +739,66 @@ export type Database = {
           dismissed?: boolean
           first_seen_at?: string
           model_id?: string
+        }
+        Relationships: []
+      }
+      neuron_call_ledger: {
+        Row: {
+          action: string
+          chat_id: string | null
+          created_at: string
+          id: string
+          input_tokens: number | null
+          key_number: number | null
+          model: string
+          neurons: number
+          output_tokens: number | null
+          project_id: string | null
+          provider_id: string
+          request_key: string | null
+          section: string
+          source: string
+          status: string
+          step: number
+          user_id: string | null
+        }
+        Insert: {
+          action?: string
+          chat_id?: string | null
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          key_number?: number | null
+          model: string
+          neurons?: number
+          output_tokens?: number | null
+          project_id?: string | null
+          provider_id: string
+          request_key?: string | null
+          section: string
+          source?: string
+          status?: string
+          step?: number
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          chat_id?: string | null
+          created_at?: string
+          id?: string
+          input_tokens?: number | null
+          key_number?: number | null
+          model?: string
+          neurons?: number
+          output_tokens?: number | null
+          project_id?: string | null
+          provider_id?: string
+          request_key?: string | null
+          section?: string
+          source?: string
+          status?: string
+          step?: number
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1580,6 +1655,39 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_ai_settings: {
+        Row: {
+          build_engine: string
+          chat_engine: string
+          id: string
+          image_model: string | null
+          image_provider: string | null
+          text_model: string | null
+          text_provider: string | null
+          updated_at: string
+        }
+        Insert: {
+          build_engine?: string
+          chat_engine?: string
+          id?: string
+          image_model?: string | null
+          image_provider?: string | null
+          text_model?: string | null
+          text_provider?: string | null
+          updated_at?: string
+        }
+        Update: {
+          build_engine?: string
+          chat_engine?: string
+          id?: string
+          image_model?: string | null
+          image_provider?: string | null
+          text_model?: string | null
+          text_provider?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       workspace_members: {
         Row: {
           created_at: string
@@ -1655,6 +1763,7 @@ export type Database = {
         Args: { _user: string; _ws: string }
         Returns: boolean
       }
+      start_approved_workspace_job: { Args: { _edit: string }; Returns: number }
       start_build_job: {
         Args: {
           _project: string
@@ -1664,6 +1773,7 @@ export type Database = {
         }
         Returns: number
       }
+      workspace_session_allowed: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user"

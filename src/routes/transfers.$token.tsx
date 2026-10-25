@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Loader2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/transfers/$token")({
-  head: () => ({ meta: [{ title: "Accept project transfer — Code Haven" }] }),
+  head: () => ({ meta: [{ title: "Accept project transfer — Code Haven" }, { name: "description", content: "Review a shared Code Haven project transfer." }, { property: "og:title", content: "Accept project transfer — Code Haven" }, { property: "og:description", content: "Review a shared Code Haven project transfer." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: TransferPage,
   errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-8">Transfer not found</div>,

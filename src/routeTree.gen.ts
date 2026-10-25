@@ -13,6 +13,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as NotAvailableRouteImport } from './routes/not-available'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
@@ -28,6 +29,7 @@ import { Route as AuthenticatedAdminBrainRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
 import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
 import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats.index'
 import { Route as AuthenticatedChatsChatIdRouteImport } from './routes/_authenticated/chats.$chatId'
@@ -62,6 +64,11 @@ const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotAvailableRoute = NotAvailableRouteImport.update({
+  id: '/not-available',
+  path: '/not-available',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TemplatesRoute = TemplatesRouteImport.update({
@@ -143,6 +150,12 @@ const AuthenticatedAdminModelsRoute =
   AuthenticatedAdminModelsRouteImport.update({
     id: '/admin/models',
     path: '/admin/models',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/admin/settings',
+    path: '/admin/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
@@ -235,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/mcp': typeof McpRoute
+  '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
@@ -248,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
@@ -270,6 +285,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/mcp': typeof McpRoute
+  '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
@@ -284,6 +300,7 @@ export interface FileRoutesByTo {
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
@@ -308,6 +325,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
   '/mcp': typeof McpRoute
+  '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
@@ -322,6 +340,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/_authenticated/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
@@ -347,6 +366,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/mcp'
+    | '/not-available'
     | '/templates'
     | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
@@ -360,6 +380,7 @@ export interface FileRouteTypes {
     | '/admin/domains'
     | '/admin/integrations'
     | '/admin/models'
+    | '/admin/settings'
     | '/admin/users'
     | '/chats/$chatId'
     | '/p/$projectId'
@@ -382,6 +403,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/mcp'
+    | '/not-available'
     | '/templates'
     | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
@@ -396,6 +418,7 @@ export interface FileRouteTypes {
     | '/admin/domains'
     | '/admin/integrations'
     | '/admin/models'
+    | '/admin/settings'
     | '/admin/users'
     | '/chats/$chatId'
     | '/p/$projectId'
@@ -419,6 +442,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forge-sdk.js'
     | '/mcp'
+    | '/not-available'
     | '/templates'
     | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
@@ -433,6 +457,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/domains'
     | '/_authenticated/admin/integrations'
     | '/_authenticated/admin/models'
+    | '/_authenticated/admin/settings'
     | '/_authenticated/admin/users'
     | '/_authenticated/chats/$chatId'
     | '/_authenticated/p/$projectId'
@@ -457,6 +482,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
   McpRoute: typeof McpRoute
+  NotAvailableRoute: typeof NotAvailableRoute
   TemplatesRoute: typeof TemplatesRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   LiveProjectIdRoute: typeof LiveProjectIdRoute
@@ -505,6 +531,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/not-available': {
+      id: '/not-available'
+      path: '/not-available'
+      fullPath: '/not-available'
+      preLoaderRoute: typeof NotAvailableRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/templates': {
@@ -610,6 +643,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/models'
       fullPath: '/admin/models'
       preLoaderRoute: typeof AuthenticatedAdminModelsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/users': {
@@ -749,6 +789,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminDomainsRoute: typeof AuthenticatedAdminDomainsRoute
   AuthenticatedAdminIntegrationsRoute: typeof AuthenticatedAdminIntegrationsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedChatsChatIdRoute: typeof AuthenticatedChatsChatIdRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
@@ -764,6 +805,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminDomainsRoute: AuthenticatedAdminDomainsRoute,
   AuthenticatedAdminIntegrationsRoute: AuthenticatedAdminIntegrationsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
+  AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
   AuthenticatedChatsChatIdRoute: AuthenticatedChatsChatIdRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
@@ -779,6 +821,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
   McpRoute: McpRoute,
+  NotAvailableRoute: NotAvailableRoute,
   TemplatesRoute: TemplatesRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,

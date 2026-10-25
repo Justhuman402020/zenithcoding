@@ -61,6 +61,9 @@ export const Route = createFileRoute("/api/public/push-stream")({
         });
         const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
         if (userErr || !userRes.user) return new Response("Unauthorized", { status: 401 });
+        const { isOwner } = await import("@/lib/owner-policy");
+        const { data: allowed } = await supabase.rpc("workspace_session_allowed");
+        if (!isOwner(userRes.user) || !allowed) return new Response("Not available", { status: 403 });
         const userId = userRes.user.id;
 
         const encoder = new TextEncoder();

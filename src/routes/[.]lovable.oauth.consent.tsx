@@ -13,7 +13,7 @@ const oauth = () => (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
 
 export const Route = createFileRoute("/.lovable/oauth/consent")({
   ssr: false,
-  head: () => ({ meta: [{ title: "Connect an app — Code Haven" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Connect an app — Code Haven" }, { name: "robots", content: "noindex" }, { name: "description", content: "Approve a connection to your private Code Haven workspace." }, { property: "og:title", content: "Connect an app — Code Haven" }, { property: "og:description", content: "Approve a Code Haven workspace connection." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   validateSearch: (s: Record<string, unknown>) => ({
     authorization_id: typeof s.authorization_id === "string" ? s.authorization_id : "",
   }),

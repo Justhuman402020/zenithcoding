@@ -1,9 +1,12 @@
 # Roadmap
 
-- [ ] Restrict workspace and server requests to the owner; add Security password and device controls.
-- [ ] Unify Cloudflare usage ledger and shared neuron log, including plan steps and account totals.
-- [ ] Use approved OpenRouter models for chat/image approvals and build engine snapshots, preserving pool rules.
-- [ ] Keep successful edits in project chat and failed/partial attempts only in assistant logs; verify with mocked tests and browser.
+- [x] Restrict workspace and server requests to the owner; add Security password and device controls.
+- [x] Unify Cloudflare usage ledger and shared neuron log, including plan steps and account totals.
+- [x] Use approved OpenRouter models for chat/image approvals and build engine snapshots, preserving pool rules.
+- [x] Preserve an Admin switch to revert chat to its previous Ollama setup.
+- [x] Keep successful edits in project chat and failed/partial attempts only in assistant logs; verify approval/decline with mocked tests and signed-in browser.
+- [ ] Verify a live approved plan→build and real Neuron reconciliation: waiting for manually selected OpenRouter text/VL models and explicit approval to spend Neurons.
+- [ ] Verify password change and other-device revocation: requires an owner-chosen password and permission to revoke real sessions.
 
 - [x] Add saved Cloudflare coding/vision model settings and project visual briefs.
 - [x] Add working model discovery, refresh, and editor lightning pickers.

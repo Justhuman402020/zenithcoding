@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, Copy, X, Globe, ExternalLink, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId/settings")({
-  head: () => ({ meta: [{ title: "Project settings — Code Haven" }] }),
+  head: () => ({ meta: [{ title: "Project settings — Code Haven" }, { name: "description", content: "Manage project domains, keys, sharing and settings." }, { property: "og:title", content: "Project settings — Code Haven" }, { property: "og:description", content: "Manage project domains, keys, sharing and settings." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: SettingsPage,
   errorComponent: ({ error }) => <div className="p-8 text-sm text-destructive">{(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-8">Not found</div>,

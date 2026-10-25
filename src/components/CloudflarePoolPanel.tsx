@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, FlaskConical, Loader2, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NeuronLog } from "./NeuronLog";
 import {
   getCloudflarePool,
   moveCloudflareKey,
@@ -36,20 +37,16 @@ export function NeuronsBar({ className = "" }: { className?: string }) {
   const active = data.keys.find((k) => k.status === "active");
   const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(n));
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground ${className}`}
-      title={`Today: ${data.totalUsed.toLocaleString()} of ${data.totalLimit.toLocaleString()} Neurons used across all keys (${(data.keys.length * 9000).toLocaleString()} usable at the 9k cap). Resets to 0 at 00:00 UTC (01:00 Lagos).`}
-    >
-      <Zap className="h-3 w-3 text-primary" />
+    <NeuronLog><span className={`inline-flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground ${className}`}>
       {active ? (
         <span className="tabular-nums text-foreground">
-          Key #{active.position} of {data.keys.length} · {k(Math.min(active.used, 9000))}/9k Neurons
+          Key #{active.position} · {k(active.used)} used · {k(Math.max(0, 9500 - active.used))} / 9.5k left
         </span>
       ) : (
         <span className="text-destructive">All {data.keys.length} keys at 9k</span>
       )}
       <span className="tabular-nums">· resets {countdown}</span>
-    </span>
+    </span></NeuronLog>
   );
 }
 
@@ -84,10 +81,10 @@ export function CloudflarePoolPanel() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-semibold flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" /> Cloudflare keys pool
+            <NeuronLog /> Cloudflare keys pool
           </h2>
           <p className="text-xs text-muted-foreground">
-            Unlimited keys (new ones join the end of the line), 10,000 Neurons each per day. Code Haven codes with the selected model on key #1 and moves to
+            60 accounts, 10,000 Neurons each per day; handoff at 9,000, hard stop at 9,500. Code Haven uses the selected model on key #1 and moves to
             the next key when one runs out. Add keys with "Add a new key" → Cloudflare Workers AI.
           </p>
         </div>

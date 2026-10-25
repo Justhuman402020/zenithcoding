@@ -87,6 +87,7 @@ function AdminPage() {
             <Button variant="outline" onClick={() => navigate({ to: "/admin/brain" })} className="w-full gap-1.5">
               <Brain className="h-4 w-4" /> Brain &amp; credential vault
             </Button>
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/settings" })} className="w-full gap-1.5"><Lock className="h-4 w-4" /> Settings → Security</Button>
           </div>
         ) : (
           <div className="space-y-3 text-center">
