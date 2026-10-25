@@ -1751,6 +1751,7 @@ export type Database = {
     Functions: {
       arm_job_resume: { Args: never; Returns: undefined }
       disarm_job_resume_if_idle: { Args: never; Returns: undefined }
+      dispatch_saved_build: { Args: { _job: string }; Returns: number }
       get_credit_balance: { Args: { _user: string }; Returns: number }
       has_role: {
         Args: {
