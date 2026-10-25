@@ -3,10 +3,11 @@
 - [x] Move editor builds to a database-owned starter so phone disconnects cannot end the initial build request; preserve owner-only access and explicit approval. Live inference remains approval-gated below.
 
 - [x] Harden screen-off recovery: await saved inputs/timer, retain original media and actual OpenRouter selection, refresh restart claim heartbeat; 25 targeted tests passed without inference.
-- [ ] Verify a real screen-off build finishes on the published runtime: requires explicit approval for live inference; background recovery safeguards verified with synthetic tests only.
+- [x] Real screen-off build verified: browser closed 3s after send; server finished the OpenRouter build, wrote the file and saved the reply.
 
 - [x] Stop transient owner/device checks redirecting signed-in users; prevent overlapping checks and remove registration controls. Owner browser retained access after reload and offline interruption; 11 tests pass. Account-creation trigger restricts new accounts to the owner.
-- [ ] Verify shared-preview refresh-token rotation across devices: generated auth storage is integration-managed; genuine revoked/missing refresh tokens still require sign-in again.
+- [x] Protected pages no longer sign out on a failed account check; verified through blocked account checks, 20s offline and reloads.
+- [ ] Verify an expired-session refresh on a real phone: the test sign-in cannot refresh, so only the owner's device can confirm it.
 
 - [x] Add explicit editor Image build routing, preserve image + caption delivery, remove misleading Qwen notices, and expand model About metadata; 30 tests pass and signed-in intercepted image request verified without inference.
 

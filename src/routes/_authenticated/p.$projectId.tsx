@@ -884,7 +884,7 @@ function ProjectEditor() {
           headers["x-forge-mode"] = choice.mode;
           headers["x-forge-engine"] = choice.engine;
           if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
-          if (!window.confirm(choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : "Send the image and text to your selected OpenRouter image model?")) throw new Error("Request not approved");
+          if (!window.confirm(choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?")) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
           headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
           if (poolFromRef.current) {
