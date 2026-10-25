@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Ensure approved builds finish with the phone screen off using server-owned execution; no personal GPU required.
+
 - [x] Stop transient owner/device checks redirecting signed-in users; prevent overlapping checks and remove registration controls. Owner browser retained access after reload and offline interruption; 11 tests pass. Account-creation trigger restricts new accounts to the owner.
 - [ ] Verify shared-preview refresh-token rotation across devices: generated auth storage is integration-managed; genuine revoked/missing refresh tokens still require sign-in again.
 
