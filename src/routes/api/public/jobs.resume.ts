@@ -44,9 +44,11 @@ export const Route = createFileRoute("/api/public/jobs/resume")({
             // Claim the job so two timers never restart it twice.
             const { data: claimed } = await (supabaseAdmin as any)
               .from("chat_jobs")
-              .update({ auto_resumes: job.auto_resumes + 1, resumed_at: new Date().toISOString(), progress: `Restarted by the server (${job.auto_resumes + 1}/${MAX_AUTO_RESUMES})` })
+              .update({ auto_resumes: job.auto_resumes + 1, resumed_at: new Date().toISOString(), updated_at: new Date().toISOString(), progress: `Restarted by the server (${job.auto_resumes + 1}/${MAX_AUTO_RESUMES})` })
               .eq("id", job.id)
               .eq("auto_resumes", job.auto_resumes)
+              .in("status", ["queued", "running"])
+              .lt("updated_at", cutoff)
               .select("id");
             if (!claimed?.length) return;
             const payload = job.resume_payload as { messages: any[]; headers: Record<string, string> };
@@ -68,7 +70,7 @@ export const Route = createFileRoute("/api/public/jobs/resume")({
                   "x-project-id": job.project_id,
                   "x-forge-request-key": job.request_key,
                   "x-forge-resume-user": job.user_id,
-                  "x-forge-resume-token": token!,
+                  "x-forge-resume-token": token ?? "",
                 },
                 body: JSON.stringify({ messages }),
               });

@@ -4,6 +4,7 @@ import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, 
 import { createFileRoute } from "@tanstack/react-router";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
+import { recoveryHeaders } from "@/lib/build-recovery";
 import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
 import { createTrace } from "@/lib/trace.server";
 import {
@@ -240,17 +241,12 @@ export const Route = createFileRoute("/api/public/chat")({
         // is cut off after the phone disconnects, then arm the restart check.
         if (jobId && !planMode) {
           const resumePayload = {
-            messages: imageBuild ? compactChatMessages(body.messages) : compactMessages0(body.messages),
-            headers: Object.fromEntries(
-              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-image-build", "x-forge-approval", "x-forge-approved"]
-                .map((h) => [h, request.headers.get(h)])
-                .filter(([, v]) => v != null),
-            ),
+            messages: compactChatMessages(body.messages),
+            headers: recoveryHeaders(request.headers),
           };
-          void (async () => {
-            await supabaseAdmin.from("chat_jobs").update({ resume_payload: resumePayload as any, ...(isResume ? {} : { auto_resumes: 0 }) }).eq("id", jobId);
-            await supabaseAdmin.rpc("arm_job_resume" as any);
-          })().catch(() => undefined);
+          const { error: saveError } = await supabaseAdmin.from("chat_jobs").update({ resume_payload: resumePayload as any, ...(isResume ? {} : { auto_resumes: 0 }) }).eq("id", jobId);
+          const { error: armError } = saveError ? { error: saveError } : await supabaseAdmin.rpc("arm_job_resume" as any);
+          if (saveError || armError) return fail(503, "Could not secure background recovery. Please retry; no model work has started.");
         }
 
         // Snapshot current files BEFORE the AI mutates anything, so the user
@@ -462,6 +458,15 @@ export const Route = createFileRoute("/api/public/chat")({
             sentMessages: compactMessages.length,
           },
         });
+
+        // Save the actual locked selection before inference, including media.
+        if (jobId && !planMode) {
+          const { error } = await supabaseAdmin.from("chat_jobs").update({
+            build_engine: "openrouter", engine_provider: pick.ref.provider, engine_model: pick.ref.model,
+            resume_payload: { messages: compactMessages, headers: recoveryHeaders(request.headers, { engine: "openrouter", provider: pick.ref.provider, model: pick.ref.model }) } as any,
+          }).eq("id", jobId);
+          if (error) return fail(503, "Could not save the selected build model for background recovery. Please retry.");
+        }
 
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);

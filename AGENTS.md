@@ -57,3 +57,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - OpenRouter capability and pricing labels come from authenticated catalog metadata, not name guesses; preserve API order and full details for build-key browsing.
 - Image questions send the actual attachment to the declared vision model; file edits retain the dedicated vision brief pass and running jobs preserve their reader snapshot.
 - Explicit editor Image build keeps original image parts alongside captions after the visual brief pass and locks the build-key image selection; editor mode headers survive server resumes.
+- Before build inference, await durable recovery payload/timer registration and persist the actual model snapshot with all media; restart claims refresh the heartbeat and never reclaim finished or paused runs.
