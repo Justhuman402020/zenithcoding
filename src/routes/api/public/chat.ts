@@ -240,7 +240,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // is cut off after the phone disconnects, then arm the restart check.
         if (jobId && !planMode) {
           const resumePayload = {
-            messages: compactMessages0(body.messages),
+            messages: imageBuild ? compactChatMessages(body.messages) : compactMessages0(body.messages),
             headers: Object.fromEntries(
               ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-image-build", "x-forge-approval", "x-forge-approved"]
                 .map((h) => [h, request.headers.get(h)])
@@ -326,7 +326,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const poolSettings = await readPoolSettings();
         const { workspacePick } = await import("@/lib/workspace-ai.server");
         const editorEngine = !imageBuild && !hasImages && request.headers.get("x-forge-engine") === "cloudflare" ? "cloudflare" : null;
-        const selection = await workspacePick(planMode ? "plan" : "build", existingJob?.build_engine as "openrouter" | "cloudflare" | null ?? editorEngine, hasImages);
+        const selection = await workspacePick(planMode ? "plan" : "build", (existingJob?.build_engine as "openrouter" | "cloudflare" | null) ?? editorEngine, hasImages);
         const editorAuto = selection.engine === "cloudflare";
         if (editorAuto) {
           const approvalId = request.headers.get("x-forge-approval");

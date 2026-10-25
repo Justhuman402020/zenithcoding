@@ -137,7 +137,7 @@ function fmtElapsed(ms: number) {
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
-type QueuedMessage = { id: string; text: string; attachments: Attachment[] };
+type QueuedMessage = { id: string; text: string; attachments: Attachment[]; mode?: EditorBuildMode };
 
 const CHAT_JOB_STALE_MS = 600_000;
 
@@ -1111,7 +1111,7 @@ function ProjectEditor() {
     setQueue((cur) => cur.filter((item) => item.id !== next.id));
     void (async () => {
       try {
-        await deliverMessage(next.text, next.attachments);
+        await deliverMessage(next.text, next.attachments, next.mode);
       } catch {
         // put it back so nothing typed is ever lost
         setQueue((cur) => [next, ...cur]);
@@ -1397,12 +1397,12 @@ function ProjectEditor() {
 
   // Actually hands one message to the agent. Used both for an immediate send
   // and for a message that waited in the queue while Code Haven was busy.
-  async function deliverMessage(text: string, atts: Attachment[]) {
-    if (modeRef.current === "image" && !atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0)) {
+  async function deliverMessage(text: string, atts: Attachment[], requestedMode = modeRef.current) {
+    if (requestedMode === "image" && !atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0)) {
       toast.error("Attach an image for Image build.");
       return;
     }
-    requestModeRef.current = modeRef.current;
+    requestModeRef.current = requestedMode;
     requestImagesRef.current = atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0);
     requestKeyRef.current = crypto.randomUUID();
     autoContinueRef.current = 0;
@@ -1514,7 +1514,7 @@ function ProjectEditor() {
     // A pause can only hold an existing queue. An empty, stale pause flag must
     // never swallow the next instruction.
     if (isBusy || (queuePaused && queue.length > 0)) {
-      setQueue((cur) => [...cur, { id: crypto.randomUUID(), text, attachments: atts }]);
+      setQueue((cur) => [...cur, { id: crypto.randomUUID(), text, attachments: atts, mode: modeRef.current }]);
       return;
     }
     if (queuePaused) setQueuePaused(false);
