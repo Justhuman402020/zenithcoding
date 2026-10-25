@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
 
+import { successfulEdit } from "./owner-policy";
+
 type Ctx = { supabase: any; userId: string };
 
 async function keyFor(ctx: Ctx, keyId: string) {
@@ -27,6 +29,25 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
   return String(json?.choices?.[0]?.message?.content ?? "");
 }
 
+async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false) {
+  const { readWorkspaceAI } = await import("./workspace-ai.server");
+  const settings = await readWorkspaceAI();
+  if (settings.chatEngine === "ollama" && !images) {
+    if (!keyId || !model) throw new Error("Select your previous Ollama model");
+    return ollamaChat(ctx, keyId, model, messages);
+  }
+  const ref = images ? settings.image : settings.text;
+  if (!ref) throw new Error("Select your OpenRouter model in Admin → AI Models");
+  const { loadProviderRegistry } = await import("./model-router.server");
+  const { providers, keys } = await loadProviderRegistry();
+  const provider = providers.find((p) => p.id === ref.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL));
+  if (!provider || !keys[ref.provider]) throw new Error("Saved OpenRouter key is not active");
+  const response = await fetch(`${provider.baseURL}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${keys[ref.provider]}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: ref.model, messages, stream: false, max_tokens: 2000 }) });
+  if (!response.ok) throw new Error(`OpenRouter could not answer (${response.status})`);
+  const json: any = await response.json();
+  return String(json?.choices?.[0]?.message?.content ?? "");
+}
+
 /** One readable work-log line from a build trace row. */
 function liveLine(t: { phase: string; status: string; message: string | null; detail: any }): string | null {
   if (/^(request\.|credits\.|project\.|snapshot\.)/.test(t.phase)) return null;
@@ -43,9 +64,9 @@ async function isAdmin(ctx: Ctx) {
 /** Read-only context about Code Haven + the selected project. */
 async function buildContext(ctx: Ctx, projectId: string | null) {
   const parts: string[] = [
-    "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable): projects with files, a live preview, a Cloudflare Workers AI key pool that does the actual coding (9k Neuron handoffs), a Brain with global rules and skills, and an Admin vault of saved keys.",
+    "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable): projects with files, a live preview, a Cloudflare pool for approved planning (9k handoffs), and manually selected OpenRouter text/image models for approved builds, a Brain with global rules and skills, and an Admin vault of saved keys.",
     "You can READ only. You can never write files, change Admin, or delete anything. You discuss, explain and plan.",
-    "When the owner asks for a change to the project, explain briefly, then put ONE precise instruction for the Cloudflare coding agent inside <edit>...</edit>. The owner must approve before it runs. Never claim the edit is done yourself.",
+    "When the owner asks for a change to the project, explain briefly, then put ONE precise instruction for the selected coding agent inside <edit>...</edit>. The owner must approve before it runs. Never claim the edit is done yourself.",
     "Be concise and friendly; the owner is not technical.",
   ];
   const { data: projects } = await ctx.supabase.from("projects").select("id,name,description").eq("user_id", ctx.userId).order("updated_at", { ascending: false }).limit(40);
@@ -152,11 +173,11 @@ export const getChat = auth({ method: "POST" }).middleware([requireSupabaseAuth]
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,ollama_key_id,model,initialized_at,projects(name)").eq("id", data.id).maybeSingle();
     if (!chat) throw new Error("Chat not found");
     const { data: messages } = await (context.supabase as any).from("assistant_messages").select("id,role,content,parts,created_at").eq("chat_id", data.id).order("created_at");
-    const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at").eq("chat_id", data.id).order("created_at");
+    const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at,kind").eq("chat_id", data.id).order("created_at");
     return {
       chat: { id: chat.id as string, title: chat.title as string, projectId: chat.project_id as string | null, projectName: ((chat as any).projects?.name ?? null) as string | null, keyId: chat.ollama_key_id as string | null, model: chat.model as string | null, initialized: !!chat.initialized_at },
       messages: (messages ?? []) as Array<{ id: string; role: string; content: string; parts: any; created_at: string }>,
-      edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; request_key: string | null; report: any; created_at: string }>,
+      edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; kind: string; request_key: string | null; report: any; created_at: string }>,
     };
   });
 
@@ -170,9 +191,9 @@ export const setupChat = auth({ method: "POST" }).middleware([requireSupabaseAut
     await (context.supabase as any).from("assistant_chats").update(patch).eq("id", data.id);
     if (data.initialize) {
       const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model,projects(name)").eq("id", data.id).single();
-      if (!chat.ollama_key_id || !chat.model) throw new Error("Pick an Ollama key and model first");
+      
       const ctxText = await buildContext(context as Ctx, chat.project_id);
-      const reply = await ollamaChat(context as Ctx, chat.ollama_key_id, chat.model, [
+      const reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [
         { role: "system", content: ctxText },
         { role: "user", content: "Read everything above and reply in 2-3 short sentences that you are ready, naming the project and what it is." },
       ]);
@@ -183,24 +204,31 @@ export const setupChat = auth({ method: "POST" }).middleware([requireSupabaseAut
   });
 
 export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ id: z.string().uuid(), text: z.string().min(1).max(20000), attachments: z.array(z.object({ name: z.string().max(200), text: z.string().max(20000) })).max(5).optional() }).parse(d))
+  .inputValidator((d) => z.object({ id: z.string().uuid(), text: z.string().min(1).max(20000), attachments: z.array(z.object({ name: z.string().max(200), text: z.string().max(20000) })).max(5).optional(), images: z.array(z.object({ type: z.literal("file"), mediaType: z.string().regex(/^image\/(png|jpeg|webp|gif)$/), url: z.string().max(8000000) })).max(3).optional(), plan: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
-    if (!chat?.ollama_key_id || !chat.model) throw new Error("Pick an Ollama key and model, then tap Initialize");
+    if (!chat) throw new Error("Chat not found");
+    if (data.plan) {
+      if (!chat.project_id) throw new Error("Select a project first");
+      await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text });
+      const { error } = await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: data.text, kind: "plan" });
+      if (error) throw new Error("Could not save planning request");
+      return { ok: true };
+    }
     const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at").limit(60);
     const ctxText = await buildContext(context as Ctx, chat.project_id);
     let reply: string;
     try {
-      reply = await ollamaChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...((history ?? []) as any[]).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }))]);
+      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...((history ?? []) as any[]).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })), ...(data.images?.length ? [{ role: "user", content: [{ type: "text", text: data.text }, ...data.images.map((image) => ({ type: "image_url", image_url: { url: image.url } }))] }] : [])], !!data.images?.length);
     } catch (e) {
       reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
     const { text, edit } = parseEditProposal(reply);
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send." });
     if (edit && chat.project_id) {
-      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit });
+      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit, images: data.images ?? [] });
     }
     await (context.supabase as any).from("assistant_chats").update({ updated_at: new Date().toISOString() }).eq("id", data.id);
     return { ok: true };
@@ -209,26 +237,23 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
 export const decideEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), answer: z.enum(["yes", "no"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id,project_id,prompt").eq("id", data.id).single();
+    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id,project_id,prompt,kind").eq("id", data.id).single();
     const next = decide(req.status as EditStatus, data.answer);
     const requestKey = next === "approved" ? crypto.randomUUID() : null;
-    await (context.supabase as any).from("assistant_edit_requests").update({ status: next === "approved" ? "running" : next, request_key: requestKey, updated_at: new Date().toISOString() }).eq("id", data.id);
+    const { data: claimed, error: claimError } = await (context.supabase as any).from("assistant_edit_requests").update({ status: next === "approved" ? "running" : next, request_key: requestKey, updated_at: new Date().toISOString() }).eq("id", data.id).eq("status", "pending").select("id");
+    if (claimError || !claimed?.length) throw new Error("This request was already answered");
     let started = true;
     if (next === "approved" && requestKey) {
-      // Only after Yes: the backend itself starts and holds the Cloudflare build,
-      // so it doesn't depend on this phone staying online.
-      const { data: proj } = await (context.supabase as any).from("projects").select("id").eq("id", req.project_id).eq("user_id", context.userId).maybeSingle();
-      if (!proj) throw new Error("Project not found");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { error } = await (supabaseAdmin as any).rpc("start_build_job", {
-        _project: req.project_id, _user: context.userId, _request_key: requestKey,
-        _prompt: `${req.prompt}\n\nWhen done, make sure every changed file is complete and valid, then end with the checklist.`,
-      });
-      if (error) started = false;
+      const { error } = await supabaseAdmin.rpc("start_approved_workspace_job", { _edit: data.id });
+      if (error) {
+        started = false;
+        await (context.supabase as any).from("assistant_edit_requests").update({ status: "failed", report: { error: error.message } }).eq("id", data.id);
+      }
     }
     await (context.supabase as any).from("assistant_messages").insert({
       chat_id: req.chat_id, user_id: context.userId, role: "assistant",
-      content: next !== "approved" ? "Okay, I won't send that edit." : started ? "Editing files now with Cloudflare. I'll show the work log here and tell you when it's done." : "Couldn't start Cloudflare from the server — starting it from this device instead.",
+      content: next !== "approved" ? "Okay, I won't send that edit." : started ? (req.kind === "plan" ? "Planning with Cloudflare." : "I’m on it.") : "Could not start. Check the pool and selected OpenRouter models in AI Models.",
     });
     return { status: next, requestKey, started };
   });
@@ -253,7 +278,7 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
     const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("*").eq("id", data.id).single();
     if (req.status !== "running" || !req.request_key) return { status: req.status as EditStatus, progress: null as string | null, log: [] as string[] };
     const { data: job } = await (context.supabase as any).from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply,created_at").eq("request_key", req.request_key).maybeSingle();
-    if (!job) return { status: "running" as EditStatus, progress: "Starting Cloudflare…", log: [] as string[] };
+    if (!job) return { status: "running" as EditStatus, progress: "Starting…", log: [] as string[] };
     if (job.status === "queued" || job.status === "running") {
       // Live work log: this build's trace lines so far.
       const { data: rows } = await (context.supabase as any).from("chat_traces").select("phase,status,message,detail,created_at")
@@ -263,19 +288,30 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
     }
     const { data: trace } = job.trace_id ? await (context.supabase as any).from("chat_traces").select("phase,status,message").eq("trace_id", job.trace_id).order("seq").limit(200) : { data: [] };
     const log = ((trace ?? []) as any[]).map((t) => `${t.phase} [${t.status}] ${t.message ?? ""}`.trim());
-    const ok = job.status === "completed" || job.outcome === "finished";
+    const ok = successfulEdit(job);
     const report = { jobStatus: job.status, outcome: job.outcome, steps: job.steps_done, files: job.files_changed, error: job.error, log };
+    if (req.kind === "plan") {
+      const { data: calls } = await (context.supabase as any).from("neuron_call_ledger").select("step,neurons,key_number,model,action").eq("request_key", req.request_key).order("step");
+      const used = (calls ?? []).reduce((t: number, c: any) => t + c.neurons, 0);
+      const planText = String(job.assistant_reply ?? "");
+      const { data: claimed } = await (context.supabase as any).from("assistant_edit_requests").update({ status: ok ? "done" : "failed", chat_job_id: job.id, report: { ...report, neurons: used, steps: calls }, updated_at: new Date().toISOString() }).eq("id", data.id).eq("status", "running").select("id");
+      if (!claimed?.length) return { status: (ok ? "done" : "failed") as EditStatus, progress: null, log: [] as string[] };
+      await (context.supabase as any).from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: ok ? planText : `Planning stopped: ${job.error ?? "No complete plan"}`, parts: { log, planning: { used, steps: calls ?? [] } } });
+      if (ok) await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: req.chat_id, user_id: context.userId, project_id: req.project_id, prompt: planText, kind: "build" });
+      return { status: (ok ? "done" : "failed") as EditStatus, progress: null, log: [] as string[] };
+    }
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("ollama_key_id,model").eq("id", req.chat_id).single();
     let summary = `${ok ? "✅ Done" : "⚠️ Stopped"}: ${job.steps_done} steps, ${job.files_changed} files changed.${job.error ? ` Error: ${job.error}` : ""}`;
     try {
-      if (chat?.ollama_key_id && chat.model) {
-        summary = await ollamaChat(context as Ctx, chat.ollama_key_id, chat.model, [
-          { role: "system", content: "Summarize this finished Cloudflare edit for a non-technical owner: what was edited, which files, whether the typecheck/build passed, any problem. Short bullet list." },
+      if (chat) {
+        summary = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [
+          { role: "system", content: "Summarize this finished edit for a non-technical owner: what was edited, which files, whether the typecheck/build passed, any problem. Short bullet list." },
           { role: "user", content: `Edit asked: ${req.prompt}\nResult: ${JSON.stringify({ ...report, log: log.slice(-60) })}\nAgent reply: ${String(job.assistant_reply ?? "").slice(0, 3000)}` },
         ]);
       }
     } catch { /* keep plain summary */ }
-    await (context.supabase as any).from("assistant_edit_requests").update({ status: ok ? "done" : "failed", chat_job_id: job.id, report, updated_at: new Date().toISOString() }).eq("id", data.id);
+    const { data: claimed } = await (context.supabase as any).from("assistant_edit_requests").update({ status: ok ? "done" : "failed", chat_job_id: job.id, report, updated_at: new Date().toISOString() }).eq("id", data.id).eq("status", "running").select("id");
+    if (!claimed?.length) return { status: (ok ? "done" : "failed") as EditStatus, progress: null, log: [] as string[] };
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: summary, parts: { editId: data.id, log } });
     return { status: (ok ? "done" : "failed") as EditStatus, progress: null, log: [] as string[] };
   });
