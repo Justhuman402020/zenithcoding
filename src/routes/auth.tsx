@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ForgeMark } from "@/components/ForgeMark";
+import { isOwner, OWNER_EMAIL } from "@/lib/owner-policy";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -22,22 +23,23 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) navigate({ to: "/" });
+      if (data.user) navigate({ to: isOwner(data.user) ? "/" : "/not-available" });
     });
   }, [navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (email.trim().toLowerCase() !== OWNER_EMAIL) { await navigate({ to: "/not-available" }); return; }
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { emailRedirectTo: window.location.origin },
         });
         if (error) throw error;
-        toast.success("Account created — you're in.");
+        if (!data.session) { toast.success("Check your email to confirm your account."); return; }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

@@ -12,8 +12,12 @@ export const ownerFunctionMiddleware = createMiddleware({ type: "function" }).se
     const key = process.env["SUPABASE_PUBLISHABLE_KEY"];
     if (!url || !key) throw new Error("Sign-in unavailable");
     const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data, error } = await client.auth.getUser(header.replace(/^Bearer\s+/i, ""));
+    const token = header.replace(/^Bearer\s+/i, "");
+    const { data, error } = await client.auth.getUser(token);
     if (error || !isOwner(data.user)) throw new Error("Not available");
+    const scoped = createClient(url, key, { global: { headers: { Authorization: header } }, auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: allowed, error: denied } = await scoped.rpc("workspace_session_allowed");
+    if (denied || !allowed) throw new Error("Not available");
   }
   return next();
 });

@@ -3,6 +3,7 @@
 - [ ] Restrict workspace and server requests to the owner; add Security password and device controls.
 - [ ] Unify Cloudflare usage ledger and shared neuron log, including plan steps and account totals.
 - [ ] Use approved OpenRouter models for chat/image approvals and build engine snapshots, preserving pool rules.
+- [ ] Preserve an Admin switch to revert chat to its previous Ollama setup.
 - [ ] Keep successful edits in project chat and failed/partial attempts only in assistant logs; verify with mocked tests and browser.
 
 - [x] Add saved Cloudflare coding/vision model settings and project visual briefs.
