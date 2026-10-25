@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { CloudflarePoolPanel, NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { CloudflareModelSettings } from "@/components/CloudflareModelSettings";
 import { CloudflarePoolToggle } from "@/components/CloudflarePoolToggle";
+import { BuildEngineSettings } from "@/components/BuildEngineSettings";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -265,6 +266,7 @@ function AdminModelsPage() {
       <NeuronsBar />
       <CloudflarePoolPanel />
       <CloudflareModelSettings />
+      <BuildEngineSettings rows={data?.rows ?? []} providers={data?.providers ?? []} />
 
       <div className="flex items-start gap-3">
         <Cpu className="h-6 w-6 text-primary mt-1" />
