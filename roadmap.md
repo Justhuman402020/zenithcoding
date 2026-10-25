@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Add full build-key OpenRouter catalog search and model information; diagnose and test missing image delivery without live inference.
+
 - [x] Restrict workspace and server requests to the owner; add Security password and device controls.
 - [x] Unify Cloudflare usage ledger and shared neuron log, including plan steps and account totals.
 - [x] Use approved OpenRouter models for chat/image approvals and build engine snapshots, preserving pool rules.

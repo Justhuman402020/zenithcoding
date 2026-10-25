@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { isOwner, sectionTotals } from "./owner-policy";
+import type { RouterModel } from "./openrouter-catalog";
 export const verifyWorkspaceAccess = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data, error } = await context.supabase.rpc("workspace_session_allowed");
   if (error || !data) throw new Error("Not available");
@@ -39,7 +40,8 @@ export const getNeuronLedger = createServerFn({ method: "GET" }).middleware([req
 });async function ownerOnly(context: any) {
   const { data: user } = await context.supabase.auth.getUser();
   if (!isOwner(user.user)) throw new Error("Not available");
-  return user.user!.id as string;
+  if (!user.user) throw new Error("Not available");
+  return user.user.id;
 }
 export const testBuildRouterKey = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d: { apiKey: string }) => z.object({ apiKey: z.string().min(10).max(300) }).parse(d))
@@ -63,7 +65,7 @@ export const getBuildRouterModels = createServerFn({ method: "GET" }).middleware
   await ownerOnly(context);
   const { routerModels, readBuildRouterKey, BUILD_ROUTER_ID } = await import("./workspace-ai.server");
   const key = await readBuildRouterKey();
-  if (!key) return { active: false, provider: BUILD_ROUTER_ID, models: [] as Array<{ id: string; label: string; vision: boolean }>, error: null as string | null };
+  if (!key) return { active: false, provider: BUILD_ROUTER_ID, models: [] as RouterModel[], error: null as string | null };
   const r = await routerModels(key);
   return { active: true, provider: BUILD_ROUTER_ID, models: r.ok ? r.models : [], error: r.ok ? null : r.error };
 });
