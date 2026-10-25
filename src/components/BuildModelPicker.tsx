@@ -43,6 +43,7 @@ export function BuildModelPicker({ kind, models, selected, onSelect }: {
           <dt className="text-muted-foreground">Inputs</dt><dd className="break-words">{about.inputModalities.join(", ") || "Not provided"}</dd>
           <dt className="text-muted-foreground">Outputs</dt><dd>{about.outputModalities.join(", ") || "Not provided"}</dd>
           <dt className="text-muted-foreground">Context</dt><dd>{about.contextLength?.toLocaleString() ?? "Not provided"} tokens</dd>
+          <dt className="text-muted-foreground">Released</dt><dd>{about.releasedAt ? new Date(about.releasedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }) : "Not provided"}</dd>
           <dt className="text-muted-foreground">Max output</dt><dd>{about.topProvider.max_completion_tokens?.toLocaleString() ?? "Not provided"}</dd>
           <dt className="text-muted-foreground">Input price</dt><dd>{tokenPrice(about.pricing.prompt)}</dd>
           <dt className="text-muted-foreground">Output price</dt><dd>{tokenPrice(about.pricing.completion)}</dd>

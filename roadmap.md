@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Add explicit editor Image build routing, preserve image + caption delivery, remove misleading Qwen notices, and expand model About metadata; 30 tests pass and signed-in intercepted image request verified without inference.
+
 - [x] Add full build-key OpenRouter catalog search and model information; verified 467 real models, search/About on desktop and phone, and 27 regression tests without inference.
 - [x] Show image support only from declared image inputs and mark Free only when OpenRouter reports zero pricing; validate saved image choices against the activated key catalog.
 - [ ] Verify VL answers with a real image: attachment path corrected and regression-tested; waiting for explicit approval for live image inference.

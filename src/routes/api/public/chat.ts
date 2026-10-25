@@ -145,6 +145,7 @@ export const Route = createFileRoute("/api/public/chat")({
           .join(" ") ?? "";
         // Plan mode thinks and proposes; build mode writes files.
         const planMode = (request.headers.get("x-forge-mode") ?? "build").toLowerCase() === "plan";
+        const imageBuild = !planMode && request.headers.get("x-forge-image-build") === "yes";
         const cloneMode = request.headers.get("x-forge-clone") === "1";
         const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
         const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
@@ -239,9 +240,9 @@ export const Route = createFileRoute("/api/public/chat")({
         // is cut off after the phone disconnects, then arm the restart check.
         if (jobId && !planMode) {
           const resumePayload = {
-            messages: compactMessages0(body.messages),
+            messages: imageBuild ? compactChatMessages(body.messages) : compactMessages0(body.messages),
             headers: Object.fromEntries(
-              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-approval", "x-forge-approved"]
+              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-image-build", "x-forge-approval", "x-forge-approved"]
                 .map((h) => [h, request.headers.get(h)])
                 .filter(([, v]) => v != null),
             ),
@@ -280,6 +281,7 @@ export const Route = createFileRoute("/api/public/chat")({
             (part: any) => isVisualPart(part),
           ),
         );
+        if (imageBuild && !hasImages) return fail(422, "Attach an image for Image build.");
 
         const requestedRef = parseModelKey(request.headers.get("x-forge-model"));
         const { ref: adminRef, autoFallback } = await readActiveModelRef();
@@ -294,7 +296,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const fullChain = buildModelChain(preferred, { vision: false, availableProviders }) // images go to the vision planner; the coder gets a text blueprint;
         // Providers the admin added by pasting a key join the backup chain too.
         const { isCloudflareBaseUrl } = await import("@/lib/cloudflare-pool.server");
-        // Cloudflare keys only ever run Qwen 3.8 27B through the pool below.
+        // Cloudflare uses the saved pool coding model, never an implied selection.
         const extraProviders = providerRegistry.filter((p) => p.id.startsWith("custom-") && providerKeys[p.id] && !isCloudflareBaseUrl(p.baseURL));
         if (extraProviders.length) {
           const { listProviderModels } = await import("@/lib/model-discovery.server");
@@ -323,12 +325,13 @@ export const Route = createFileRoute("/api/public/chat")({
         const { readPoolSettings } = await import("@/lib/cf-pool-settings.server");
         const poolSettings = await readPoolSettings();
         const { workspacePick } = await import("@/lib/workspace-ai.server");
-        const selection = await workspacePick(planMode ? "plan" : "build", existingJob?.build_engine as "openrouter" | "cloudflare" | null, hasImages);
+        const editorEngine = !imageBuild && !hasImages && request.headers.get("x-forge-engine") === "cloudflare" ? "cloudflare" : null;
+        const selection = await workspacePick(planMode ? "plan" : "build", (existingJob?.build_engine as "openrouter" | "cloudflare" | null) ?? editorEngine, hasImages);
         const editorAuto = selection.engine === "cloudflare";
         if (editorAuto) {
           const approvalId = request.headers.get("x-forge-approval");
           const { data: approval } = approvalId ? await supabaseAdmin.from("assistant_edit_requests").select("id").eq("id", approvalId).eq("user_id", userId).eq("project_id", projectId).eq("request_key", requestKey).eq("status", "running").maybeSingle() : { data: null };
-          if (!approval && request.headers.get("x-forge-auto") !== "on") return fail(403, "Cloudflare approval required");
+          if (!approval && request.headers.get("x-forge-approved") !== "yes") return fail(403, "Cloudflare approval required");
           if (!poolSettings.poolEnabled) return fail(424, "Cloudflare pool is off. Enable it in AI Models before approving a plan.");
         }
         const engineRef = existingJob?.engine_provider && existingJob.engine_model ? { provider: existingJob.engine_provider, model: existingJob.engine_model } : selection.ref;
@@ -355,7 +358,7 @@ export const Route = createFileRoute("/api/public/chat")({
           const { withoutCloudflare } = await import("@/lib/cf-pool-routing");
           const allowed = new Set(withoutCloudflare(providerRegistry).map((p) => p.id));
           const manual = requestedRef && providerRegistry.some((p) => p.id === requestedRef.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL)) ? requestedRef : null;
-          const locked = existingJob?.engine_provider ? engineRef : manual ?? engineRef;
+          const locked = existingJob?.engine_provider ? engineRef : hasImages ? selection.ref : manual ?? engineRef;
           if (!locked || !allowed.has(locked.provider) || !providerRegistry.some((p) => p.id === locked.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL))) return fail(424, "Select your OpenRouter text/image model in AI Models first.");
           if (!locked) return fail(424, JSON.stringify({ error: "model_unavailable", message: "The Cloudflare pool is off and no non-Cloudflare coding model is selected. Pick one in Admin → Models, or turn the pool on." }), "application/json");
           chain = [locked];
@@ -399,7 +402,7 @@ export const Route = createFileRoute("/api/public/chat")({
             messages: compactMessages,
             providers: providerRegistry.filter((p) => /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL)),
             keys: providerKeys,
-            preferred: imageReaderRef(existingJob?.engine_provider ? engineRef : null, selectedVision, engineRef ?? visionPreference),
+            preferred: imageReaderRef(existingJob?.engine_provider ? engineRef : null, imageBuild ? chain[0] ?? null : selectedVision, engineRef ?? visionPreference),
             strict: true,
             gateway,
             onSwitch: async () => {},
@@ -529,7 +532,7 @@ export const Route = createFileRoute("/api/public/chat")({
         // request, so send a much shorter history there or it silently rejects.
         const isGitHubModels = /models\.github\.ai/i.test(pick.baseURL);
         const turnMessages = isGitHubModels ? compactChatMessages(body.messages, 3) : compactMessages;
-        const strippedMessages = visionOk && !visualBrief
+        const strippedMessages = visionOk && (!visualBrief || imageBuild)
           ? turnMessages
           : turnMessages.map((message) => ({
               ...message,

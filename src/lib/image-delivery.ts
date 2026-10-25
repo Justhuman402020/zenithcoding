@@ -1,5 +1,14 @@
 import type { ModelRef } from "./ai-providers";
 
+export type EditorBuildMode = "plan" | "build" | "image";
+export function editorRequestChoice(mode: EditorBuildMode, hasImages: boolean) {
+  return {
+    mode: mode === "plan" ? "plan" as const : "build" as const,
+    engine: mode === "image" || (mode === "build" && hasImages) ? "openrouter" as const : "cloudflare" as const,
+    imageBuild: mode === "image" || (mode === "build" && hasImages),
+  };
+}
+
 export function attachedImageUrls(messages: Array<{ role: string; parts?: unknown[] }>) {
   const latest = [...messages].reverse().find((m) => m.role === "user");
   return (latest?.parts ?? []).flatMap((part) => {

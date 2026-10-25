@@ -3,7 +3,7 @@ import { catalogModels, searchRouterModels, routerPriceLabel } from "../src/lib/
 
 describe("build key model catalog", () => {
   const models = catalogModels([
-    { id: "nvidia/lightning", name: "NVIDIA: Lightning", architecture: { input_modalities: ["text"] }, context_length: 128000, pricing: { prompt: "0.000001" } },
+    { id: "nvidia/lightning", name: "NVIDIA: Lightning", created: 1792022400, architecture: { input_modalities: ["text"] }, context_length: 128000, pricing: { prompt: "0.000001" } },
     { id: "nvidia/super-vl", name: "NVIDIA: Super VL", description: "Reads pictures", architecture: { input_modalities: ["text", "image"] }, supported_parameters: ["tools"] },
     { id: "other/vl-name", name: "VL in name only", architecture: { input_modalities: ["text"] } },
   ]);
@@ -20,6 +20,7 @@ describe("build key model catalog", () => {
     expect(models[0].contextLength).toBe(128000);
     expect(models[0].pricing.prompt).toBe("0.000001");
     expect(models[1].supportedParameters).toEqual(["tools"]);
+    expect(models[0].releasedAt).toBe("2026-10-15T00:00:00.000Z");
   });
   it("marks only explicitly zero-priced models Free", () => {
     expect(routerPriceLabel({ prompt: "0", completion: "0", image: "0" })).toBe("Free");
