@@ -438,7 +438,8 @@ export const Route = createFileRoute("/api/public/chat")({
                   : /429|rate limit|quota/i.test(raw)
                     ? " The provider's limit has been reached for now."
                     : "";
-          const lockedRef = !(editorAuto) ? (requestedRef ?? adminRef) : null;
+          // Name the model that was actually tried, never an unrelated saved pick.
+          const lockedRef = !(editorAuto) ? (chain[0] ?? null) : null;
           const locked = !!lockedRef;
           const message = locked
             ? `The model you picked (${lockedRef!.model}) can't answer right now.${reason} Pick a different model, or turn Auto-switch on to let Forge choose one.`
