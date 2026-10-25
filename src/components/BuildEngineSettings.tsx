@@ -11,7 +11,7 @@ export function BuildEngineSettings({ rows, providers }: { rows: Awaited<ReturnT
   const [busy, setBusy] = useState(false);
   useEffect(() => { void load().then(setSettings); }, [load]);
   // Provider identity comes from its verified registry, not its editable label.
-  const routerIds = providers.filter((p) => p.provider === "openrouter" || p.provider.startsWith("custom-openrouter")).map((p) => p.provider);
+  const routerIds = providers.filter((p) => p.provider === "openrouter" || p.provider.startsWith("custom-openrouter") || p.providerLabel.toLowerCase().includes("openrouter")).map((p) => p.provider);
   const options = rows.filter((r) => routerIds.includes(r.provider) && r.keyConfigured);
   if (!settings) return null;
   function pick(value: string) { const [provider, ...model] = value.split("|"); return provider && model.length ? { provider, model: model.join("|") } : null; }
