@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronLog } from "@/components/NeuronLog";
+import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
 import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
@@ -103,13 +104,14 @@ function ChatPage() {
 
   return (
     <div className="flex h-[100dvh] flex-col bg-background text-foreground">
-      <header className="flex items-center gap-2 border-b px-3 py-2">
+      <header className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/chats" })} aria-label="Back"><ArrowLeft className="h-5 w-5" /></Button>
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{data.chat.title}</div>
           <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
         <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
+        <NeuronsBar />
       </header>
       <main className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-4">

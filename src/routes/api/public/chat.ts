@@ -327,7 +327,7 @@ export const Route = createFileRoute("/api/public/chat")({
           if (!poolSettings.poolEnabled) return fail(424, "Cloudflare pool is off. Enable it in AI Models before approving a plan.");
         }
         const engineRef = existingJob?.engine_provider && existingJob.engine_model ? { provider: existingJob.engine_provider, model: existingJob.engine_model } : selection.ref;
-        if (jobId) await supabaseAdmin.from("chat_jobs").update({ build_engine: selection.engine, engine_provider: engineRef?.provider ?? null, engine_model: engineRef?.model ?? null }).eq("id", jobId);
+            await supabaseAdmin.from("chat_jobs").update({ build_engine: selection.engine, engine_provider: engineRef?.provider ?? null, engine_model: engineRef?.model ?? null }).eq("id", jobId);
         const poolPositions = new Map<string, number>();
         let chain: ModelRef[] = [];
         let runCap: number | null = null;

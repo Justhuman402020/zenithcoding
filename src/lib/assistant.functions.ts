@@ -77,6 +77,9 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
     if (brain) parts.push(`Brain rules:\n${brain.slice(0, 3000)}`);
     const vault = await listVault();
     parts.push(`Saved key names in the Admin vault (values hidden): ${vault.map((v) => v.label).join(", ") || "none"}`);
+    const { readWorkspaceAI } = await import("./workspace-ai.server");
+    const ai = await readWorkspaceAI();
+    parts.push(`Admin AI Models (read only): planning=Cloudflare; build engine=${ai.engine}; text=${ai.text?.model ?? "not selected"}; image=${ai.image?.model ?? "not selected"}; chat=${ai.chatEngine}. Never change these settings.`);
   }
   if (projectId) {
     const { data: proj } = await ctx.supabase.from("projects").select("name,description").eq("id", projectId).eq("user_id", ctx.userId).maybeSingle();
