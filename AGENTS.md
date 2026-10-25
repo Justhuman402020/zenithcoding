@@ -50,6 +50,7 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Site themes are pure data in src/lib/themes.ts (SVG doodles + CSS vars applied on <html>); the saved choice lives in user_settings so it follows the owner across devices.
 - Chat-approved Cloudflare edits are started by the database (pg_net via public.start_build_job) with the resume token, so the build is held open server-side and never depends on the phone staying online.
 - Owner access is revalidated in app function middleware and restrictive session policies; never gate public published sites or signed provider callbacks with workspace access.
+- The protected layout owns session admission; the root owner/device check redirects only on authoritative denial, never on transport errors, and public auth offers sign-in only to prevent accidental registration.
 - Workspace planning/build configuration lives separately from manual model selection; approved jobs snapshot their engine/model and use the database starter so retries cannot change engines.
 - All Workers AI inference steps use the normalized Neuron call ledger; aggregate key counters serve budget checks, not a second event history. Routing must never probe Workers AI with inference pings.
 - OpenRouter capability and pricing labels come from authenticated catalog metadata, not name guesses; preserve API order and full details for build-key browsing.
