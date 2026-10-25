@@ -113,7 +113,7 @@ export const getModelBoard = createServerFn({ method: "GET" })
         const lastStatus = (status?.last_status as string | null) ?? null;
         const lastError = (status?.last_error as string | null) ?? null;
         rows.push({
-          access: model.routerDetails ? (lastStatus === "unauthorized" || lastStatus === "unavailable" ? "unavailable" : routerPriceLabel(model.routerDetails.pricing) === "Free" ? "free" : "paid") : classifyAccess({ model: model.id, cloudflare: isCloudflareBaseUrl(provider.baseURL), lastStatus, lastError }),
+          access: model.routerDetails ? (lastStatus === "unauthorized" || lastStatus === "unavailable" ? "unavailable" : routerPriceLabel(model.routerDetails.pricing) === "Free" ? "free" : routerPriceLabel(model.routerDetails.pricing) === "Paid" ? "paid" : "unavailable") : classifyAccess({ model: model.id, cloudflare: isCloudflareBaseUrl(provider.baseURL), lastStatus, lastError }),
           isNew: false,
           provider: provider.id,
           providerLabel: provider.label,
