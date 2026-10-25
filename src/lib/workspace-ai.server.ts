@@ -13,3 +13,26 @@ export async function recordNeuronCall(row: { user_id?: string; project_id?: str
   const { error } = await supabaseAdmin.from("neuron_call_ledger").insert(row);
   if (error) throw new Error("Could not save Neuron usage");
 }
+export const BUILD_ROUTER_ID = "build-openrouter";
+const ROUTER_URL = "https://openrouter.ai/api/v1";
+/** Lists models reachable with a pasted OpenRouter key; also proves the key works. */
+export async function routerModels(apiKey: string) {
+  const key = apiKey.trim().replace(/^Bearer\s+/i, "");
+  const auth = await fetch(`${ROUTER_URL}/key`, { headers: { Authorization: `Bearer ${key}` } });
+  if (!auth.ok) return { ok: false as const, error: auth.status === 401 ? "OpenRouter rejected this key" : `OpenRouter ${auth.status}` };
+  const res = await fetch(`${ROUTER_URL}/models`, { headers: { Authorization: `Bearer ${key}` } });
+  if (!res.ok) return { ok: false as const, error: `OpenRouter ${res.status}` };
+  const j = (await res.json()) as { data?: Array<{ id: string; name?: string; architecture?: { input_modalities?: string[] } }> };
+  const models = (j.data ?? []).map((m) => ({ id: m.id, label: m.name ?? m.id, vision: !!m.architecture?.input_modalities?.includes("image") }));
+  return { ok: true as const, models };
+}
+export async function readBuildRouterKey() {
+  const { getIntegrationKey } = await import("./integration-keys.server");
+  return getIntegrationKey("build_openrouter", "apiKey");
+}
+export async function saveBuildRouterKey(apiKey: string, userId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { encryptSecret } = await import("./secrets-crypto.server");
+  const { error } = await supabaseAdmin.from("platform_integration_keys" as any).upsert({ service: "build_openrouter", field: "apiKey", value_encrypted: await encryptSecret(apiKey.trim().replace(/^Bearer\s+/i, "")), updated_by: userId, updated_at: new Date().toISOString() } as any);
+  if (error) throw new Error("Could not activate key");
+}

@@ -26,6 +26,12 @@ export async function loadProviderRegistry(): Promise<{ providers: ProviderOptio
     providers.push(option);
     keys[option.id] = apiKey;
   }
+  const { readBuildRouterKey, BUILD_ROUTER_ID } = await import("./workspace-ai.server");
+  const buildKey = await readBuildRouterKey();
+  if (buildKey) {
+    providers.push({ id: BUILD_ROUTER_ID, label: "OpenRouter (Build key)", envKey: "BUILD_OPENROUTER", baseURL: "https://openrouter.ai/api/v1", docs: "https://openrouter.ai", models: [] } as ProviderOption);
+    keys[BUILD_ROUTER_ID] = buildKey;
+  }
   return { providers, keys };
 }
 

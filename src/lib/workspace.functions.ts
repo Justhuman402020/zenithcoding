@@ -36,4 +36,34 @@ export const getNeuronLedger = createServerFn({ method: "GET" }).middleware([req
     if (!data || data.length < 1000) break;
   }
   return { rows, totals: sectionTotals(rows) };
+});async function ownerOnly(context: any) {
+  const { data: user } = await context.supabase.auth.getUser();
+  if (!isOwner(user.user)) throw new Error("Not available");
+  return user.user!.id as string;
+}
+export const testBuildRouterKey = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: { apiKey: string }) => z.object({ apiKey: z.string().min(10).max(300) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await ownerOnly(context);
+    const { routerModels } = await import("./workspace-ai.server");
+    const r = await routerModels(data.apiKey);
+    return r.ok ? { ok: true, count: r.models.length, error: null } : { ok: false, count: 0, error: r.error };
+  });
+export const activateBuildRouterKey = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: { apiKey: string }) => z.object({ apiKey: z.string().min(10).max(300) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const uid = await ownerOnly(context);
+    const { routerModels, saveBuildRouterKey } = await import("./workspace-ai.server");
+    const r = await routerModels(data.apiKey);
+    if (!r.ok) throw new Error(r.error);
+    await saveBuildRouterKey(data.apiKey, uid);
+    return { ok: true };
+  });
+export const getBuildRouterModels = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+  await ownerOnly(context);
+  const { routerModels, readBuildRouterKey, BUILD_ROUTER_ID } = await import("./workspace-ai.server");
+  const key = await readBuildRouterKey();
+  if (!key) return { active: false, provider: BUILD_ROUTER_ID, models: [] as Array<{ id: string; label: string; vision: boolean }>, error: null as string | null };
+  const r = await routerModels(key);
+  return { active: true, provider: BUILD_ROUTER_ID, models: r.ok ? r.models : [], error: r.ok ? null : r.error };
 });
