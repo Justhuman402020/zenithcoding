@@ -16,7 +16,6 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,18 +31,8 @@ function AuthPage() {
     if (email.trim().toLowerCase() !== OWNER_EMAIL) { await navigate({ to: "/not-available" }); return; }
     setLoading(true);
     try {
-      if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        if (!data.session) { toast.success("Check your email to confirm your account."); return; }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
       navigate({ to: "/" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Auth failed");
@@ -93,12 +82,10 @@ function AuthPage() {
           <div className="rounded-2xl border hairline-gold bg-card/70 backdrop-blur-sm p-7 shadow-candlelight">
             <div className="mb-6 space-y-1">
               <h2 className="font-display text-3xl leading-tight">
-                {mode === "signin" ? "Welcome back." : "Begin forging."}
+                Welcome back.
               </h2>
               <p className="text-sm text-muted-foreground">
-                {mode === "signin"
-                  ? "Step into your atelier."
-                  : "Create your private workspace — takes a moment."}
+                Private owner sign-in.
               </p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -115,19 +102,9 @@ function AuthPage() {
                 className="w-full h-11 bg-gold-gradient text-primary-foreground font-medium hover:opacity-95 shadow-gold-glow"
                 disabled={loading}
               >
-                {loading ? "..." : mode === "signin" ? "Sign in" : "Create account"}
+                {loading ? "..." : "Sign in"}
               </Button>
             </form>
-            <div className="mt-6 text-center text-sm text-muted-foreground">
-              {mode === "signin" ? "New to Code Haven?" : "Already have an account?"}{" "}
-              <button
-                type="button"
-                className="text-primary hover:text-primary-glow underline-offset-4 hover:underline"
-                onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              >
-                {mode === "signin" ? "Create one" : "Sign in"}
-              </button>
-            </div>
           </div>
           <p className="mt-6 text-center text-[11px] text-muted-foreground/60 font-mono uppercase tracking-[0.18em]">
             Pure gold · Built for one

@@ -16,6 +16,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeBoot } from "@/components/ThemePicker";
+import { Button } from "@/components/ui/button";
+import { isWorkspaceAccessDenied } from "@/lib/session-policy";
 
 function NotFoundComponent() {
   return (
@@ -159,21 +161,37 @@ function WorkspaceGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const verify = useServerFn(verifyWorkspaceAccess);
   const [allowed, setAllowed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [unavailable, setUnavailable] = useState(false);
   const path = router.state.location.pathname;
   const privatePath = path === "/" || /^\/(admin|chats|p|account)(\/|$)/.test(path);
   useEffect(() => {
     if (!privatePath) return;
     let live = true;
+    let checking = false;
     setAllowed(false);
+    setUnavailable(false);
     async function check() {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) { await router.navigate({ to: "/auth", replace: true }); return; }
-      try { await verify(); if (live) setAllowed(true); }
-      catch { if (live) await router.navigate({ to: "/not-available", replace: true }); }
+      if (checking || !live) return;
+      checking = true;
+      try {
+        // The protected layout owns login; this check owns owner/device access.
+        // Do not redirect or discard a verified session on transport failures.
+        await verify();
+        if (live) { setAllowed(true); setUnavailable(false); }
+      } catch (error) {
+        if (!live) return;
+        if (isWorkspaceAccessDenied(error)) {
+          setAllowed(false);
+          await router.navigate({ to: "/not-available", replace: true });
+        } else setUnavailable(true);
+      } finally { checking = false; }
     }
     void check();
     const timer = setInterval(() => void check(), 30_000);
     return () => { live = false; clearInterval(timer); };
-  }, [path, privatePath, verify, router]);
-  return !privatePath || allowed ? children : <div className="min-h-screen grid place-items-center text-muted-foreground">Checking access…</div>;
+  }, [path, privatePath, verify, router, retry]);
+  return !privatePath || allowed ? children : <div className="min-h-screen flex flex-col gap-4 items-center justify-center text-muted-foreground">
+    {unavailable ? <>Connection interrupted. Your sign-in has not been cleared.<Button variant="outline" onClick={() => setRetry((value) => value + 1)}>Try again</Button></> : "Checking access…"}
+  </div>;
 }

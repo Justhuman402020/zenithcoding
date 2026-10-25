@@ -1,5 +1,11 @@
 # Roadmap
 
+- [x] Harden screen-off recovery: await saved inputs/timer, retain original media and actual OpenRouter selection, refresh restart claim heartbeat; 25 targeted tests passed without inference.
+- [ ] Verify a real screen-off build finishes on the published runtime: requires explicit approval for live inference; background recovery safeguards verified with synthetic tests only.
+
+- [x] Stop transient owner/device checks redirecting signed-in users; prevent overlapping checks and remove registration controls. Owner browser retained access after reload and offline interruption; 11 tests pass. Account-creation trigger restricts new accounts to the owner.
+- [ ] Verify shared-preview refresh-token rotation across devices: generated auth storage is integration-managed; genuine revoked/missing refresh tokens still require sign-in again.
+
 - [x] Add explicit editor Image build routing, preserve image + caption delivery, remove misleading Qwen notices, and expand model About metadata; 30 tests pass and signed-in intercepted image request verified without inference.
 
 - [x] Add full build-key OpenRouter catalog search and model information; verified 467 real models, search/About on desktop and phone, and 27 regression tests without inference.

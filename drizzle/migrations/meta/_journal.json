@@ -113,6 +113,13 @@
       "when": 1792929323283,
       "tag": "0015_atomic_neuron_ledger_totals",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792969501751,
+      "tag": "0016_restrict_workspace_registration_to_owner",
+      "breakpoints": true
     }
   ]
 }
