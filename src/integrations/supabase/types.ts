@@ -1658,6 +1658,7 @@ export type Database = {
       workspace_ai_settings: {
         Row: {
           build_engine: string
+          chat_engine: string
           id: string
           image_model: string | null
           image_provider: string | null
@@ -1667,6 +1668,7 @@ export type Database = {
         }
         Insert: {
           build_engine?: string
+          chat_engine?: string
           id?: string
           image_model?: string | null
           image_provider?: string | null
@@ -1676,6 +1678,7 @@ export type Database = {
         }
         Update: {
           build_engine?: string
+          chat_engine?: string
           id?: string
           image_model?: string | null
           image_provider?: string | null
