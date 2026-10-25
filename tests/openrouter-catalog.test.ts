@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogModels, searchRouterModels } from "../src/lib/openrouter-catalog";
+import { catalogModels, searchRouterModels, routerPriceLabel } from "../src/lib/openrouter-catalog";
 
 describe("build key model catalog", () => {
   const models = catalogModels([
@@ -20,5 +20,12 @@ describe("build key model catalog", () => {
     expect(models[0].contextLength).toBe(128000);
     expect(models[0].pricing.prompt).toBe("0.000001");
     expect(models[1].supportedParameters).toEqual(["tools"]);
+  });
+  it("marks only explicitly zero-priced models Free", () => {
+    expect(routerPriceLabel({ prompt: "0", completion: "0", image: "0" })).toBe("Free");
+    expect(routerPriceLabel({ prompt: "0", completion: "0.000001" })).toBe("Paid");
+    expect(routerPriceLabel({ prompt: "0", completion: "0", image: "0.01" })).toBe("Paid");
+    expect(routerPriceLabel({})).toBe("Pricing unavailable");
+    expect(routerPriceLabel({ prompt: "-1", completion: "0" })).toBe("Pricing unavailable");
   });
 });

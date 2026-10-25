@@ -35,3 +35,10 @@ export function tokenPrice(value?: string) {
   if (value === undefined || !Number.isFinite(Number(value))) return "Not provided";
   return `$${(Number(value) * 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 4 })} / 1M tokens`;
 }
+
+export function routerPriceLabel(pricing: Record<string, string>): "Free" | "Paid" | "Pricing unavailable" {
+  const values = Object.values(pricing);
+  if (values.some((v) => Number.isFinite(Number(v)) && Number(v) > 0)) return "Paid";
+  if (pricing.prompt === undefined || pricing.completion === undefined || !values.length || values.some((v) => v.trim() === "" || !Number.isFinite(Number(v)) || Number(v) !== 0)) return "Pricing unavailable";
+  return "Free";
+}
