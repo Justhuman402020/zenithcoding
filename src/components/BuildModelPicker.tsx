@@ -16,7 +16,7 @@ export function BuildModelPicker({ kind, models, selected, onSelect }: {
   return <div className="min-w-0 space-y-2">
     <span className="text-sm">{kind === "image" ? "Image model" : "Text model"}</span>
     <Button variant="outline" className="h-auto min-h-10 w-full justify-start whitespace-normal text-left" onClick={() => setOpen(true)} aria-label={`Choose ${kind} build model`}>
-      <span className="min-w-0 break-words">{chosen?.label ?? selected || "Select manually"}</span>
+      <span className="min-w-0 break-words">{chosen?.label ?? (selected || "Select manually")}</span>
     </Button>
     {chosen && <p className="break-all text-xs text-muted-foreground">{chosen.id} · {routerPriceLabel(chosen.pricing)}</p>}
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[85dvh] w-[calc(100%-2rem)] max-w-2xl overflow-hidden">
