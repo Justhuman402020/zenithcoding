@@ -84,7 +84,10 @@ export const Route = createFileRoute("/api/public/chat")({
         if (isResume) {
           const { supabaseAdmin: adminClient } = await import("@/integrations/supabase/client.server");
           supabase = adminClient;
-          userId = resumeUser!;
+          userId = String(resumeUser);
+          const { data: resumedOwner } = await adminClient.auth.admin.getUserById(userId);
+          const { isOwner } = await import("@/lib/owner-policy");
+          if (!isOwner(resumedOwner.user)) return new Response("Not available", { status: 403 });
         } else {
           supabase = createClient(supabaseUrl, supabasePublishable, {
             global: { headers: { Authorization: `Bearer ${token}` } },
@@ -95,6 +98,10 @@ export const Route = createFileRoute("/api/public/chat")({
             console.log("[chat] getUser failed", userErr?.message);
             return new Response(`Unauthorized: ${userErr?.message ?? "no user"}`, { status: 401 });
           }
+          const { isOwner } = await import("@/lib/owner-policy");
+          if (!isOwner(userRes.user)) return new Response("Not available", { status: 403 });
+          const { data: allowed } = await supabase.rpc("workspace_session_allowed");
+          if (!allowed) return new Response("Not available", { status: 403 });
           userId = userRes.user.id;
         }
 
@@ -204,7 +211,7 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const { data: existingJob } = await supabase
           .from("chat_jobs")
-          .select("id,status,assistant_reply,error")
+          .select("id,status,assistant_reply,error,build_engine,engine_provider,engine_model")
           .eq("project_id", projectId)
           .eq("user_id", userId)
           .eq("request_key", requestKey)
@@ -228,7 +235,7 @@ export const Route = createFileRoute("/api/public/chat")({
           const resumePayload = {
             messages: compactMessages0(body.messages),
             headers: Object.fromEntries(
-              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model"]
+              ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-approval"]
                 .map((h) => [h, request.headers.get(h)])
                 .filter(([, v]) => v != null),
             ),
@@ -309,7 +316,17 @@ export const Route = createFileRoute("/api/public/chat")({
         // ON: keys 1 → 60 in strict order, handing off at 9,000.
         const { readPoolSettings } = await import("@/lib/cf-pool-settings.server");
         const poolSettings = await readPoolSettings();
-        const editorAuto = poolSettings.poolEnabled;
+        const { workspacePick } = await import("@/lib/workspace-ai.server");
+        const selection = await workspacePick(planMode ? "plan" : "build", existingJob?.build_engine as "openrouter" | "cloudflare" | null, hasImages);
+        const editorAuto = selection.engine === "cloudflare";
+        if (editorAuto) {
+          const approvalId = request.headers.get("x-forge-approval");
+          const { data: approval } = approvalId ? await supabaseAdmin.from("assistant_edit_requests").select("id").eq("id", approvalId).eq("user_id", userId).eq("project_id", projectId).eq("request_key", requestKey).eq("status", "running").maybeSingle() : { data: null };
+          if (!approval && request.headers.get("x-forge-auto") !== "on") return fail(403, "Cloudflare approval required");
+          if (!poolSettings.poolEnabled) return fail(424, "Cloudflare pool is off. Enable it in AI Models before approving a plan.");
+        }
+        const engineRef = existingJob?.engine_provider && existingJob.engine_model ? { provider: existingJob.engine_provider, model: existingJob.engine_model } : selection.ref;
+        if (jobId) await supabaseAdmin.from("chat_jobs").update({ build_engine: selection.engine, engine_provider: engineRef?.provider ?? null, engine_model: engineRef?.model ?? null }).eq("id", jobId);
         const poolPositions = new Map<string, number>();
         let chain: ModelRef[] = [];
         let runCap: number | null = null;
@@ -331,14 +348,16 @@ export const Route = createFileRoute("/api/public/chat")({
         } else {
           const { withoutCloudflare } = await import("@/lib/cf-pool-routing");
           const allowed = new Set(withoutCloudflare(providerRegistry).map((p) => p.id));
-          const locked = requestedRef && allowed.has(requestedRef.provider) ? requestedRef : adminRef && allowed.has(adminRef.provider) ? adminRef : fullChain.find((r) => allowed.has(r.provider)) ?? null;
+          const manual = requestedRef && providerRegistry.some((p) => p.id === requestedRef.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL)) ? requestedRef : null;
+          const locked = existingJob?.engine_provider ? engineRef : manual ?? engineRef;
+          if (!locked || !allowed.has(locked.provider) || !providerRegistry.some((p) => p.id === locked.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL))) return fail(424, "Select your OpenRouter text/image model in AI Models first.");
           if (!locked) return fail(424, JSON.stringify({ error: "model_unavailable", message: "The Cloudflare pool is off and no non-Cloudflare coding model is selected. Pick one in Admin → Models, or turn the pool on." }), "application/json");
           chain = [locked];
         }
 
 
         // One pool run at a time, enforced by a unique index on running pool jobs.
-        if (editorAuto && jobId && !planMode) {
+        if (editorAuto && jobId) {
           // A dead run (no heartbeat for 3 minutes) must never hold the pool lock.
           // A server restart of this same job keeps its own lock.
           await supabaseAdmin
@@ -358,7 +377,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
         const gateway = await readAiGatewaySetting();
         let visualBrief = "";
-        if (hasImages) {
+        if (hasImages && !planMode) {
           const selectedVision = parseModelKey(request.headers.get("x-forge-vision-model"));
           const { data: poolSettings } = await supabaseAdmin
             .from("ai_pool_settings")
@@ -371,9 +390,10 @@ export const Route = createFileRoute("/api/public/chat")({
           const { planAttachedImages } = await import("@/lib/vision-planner.server");
           const visualPlan = await planAttachedImages({
             messages: compactMessages,
-            providers: providerRegistry,
+            providers: providerRegistry.filter((p) => /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL)),
             keys: providerKeys,
-            preferred: visionPreference,
+            preferred: engineRef ?? visionPreference,
+            strict: true,
             gateway,
             onSwitch: async () => {},
           });
@@ -755,7 +775,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 kick();
                 if (chunk?.type === "text-delta" || chunk?.type === "reasoning-delta") streamedChars += String(chunk.text ?? chunk.delta ?? "").length;
               },
-              onStepFinish: (step: any) => {
+              onStepFinish: async (step: any) => {
                 kick();
                 stepNo += 1;
                 attemptStepCount += 1;
@@ -775,6 +795,8 @@ export const Route = createFileRoute("/api/public/chat")({
                   const counted = countCallSync({ model: current.ref.model, inputTokens: step?.usage?.inputTokens, outputTokens: step?.usage?.outputTokens, chars: String(step?.text ?? "").length });
                   if (counted.source === "uncertain") countSource = "uncertain";
                   const cost = counted.neurons;
+                  const { recordNeuronCall } = await import("@/lib/workspace-ai.server");
+                  await recordNeuronCall({ user_id: userId, project_id: projectId, request_key: requestKey, section: planMode ? "plan" : needsFileChange ? "build" : "chat", provider_id: current.ref.provider, key_number: poolPositions.get(current.ref.provider), model: current.ref.model, step: stepNo, input_tokens: step?.usage?.inputTokens, output_tokens: step?.usage?.outputTokens, neurons: cost, source: counted.source, action: last || (planMode ? "Planning step" : "Response") });
                   attemptNeurons += cost;
                   stepCosts.push(cost);
                   // Look ahead: stop now if the next step would cross 9,000 (1,000 reserve kept).
@@ -852,11 +874,13 @@ export const Route = createFileRoute("/api/public/chat")({
 
             // Record the sum of every step's cost. Failed calls that streamed text but
             // reported no tokens are counted from characters, labeled uncertain.
-            if (cfPool && attemptNeurons === 0 && streamedChars > 0) {
+            if (cfPool && attemptStepCount === 0) {
               const { countCall } = await import("@/lib/cf-pool-policy");
               const c = countCall({ model: current.ref.model, chars: streamedChars });
               attemptNeurons = c.neurons;
               countSource = "uncertain";
+              const { recordNeuronCall } = await import("@/lib/workspace-ai.server");
+              await recordNeuronCall({ user_id: userId, project_id: projectId, request_key: requestKey, section: planMode ? "plan" : "build", provider_id: current.ref.provider, key_number: poolPositions.get(current.ref.provider), model: current.ref.model, neurons: c.neurons, source: c.source, action: "Interrupted call", status: "partial" });
             }
             if (cfPool && attemptNeurons > 0) await cfPool.addNeurons(current.ref.provider, attemptNeurons);
             runUsed += attemptNeurons;
@@ -1004,7 +1028,7 @@ export const Route = createFileRoute("/api/public/chat")({
             }
             // Handoff or confirmed quota → next key in strict order. Re-check the toggle and cap.
             const live = await readPoolSettings();
-            const stop = P.runStopReason({ runUsed, cap: runCap, poolEnabled: live.poolEnabled, userStopped, taskDone: false, atLastKey: !P.nextKey(chain.map((r) => ({ position: Number(keyNo(r.provider)) || 0 })), pos) });
+            const stop = P.runStopReason({ runUsed, cap: runCap, poolEnabled: editorAuto, userStopped, taskDone: false, atLastKey: !P.nextKey(chain.map((r) => ({ position: Number(keyNo(r.provider)) || 0 })), pos) });
             ledger.push(P.ledgerEntry({ key: pos, filesDone: [...progressModel.files], neuronsThisTurn: Math.round(attemptNeurons), totalAtHandoff: Math.round(baseNeurons + attemptNeurons), source: countSource, reason: handoff ? (capHit ? "run cap reached" : "handoff at 9,000") : `quota: ${lastError.slice(0, 160)}`, successor: stop ? null : pos + 1, retries: sameKeyRetries }));
             sameKeyRetries = 0;
             if (stop) {
@@ -1105,12 +1129,6 @@ export const Route = createFileRoute("/api/public/chat")({
                 error: reason,
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId).in("status", ["queued", "running"]);
-            }
-            if (outcome !== "stopped" && (partial || stepNo > 0)) {
-              await supabaseAdmin.from("chat_messages").insert({
-                project_id: projectId, user_id: userId, role: "assistant",
-                content: `${partial ? `${partial}\n\n` : ""}⚠️ ${reason}`,
-              });
             }
             await saveProgress({
               status: userStopped || outcome === "stopped_early" || outcome === "incomplete" ? "unfinished" : "failed",

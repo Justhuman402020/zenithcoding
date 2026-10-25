@@ -22,6 +22,7 @@ export async function planAttachedImages(args: {
   providers: ProviderOption[];
   keys: ProviderKeys;
   preferred: ModelRef | null;
+  strict?: boolean;
   gateway: { url: string | null; enabled: boolean };
   onSwitch?: (seconds: number, failed: ModelRef) => Promise<void> | void;
 }): Promise<VisionPlanResult | null> {
@@ -35,7 +36,7 @@ export async function planAttachedImages(args: {
   const allowed = new Set(providers.map((p) => p.id));
   const candidates: ModelRef[] = [];
   if (args.preferred && allowed.has(args.preferred.provider)) candidates.push(args.preferred);
-  for (const provider of providers) {
+  for (const provider of args.strict ? [] : providers) {
     const key = args.keys[provider.id];
     if (!key) continue;
     const models = await listProviderModels(provider.id, key, provider);
