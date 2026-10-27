@@ -83,6 +83,7 @@ import { getPreviewEnv } from "@/lib/project-secrets.functions";
 import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
 import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react";
+import { BuildApprovalHost, requestApproval } from "@/components/BuildApprovalDialog";
 import { BrainPanel } from "@/components/BrainPanel";
 import { SkillMenu } from "@/components/SkillMenu";
 import { AssetsPanel } from "@/components/AssetsPanel";
@@ -884,7 +885,7 @@ function ProjectEditor() {
           headers["x-forge-mode"] = choice.mode;
           headers["x-forge-engine"] = choice.engine;
           if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
-          if (!window.confirm(choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?")) throw new Error("Request not approved");
+          if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
           headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
           if (poolFromRef.current) {
@@ -1662,45 +1663,36 @@ function ProjectEditor() {
 
   const [reverting, setReverting] = useState(false);
   async function revertToLastStable() {
+    return revertToSnapshot(null);
+  }
+  /** Restores the copy saved before a build. label=null → most recent build. Saves the current files first so a revert can be undone. */
+  async function revertToSnapshot(label: string | null) {
     if (reverting) return;
-    if (!confirm("Revert this project to the version saved before your most recent build? This cannot be undone.")) return;
+    const ok = await requestApproval("revert", label ? "Revert this project to the version saved before this build?" : "Revert this project to the version saved before your most recent build?");
+    if (!ok) return;
     setReverting(true);
     try {
-      const { data: snap, error: snapErr } = await supabase
-        .from("project_snapshots")
-        .select("id,files,created_at")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      let q = supabase.from("project_snapshots").select("id,files,created_at,label").eq("project_id", projectId).neq("label", "Before revert");
+      if (label) q = q.eq("label", label);
+      const { data: snap, error: snapErr } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (snapErr) throw snapErr;
-      if (!snap) {
-        toast.error("No previous version saved yet");
-        return;
-      }
+      if (!snap) { toast.error("No saved version found for that build"); return; }
       const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) {
-        toast.error("Please sign in again");
-        return;
-      }
+      if (!userRes.user) { toast.error("Please sign in again"); return; }
+      const { data: current } = await supabase.from("files").select("path,content").eq("project_id", projectId);
+      const { error: saveErr } = await supabase.from("project_snapshots").insert({ project_id: projectId, user_id: userRes.user.id, label: "Before revert", files: (current ?? []) as any });
+      if (saveErr) throw saveErr;
       const snapFiles = (snap.files as Array<{ path: string; content: string }>) ?? [];
       const { error: delErr } = await supabase.from("files").delete().eq("project_id", projectId);
       if (delErr) throw delErr;
       if (snapFiles.length > 0) {
-        const rows = snapFiles.map((f) => ({
-          project_id: projectId,
-          user_id: userRes.user!.id,
-          path: f.path,
-          content: f.content,
-        }));
-        const { error: insErr } = await supabase.from("files").insert(rows);
+        const { error: insErr } = await supabase.from("files").insert(snapFiles.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content })));
         if (insErr) throw insErr;
       }
-      // consume the snapshot so repeated clicks don't keep restoring the same one
-      await supabase.from("project_snapshots").delete().eq("id", snap.id);
+      await supabase.from("chat_messages").insert({ project_id: projectId, user_id: userRes.user.id, role: "assistant", content: `Reverted to the version saved before: "${String(snap.label).slice(0, 80)}". A copy of the previous files is in History as "Before revert".` });
       await refreshFiles();
       setPreviewKey((k) => k + 1);
-      toast.success("Reverted to last stable version");
+      toast.success("Reverted. You can undo it from History.");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not revert");
     } finally {
@@ -1710,6 +1702,7 @@ function ProjectEditor() {
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
+      <BuildApprovalHost />
       {/* Header */}
       <header className="min-h-14 hairline-bottom-gold grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-3 py-2 shrink-0 bg-card/30 backdrop-blur-sm sm:flex sm:flex-wrap sm:py-2">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
