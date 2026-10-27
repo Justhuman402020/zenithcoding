@@ -1,5 +1,9 @@
 # Roadmap
 
+- [x] Enlarge editor chat message box: full-width text area with attach/camera/skills and send on their own row below; verified on phone (364x150) and wide screen (1254x134) with no clipping.
+
+
+
 - [x] Move editor builds to a database-owned starter so phone disconnects cannot end the initial build request; preserve owner-only access and explicit approval. Live inference remains approval-gated below.
 
 - [x] Harden screen-off recovery: await saved inputs/timer, retain original media and actual OpenRouter selection, refresh restart claim heartbeat; 25 targeted tests passed without inference.
