@@ -2017,7 +2017,7 @@ function ProjectEditor() {
                       }
                     >
                       {showStatusPill && (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-sm font-medium text-muted-foreground">
                           {workingActive ? (
                             <>
                               <HammerIcon className="h-3 w-3 text-primary animate-pulse" />
@@ -2065,7 +2065,7 @@ function ProjectEditor() {
                           <button
                             type="button"
                             onClick={() => setOpenThinking((cur) => ({ ...cur, [actKey]: !actOpen }))}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2.5 py-1 text-sm text-muted-foreground hover:text-foreground"
                           >
                             <ListTree className="h-3 w-3 text-primary" />
                             Activity ({entries.filter((e) => e.kind === "tool").length} steps)
@@ -2082,7 +2082,7 @@ function ProjectEditor() {
                                     <button
                                       type="button"
                                       onClick={() => setOpenThinking((cur) => ({ ...cur, [entry.key]: !open }))}
-                                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                                     >
                                       {entry.active ? (
                                         <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -2097,7 +2097,7 @@ function ProjectEditor() {
                                       {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                                     </button>
                                     {open && (
-                                      <div className="mt-1.5 rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                      <div className="mt-1.5 rounded-lg border border-border bg-card/40 px-3 py-2 text-sm text-muted-foreground/90 whitespace-pre-wrap leading-relaxed">
                                         {entry.text}
                                       </div>
                                     )}
@@ -2131,15 +2131,15 @@ function ProjectEditor() {
                                   <button
                                     type="button"
                                     onClick={() => setOpenToolDetails((cur) => ({ ...cur, [entry.key]: !detailOpen }))}
-                                    className="flex w-full items-center gap-2 text-left text-sm hover:opacity-80 transition-opacity"
+                                    className="flex w-full items-center gap-2 text-left text-base hover:opacity-80 transition-opacity"
                                   >
                                     <span className="font-medium text-foreground">{verb}</span>
                                     {path && (
-                                      <span className="truncate rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                                      <span className="truncate rounded bg-muted/50 px-1.5 py-0.5 font-mono text-sm text-muted-foreground">
                                         {path.split("/").pop()}
                                       </span>
                                     )}
-                                    {!path && <span className="text-muted-foreground text-xs">{label}</span>}
+                                    {!path && <span className="text-muted-foreground text-sm">{label}</span>}
                                     <span className="ml-auto shrink-0 text-muted-foreground">
                                       {detailOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                                     </span>
@@ -2148,18 +2148,18 @@ function ProjectEditor() {
                                     <div className="mt-1.5 space-y-2 rounded-lg border border-border bg-background/40 px-3 py-2">
                                       {inputPreview && (
                                         <div className="space-y-1">
-                                          <div className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Input</div>
-                                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-muted-foreground/90">{inputPreview}</pre>
+                                          <div className="font-mono text-sm uppercase tracking-wider text-primary/70">Input</div>
+                                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-sm leading-relaxed text-muted-foreground/90">{inputPreview}</pre>
                                         </div>
                                       )}
                                       {outputPreview && (
                                         <div className="space-y-1">
-                                          <div className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Result</div>
-                                          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-muted-foreground/90">{outputPreview}</pre>
+                                          <div className="font-mono text-sm uppercase tracking-wider text-primary/70">Result</div>
+                                          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all font-mono text-sm leading-relaxed text-muted-foreground/90">{outputPreview}</pre>
                                         </div>
                                       )}
                                       {!inputPreview && !outputPreview && (
-                                        <div className="text-[11px] text-muted-foreground/70">No details yet.</div>
+                                        <div className="text-sm text-muted-foreground/70">No details yet.</div>
                                       )}
                                     </div>
                                   )}
@@ -2234,7 +2234,7 @@ function ProjectEditor() {
                         if (!label || !snapshotLabels.has(label)) return null;
                         return (
                           <div className="mt-1 flex justify-end">
-                            <button onClick={() => void revertToSnapshot(label)} disabled={reverting} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground hover:text-primary hover:bg-accent/40" title="Revert to before this build" aria-label="Revert to before this build">
+                            <button onClick={() => void revertToSnapshot(label)} disabled={reverting} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:text-primary hover:bg-accent/40" title="Revert to before this build" aria-label="Revert to before this build">
                               <Undo2 className="h-3.5 w-3.5" /> Revert
                             </button>
                           </div>
