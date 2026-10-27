@@ -2686,70 +2686,74 @@ function ProjectEditor() {
                   className="hidden"
                   onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
                 />
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
-                  <Camera className="h-4 w-4" />
-                </Button>
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0 font-mono text-base" onClick={() => setSkillMenuOpen((o) => !o)} title="Brain skills">
-                  /
-                </Button>
-                <Textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  // Opening the secure box the moment a key appears means zero
-                  // extra clicks — and the key never reaches the model.
-                  const pasted = detectPastedApiKey(next);
-                  if (pasted) {
-                    setPendingSecret(pasted);
-                    setInput(stripApiKey(next, pasted.value!));
-                    setTab("chat");
-                    return;
-                  }
-                  setInput(next);
-                  const intent = detectSecretIntent(next);
-                  if (intent && !pendingSecret && !savedSecretKeys.includes(intent.key.toUpperCase())) {
-                    setPendingSecret(intent);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e as any);
-                  }
-                }}
+                <div className="w-full min-w-0 rounded-xl border border-input bg-transparent shadow-sm focus-within:ring-1 focus-within:ring-ring">
+                  <Textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      // Opening the secure box the moment a key appears means zero
+                      // extra clicks — and the key never reaches the model.
+                      const pasted = detectPastedApiKey(next);
+                      if (pasted) {
+                        setPendingSecret(pasted);
+                        setInput(stripApiKey(next, pasted.value!));
+                        setTab("chat");
+                        return;
+                      }
+                      setInput(next);
+                      const intent = detectSecretIntent(next);
+                      if (intent && !pendingSecret && !savedSecretKeys.includes(intent.key.toUpperCase())) {
+                        setPendingSecret(intent);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e as any);
+                      }
+                    }}
+                    placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Code Haven to build…"}
+                    disabled={!token}
+                    rows={5}
+                    className="resize-none w-full min-h-[132px] max-h-[45vh] border-0 bg-transparent shadow-none px-3 py-2.5 text-base leading-relaxed focus-visible:ring-0"
+                  />
+                  <div className="flex items-center gap-1 px-2 pb-2">
+                    <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0 font-mono text-base" onClick={() => setSkillMenuOpen((o) => !o)} title="Brain skills">
+                      /
+                    </Button>
+                    <div className="flex-1" />
+                    {isBusy ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-10 w-10 shrink-0 rounded-xl border-destructive/50 text-destructive"
+                        title="Stop"
+                        aria-label="Stop"
+                        onClick={handleStop}
+                      >
+                        <Square className="h-4 w-4 fill-current" />
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
+                      disabled={(!input.trim() && attachments.length === 0) || !token || !isOnline}
+                      title={isBusy || queuePaused ? "Add to the queue" : "Send"}
+                    >
+                      {isBusy || queuePaused ? <ListPlus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
 
-                placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Code Haven to build…"}
-                disabled={!token}
-                rows={4}
-                className="resize-none flex-1 min-w-0 min-h-[112px] max-h-[45vh] text-base leading-relaxed px-3 py-2.5"
-
-                />
-                {isBusy ? (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    className="h-11 w-11 shrink-0 rounded-xl border-destructive/50 text-destructive"
-                    title="Stop"
-                    aria-label="Stop"
-                    onClick={handleStop}
-                  >
-                    <Square className="h-4 w-4 fill-current" />
-                  </Button>
-                ) : null}
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
-                  disabled={(!input.trim() && attachments.length === 0) || !token || !isOnline}
-                  title={isBusy || queuePaused ? "Add to the queue" : "Send"}
-                >
-                  {isBusy || queuePaused ? <ListPlus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-                </Button>
               </div>
             </form>
           </div>
