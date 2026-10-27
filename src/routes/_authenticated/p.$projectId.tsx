@@ -2724,8 +2724,9 @@ function ProjectEditor() {
 
                 placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Code Haven to build…"}
                 disabled={!token}
-                rows={1}
-                className="resize-none min-h-[44px] max-h-32 text-base"
+                rows={4}
+                className="resize-none flex-1 min-w-0 min-h-[112px] max-h-[45vh] text-base leading-relaxed px-3 py-2.5"
+
                 />
                 {isBusy ? (
                   <Button
