@@ -2012,8 +2012,8 @@ function ProjectEditor() {
                     <div
                       className={
                         m.role === "user"
-                          ? "rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] bg-primary text-primary-foreground text-sm whitespace-pre-wrap"
-                          : "max-w-full text-sm flex flex-col gap-2 w-full"
+                          ? "rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] bg-primary text-primary-foreground text-base whitespace-pre-wrap"
+                          : "max-w-full text-base flex flex-col gap-2 w-full"
                       }
                     >
                       {showStatusPill && (
@@ -2223,7 +2223,7 @@ function ProjectEditor() {
                       })()}
                       {m.role === "assistant"
                         ? text && (
-                            <div className="prose prose-invert prose-sm max-w-none break-words">
+                            <div className="prose prose-invert max-w-none break-words text-base">
                               <ReactMarkdown>{text}</ReactMarkdown>
                             </div>
                           )
