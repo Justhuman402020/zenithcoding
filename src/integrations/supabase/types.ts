@@ -724,6 +724,60 @@ export type Database = {
         }
         Relationships: []
       }
+      model_call_log: {
+        Row: {
+          base_url: string | null
+          chat_id: string | null
+          created_at: string
+          error_short: string | null
+          first_token_ms: number | null
+          id: string
+          key_index: number | null
+          model: string
+          project_id: string | null
+          provider: string
+          section: string
+          started_at: string
+          status: string
+          total_ms: number | null
+          user_id: string
+        }
+        Insert: {
+          base_url?: string | null
+          chat_id?: string | null
+          created_at?: string
+          error_short?: string | null
+          first_token_ms?: number | null
+          id?: string
+          key_index?: number | null
+          model: string
+          project_id?: string | null
+          provider: string
+          section?: string
+          started_at?: string
+          status?: string
+          total_ms?: number | null
+          user_id: string
+        }
+        Update: {
+          base_url?: string | null
+          chat_id?: string | null
+          created_at?: string
+          error_short?: string | null
+          first_token_ms?: number | null
+          id?: string
+          key_index?: number | null
+          model?: string
+          project_id?: string | null
+          provider?: string
+          section?: string
+          started_at?: string
+          status?: string
+          total_ms?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       model_catalog_seen: {
         Row: {
           dismissed: boolean

@@ -30,8 +30,22 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
 }
 
 async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false) {
-  const { readWorkspaceAI } = await import("./workspace-ai.server");
+  const { readWorkspaceAI, recordModelCall } = await import("./workspace-ai.server");
   const settings = await readWorkspaceAI();
+  const ollama = settings.chatEngine === "ollama" && !images;
+  const ref = ollama ? { provider: "ollama", model: model ?? "unknown" } : (images ? settings.image : settings.text) ?? { provider: "openrouter", model: "unknown" };
+  const started = Date.now();
+  try {
+    const out = await helperChatInner(ctx, keyId, model, messages, images, settings);
+    await recordModelCall({ user_id: ctx.userId, provider: ref.provider, model: ref.model, section: "assistant", started_at: started, status: "ok" });
+    return out;
+  } catch (e: any) {
+    await recordModelCall({ user_id: ctx.userId, provider: ref.provider, model: ref.model, section: "assistant", started_at: started, status: "failed", error: e?.message });
+    throw e;
+  }
+}
+
+async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images: boolean, settings: Awaited<ReturnType<typeof import("./workspace-ai.server").readWorkspaceAI>>) {
   if (settings.chatEngine === "ollama" && !images) {
     if (!keyId || !model) throw new Error("Select your previous Ollama model");
     return ollamaChat(ctx, keyId, model, messages);

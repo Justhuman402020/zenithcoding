@@ -37,3 +37,17 @@ export async function saveBuildRouterKey(apiKey: string, userId: string) {
   const { error } = await supabaseAdmin.from("platform_integration_keys" as any).upsert({ service: "build_openrouter", field: "apiKey", value_encrypted: await encryptSecret(apiKey.trim().replace(/^Bearer\s+/i, "")), updated_by: userId, updated_at: new Date().toISOString() } as any);
   if (error) throw new Error("Could not activate key");
 }
+/** Saves one model reply for Recent models. Never throws: logging must not block work. */
+export async function recordModelCall(row: { user_id: string; project_id?: string | null; chat_id?: string | null; provider: string; model: string; base_url?: string | null; section: string; key_index?: number | null; started_at: number; first_token_at?: number | null; status: "ok" | "failed"; error?: string | null }) {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const now = Date.now();
+    await supabaseAdmin.from("model_call_log").insert({
+      user_id: row.user_id, project_id: row.project_id ?? null, chat_id: row.chat_id ?? null,
+      provider: row.provider, model: row.model, base_url: row.base_url ?? null, section: row.section,
+      key_index: row.key_index ?? null, started_at: new Date(row.started_at).toISOString(),
+      first_token_ms: row.first_token_at ? row.first_token_at - row.started_at : null,
+      total_ms: now - row.started_at, status: row.status, error_short: row.error ? String(row.error).slice(0, 160) : null,
+    });
+  } catch { /* ignore */ }
+}

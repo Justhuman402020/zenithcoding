@@ -79,3 +79,12 @@ export const getBuildRouterModels = createServerFn({ method: "GET" }).middleware
   const r = await routerModels(key);
   return { active: true, provider: BUILD_ROUTER_ID, models: r.ok ? r.models : [], error: r.ok ? null : r.error };
 });
+export const listRecentModelCalls = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ section: z.string().optional() }).parse(d ?? {}))
+  .handler(async ({ data, context }) => {
+    let q = (context.supabase as any).from("model_call_log").select("id,provider,model,base_url,section,key_index,created_at,first_token_ms,total_ms,status,error_short").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(200);
+    if (data.section && data.section !== "all") q = q.eq("section", data.section);
+    const { data: rows, error } = await q;
+    if (error) throw new Error("Could not load recent models");
+    return { rows: (rows ?? []) as Array<{ id: string; provider: string; model: string; base_url: string | null; section: string; key_index: number | null; created_at: string; first_token_ms: number | null; total_ms: number | null; status: string; error_short: string | null }> };
+  });
