@@ -434,6 +434,12 @@ function ProjectEditor() {
   const requestImagesRef = useRef(false);
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
+  const [remoteLog, setRemoteLog] = useState<{ t: number; text: string }[]>([]);
+  const [remoteFiles, setRemoteFiles] = useState<string[]>([]);
+  useEffect(() => {
+    if (!remoteWorking) return;
+    setRemoteLog((log) => (log.length && log[log.length - 1].text === remoteWorking ? log : [...log, { t: Date.now(), text: remoteWorking }].slice(-60)));
+  }, [remoteWorking]);
   // Messages typed while Forge is working wait here instead of being lost.
   const [queue, setQueue] = useState<QueuedMessage[]>([]);
   const [queuePaused, setQueuePaused] = useState(false);
@@ -1188,6 +1194,14 @@ function ProjectEditor() {
       if (activeJob) sawActiveJob = true;
       // Only announce remote work when this device is not the one streaming.
       setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
+      if (activeJob && !isStreaming) {
+        const { data: prog } = await supabase.from("projects").select("agent_progress").eq("id", projectId).maybeSingle();
+        const files = ((prog as any)?.agent_progress?.filesChanged as string[] | undefined) ?? [];
+        if (!disposed) setRemoteFiles(files);
+      } else if (!activeJob) {
+        setRemoteLog([]);
+        setRemoteFiles([]);
+      }
 
       if (!activeJob && sawActiveJob) {
         sawActiveJob = false;
@@ -2546,10 +2560,27 @@ function ProjectEditor() {
                 </div>
               )}
               {remoteWorking && !isStreaming && (
-                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-primary">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                  Forge is still working on this project · {remoteWorking}
-                </div>
+                <details open className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-primary">
+                  <summary className="flex cursor-pointer items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                    <span className="truncate">Working · {remoteWorking}</span>
+                  </summary>
+                  <ol className="mt-2 max-h-40 space-y-1 overflow-y-auto text-foreground/90">
+                    {remoteLog.map((l, i) => (
+                      <li key={l.t + ":" + i} className="flex gap-2">
+                        <span className="shrink-0 text-muted-foreground tabular-nums">{new Date(l.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                        <span className="break-words">{l.text}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {remoteFiles.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {remoteFiles.map((f) => (
+                        <span key={f} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{f}</span>
+                      ))}
+                    </div>
+                  )}
+                </details>
               )}
               {(isBusy || queue.length > 0 || queuePaused) && (
                 <div className="rounded-md hairline-gold bg-card/60 px-3 py-2 space-y-2">
@@ -2626,7 +2657,7 @@ function ProjectEditor() {
                   </Button>
                 ))}
               </div>
-              {!isStreaming && (
+              {!isStreaming && !remoteWorking && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {[
                     { icon: Wand2, label: "Refine the design" },
@@ -2715,8 +2746,8 @@ function ProjectEditor() {
                     }}
                     placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Code Haven to build…"}
                     disabled={!token}
-                    rows={5}
-                    className="resize-none w-full min-h-[132px] max-h-[45vh] border-0 bg-transparent shadow-none px-3 py-2.5 text-base leading-relaxed focus-visible:ring-0"
+                    rows={2}
+                    className="resize-none w-full min-h-[64px] max-h-[30vh] border-0 bg-transparent shadow-none px-3 py-2.5 text-base leading-relaxed focus-visible:ring-0"
                   />
                   <div className="flex items-center gap-1 px-2 pb-2">
                     <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
