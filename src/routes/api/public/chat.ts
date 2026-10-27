@@ -822,6 +822,8 @@ export const Route = createFileRoute("/api/public/chat")({
             const model = createGroqProvider(current.apiKey, current.baseURL)(current.ref.model);
             trace.log("attempt.start", { detail: { attempt, provider: current.ref.provider, model: current.ref.model, carried: carried.length } });
 
+            const callStarted = Date.now();
+            let firstTokenAt: number | null = null;
             const result = streamText({
               model,
               system: systemPrompt,
@@ -830,6 +832,7 @@ export const Route = createFileRoute("/api/public/chat")({
               abortSignal: attemptAbort.signal,
               onChunk: ({ chunk }: any) => {
                 kick();
+                if (firstTokenAt == null && (chunk?.type === "text-delta" || chunk?.type === "reasoning-delta" || chunk?.type === "tool-call")) firstTokenAt = Date.now();
                 if (chunk?.type === "text-delta" || chunk?.type === "reasoning-delta") streamedChars += String(chunk.text ?? chunk.delta ?? "").length;
               },
               onStepFinish: async (step: any) => {
@@ -928,6 +931,11 @@ export const Route = createFileRoute("/api/public/chat")({
             // Drain the stream on the server no matter what the browser does.
             await result.consumeStream({ onError: (e) => { failure ??= errText(e); } });
             if (watchdog) clearTimeout(watchdog);
+            {
+              const { recordModelCall } = await import("@/lib/workspace-ai.server");
+              const { classifySection } = await import("@/lib/model-calls");
+              await recordModelCall({ user_id: userId, project_id: projectId, provider: current.ref.provider, model: current.ref.model, base_url: current.baseURL, section: classifySection({ plan: planMode, imageBuild, fileChange: needsFileChange, skill: request.headers.has("x-forge-skill") }), key_index: poolPositions.get(current.ref.provider) ?? null, started_at: callStarted, first_token_at: firstTokenAt, status: failure || timedOut ? "failed" : "ok", error: failure ?? (timedOut ? "Timed out" : null) });
+            }
 
             // Record the sum of every step's cost. Failed calls that streamed text but
             // reported no tokens are counted from characters, labeled uncertain.
