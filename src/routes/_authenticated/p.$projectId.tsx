@@ -1662,6 +1662,11 @@ function ProjectEditor() {
   }
 
   const [reverting, setReverting] = useState(false);
+  const [snapshotLabels, setSnapshotLabels] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void supabase.from("project_snapshots").select("label").eq("project_id", projectId).order("created_at", { ascending: false }).limit(200)
+      .then(({ data }) => setSnapshotLabels(new Set((data ?? []).map((r: any) => String(r.label)))));
+  }, [projectId, messages.length, reverting]);
   async function revertToLastStable() {
     return revertToSnapshot(null);
   }
@@ -1978,7 +1983,7 @@ function ProjectEditor() {
                   </div>
                 </div>
               )}
-              {messages.map((m) => {
+              {messages.map((m, mi) => {
                 // Separate text parts with a blank line so multi-step replies
                 // render as distinct paragraphs instead of one jam-packed blob.
                 const rawText = m.parts
@@ -2223,6 +2228,18 @@ function ProjectEditor() {
                             </div>
                           )
                         : <span>{text}</span>}
+                      {m.role === "assistant" && !isStreaming && (() => {
+                        const prev = [...messages.slice(0, mi)].reverse().find((x) => x.role === "user");
+                        const label = prev ? prev.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("").trim().slice(0, 120) : "";
+                        if (!label || !snapshotLabels.has(label)) return null;
+                        return (
+                          <div className="mt-1 flex justify-end">
+                            <button onClick={() => void revertToSnapshot(label)} disabled={reverting} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground hover:text-primary hover:bg-accent/40" title="Revert to before this build" aria-label="Revert to before this build">
+                              <Undo2 className="h-3.5 w-3.5" /> Revert
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
