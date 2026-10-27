@@ -2657,7 +2657,7 @@ function ProjectEditor() {
                   </Button>
                 ))}
               </div>
-              {!isStreaming && (
+              {!isStreaming && !remoteWorking && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {[
                     { icon: Wand2, label: "Refine the design" },
