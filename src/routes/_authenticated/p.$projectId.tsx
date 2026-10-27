@@ -2223,7 +2223,7 @@ function ProjectEditor() {
                       })()}
                       {m.role === "assistant"
                         ? text && (
-                            <div className="prose prose-invert prose-sm max-w-none break-words">
+                            <div className="prose prose-invert max-w-none break-words text-base">
                               <ReactMarkdown>{text}</ReactMarkdown>
                             </div>
                           )
