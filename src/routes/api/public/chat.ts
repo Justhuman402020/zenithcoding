@@ -641,8 +641,10 @@ export const Route = createFileRoute("/api/public/chat")({
         const stopHeartbeat = () => {
           if (heartbeat) clearInterval(heartbeat);
         };
+        const timeline: string[] = [];
         const setProgress = (text: string) => {
           progressText = text;
+          if (timeline[timeline.length - 1]?.endsWith(text) !== true) timeline.push(`${new Date().toISOString().slice(11, 19)} UTC · ${text}`);
           if (jobId) {
             void supabaseAdmin
               .from("chat_jobs")
@@ -1165,7 +1167,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
             }
-            if (!planMode) await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText });
+            if (!planMode) await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText + (timeline.length || progressModel.files.size ? `\n\n<!-- worklog -->\n${timeline.slice(-200).map((t) => `- ${t}`).join("\n")}${progressModel.files.size ? `\n\nFiles changed:\n${[...progressModel.files].map((f) => `- \`${f}\``).join("\n")}` : ""}` : "") });
             await saveProgress({
               status: truncated ? "unfinished" : "finished",
               lastRequest: lastUserText.slice(0, 600),
