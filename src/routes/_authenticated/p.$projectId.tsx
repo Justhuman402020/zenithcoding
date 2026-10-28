@@ -13,6 +13,7 @@ import { buildFollowUpSuggestions, detectSecretIntent, detectPastedApiKey, strip
 import { cleanChatRows } from "@/lib/chat-history";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkLogCard } from "@/components/WorkLogCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -2244,12 +2245,13 @@ function ProjectEditor() {
                                   <ReactMarkdown>{body}</ReactMarkdown>
                                 </div>
                                 {log && (
-                                  <details className="mt-2 rounded-md border border-border/60 bg-card/60 px-3 py-2 text-sm">
-                                    <summary className="cursor-pointer text-muted-foreground">Work log</summary>
-                                    <div className="prose prose-invert prose-sm mt-2 max-w-none break-words">
-                                      <ReactMarkdown>{log}</ReactMarkdown>
-                                    </div>
-                                  </details>
+                                  <WorkLogCard
+                                    log={log}
+                                    title={(() => {
+                                      const prev = [...messages.slice(0, mi)].reverse().find((x) => x.role === "user");
+                                      return prev ? prev.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("").trim().slice(0, 60) : "Build";
+                                    })()}
+                                  />
                                 )}
                               </>
                             );
