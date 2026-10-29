@@ -373,7 +373,7 @@ export const Route = createFileRoute("/api/public/chat")({
 
         // The database owns the initial build connection, not the phone.
         // Persist all media and the exact selected model before dispatching it.
-        if (!planMode && !isResume) {
+        if (!planMode && !isResume && needsFileChange) {
           const selected = chain[0];
           if (!jobId || !selected) return fail(503, "Could not save the background build.");
           const { error: savedError } = await supabaseAdmin.from("chat_jobs").update({
