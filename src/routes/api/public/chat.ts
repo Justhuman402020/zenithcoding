@@ -813,12 +813,14 @@ export const Route = createFileRoute("/api/public/chat")({
             let attemptStepCount = 0;
             let loopHit = false;
             let watchdog: ReturnType<typeof setTimeout> | undefined;
+            // Reasoning models on OpenRouter can think silently for a while; give them longer.
+            const stepTimeout = isCf ? STEP_TIMEOUT_MS : 90_000;
             const kick = () => {
               if (watchdog) clearTimeout(watchdog);
               watchdog = setTimeout(() => {
                 timedOut = true;
                 attemptAbort.abort();
-              }, STEP_TIMEOUT_MS);
+              }, stepTimeout);
             };
             kick();
             const model = createGroqProvider(current.apiKey, current.baseURL)(current.ref.model);
@@ -916,7 +918,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 failure = errText(error) || "Stream failed";
               },
               onAbort: () => {
-                if (timedOut) failure = `${current.ref.model} sent nothing for 35 seconds`;
+                if (timedOut) failure = `${current.ref.model} sent nothing for ${Math.round(stepTimeout / 1000)} seconds`;
               },
             });
 
