@@ -1071,7 +1071,20 @@ export const Route = createFileRoute("/api/public/chat")({
             if (!handoff) await recordModelStatus(current.ref, /429|rate.?limit/i.test(lastError) ? "rate_limited" : "unavailable", null, lastError);
             trace.log("attempt.failover", { status: "error", message: lastError, detail: { attempt, provider: current.ref.provider } });
 
-            if (!(editorAuto)) break;
+            if (!(editorAuto)) {
+              // Single-model builds (OpenRouter): a silent or flaky call retries the same
+              // model from the last finished step instead of stopping the whole build.
+              const { shouldRetrySameModel } = await import("@/lib/build-recovery");
+              if (!handoff && !isCf && shouldRetrySameModel(lastError, timedOut, sameKeyRetries)) {
+                sameKeyRetries += 1;
+                setProgress(`Model went quiet · retrying from step ${stepNo} (${sameKeyRetries}/3)`);
+                trace.log("attempt.retry_same", { detail: { attempt, retry: sameKeyRetries, reason: lastError } });
+                lastError = null;
+                failure = null;
+                continue;
+              }
+              break;
+            }
             const P = await import("@/lib/cf-pool-policy");
             const pos = Number(keyNo(current.ref.provider)) || 0;
             if (!handoff) {
