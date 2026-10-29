@@ -16,9 +16,14 @@ const ACTION_INTENT =
 const QUESTION_OPENER =
   /^\s*(what|what's|whats|why|how|how's|who|when|where|which|can|could|do|does|did|is|are|should|would|will|tell|explain|describe)\b/i;
 
+// "Do you know how we'll make…", "how would we add…" ask for knowledge, not edits.
+const KNOWLEDGE_QUESTION =
+  /^\s*(do you (know|think|have any idea)|any idea|have you|is it possible|how (would|will|could|should|can|do) (we|i|you|it)|how'?ll (we|i)|what (would|should|will) (we|i|it)|why (would|does|is|did))\b/i;
+
 export function detectFileChangeIntent(text: string) {
   const trimmed = text.trim();
   if (!trimmed) return false;
+  if (KNOWLEDGE_QUESTION.test(trimmed)) return false;
   // Pure explanation questions ("explain how this project is structured") must
   // not trigger the forced edit pipeline — forcing write_file when the model
   // only wants to read makes Groq reject the call and the answer never comes.
