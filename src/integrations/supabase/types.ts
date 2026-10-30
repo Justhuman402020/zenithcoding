@@ -358,6 +358,45 @@ export type Database = {
           },
         ]
       }
+      browser_checks: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_short: string | null
+          findings: Json
+          id: string
+          ok: boolean
+          project_id: string
+          screenshots: Json
+          target: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_short?: string | null
+          findings?: Json
+          id?: string
+          ok?: boolean
+          project_id: string
+          screenshots?: Json
+          target: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_short?: string | null
+          findings?: Json
+          id?: string
+          ok?: boolean
+          project_id?: string
+          screenshots?: Json
+          target?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_jobs: {
         Row: {
           assistant_reply: string | null
@@ -973,6 +1012,36 @@ export type Database = {
           project_url?: string
           service_key_encrypted?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      preview_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          html: string
+          project_id: string
+          token_hash: string
+          user_id: string
+          uses: number
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          html: string
+          project_id: string
+          token_hash: string
+          user_id: string
+          uses?: number
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          html?: string
+          project_id?: string
+          token_hash?: string
+          user_id?: string
+          uses?: number
         }
         Relationships: []
       }
