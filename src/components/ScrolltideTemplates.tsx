@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { findScrolltideTemplates, readScrolltideTemplate, saveScrolltideDraft, decideScrolltideDraft, scrolltideStatus } from "@/lib/scrolltide.functions";
+import { findScrolltideTemplates, readScrolltideTemplate, saveScrolltideDraft, decideScrolltideDraft, scrolltideStatus, listScrolltideDrafts } from "@/lib/scrolltide.functions";
 import { requestApproval } from "@/components/BuildApprovalDialog";
 import { SCROLLTIDE_ITEM_ALLOWANCE } from "@/lib/runtime-mcp/scrolltide-policy";
 
@@ -14,6 +14,19 @@ export function ScrolltideTemplates({ projectId, disabled, onBuild, initialQuery
   const [open, setOpen] = useState(false); const [query, setQuery] = useState(initialQuery); const [items, setItems] = useState<Item[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [note, setNote] = useState(""); const [busy, setBusy] = useState(false); const [searched, setSearched] = useState(false); const [connected, setConnected] = useState(false);
   const [selected, setSelected] = useState<{ id: string; title: string; brief: string; source: string } | null>(null); const [requirements, setRequirements] = useState("");
   const search = useServerFn(findScrolltideTemplates); const read = useServerFn(readScrolltideTemplate); const save = useServerFn(saveScrolltideDraft); const decide = useServerFn(decideScrolltideDraft); const status = useServerFn(scrolltideStatus);
+  const loadDrafts = useServerFn(listScrolltideDrafts);
+  const [drafts, setDrafts] = useState<Array<{ id: string; title: string; state: string }>>([]);
+  useEffect(() => { if (open) void loadDrafts({ data: { projectId } }).then(setDrafts).catch(() => setNote("Could not load saved drafts.")); }, [open, projectId, loadDrafts]);
+  async function resumeDraft(id: string, title: string, state: string) {
+    if (disabled || busy) return;
+    setBusy(true); setOpen(false);
+    try {
+      const approved = await requestApproval("openrouter", `Apply ${title} to this project using your selected OpenRouter model?`);
+      if (state === "draft") await decide({ data: { id, approve: approved } });
+      if (approved) await onBuild(id, title);
+    } catch (e) { setOpen(true); setNote(e instanceof Error ? e.message : "Could not start saved draft."); }
+    finally { setBusy(false); }
+  }
   useEffect(() => { if (openRequested) { setOpen(true); setQuery(initialQuery); } }, [openRequested, initialQuery]);
   useEffect(() => { if (open) void status().then(r => setConnected(r.state === "ready")).catch(() => setNote("Could not check Scrolltide connection.")); }, [open, status]);
   async function find(more = false) { setBusy(true); setNote(""); try { const r = await search({ data: { query, cursor: more && cursor ? cursor : undefined } }); setItems(p => more ? [...p, ...r.items.filter(i => !p.some(x => x.id === i.id))] : r.items); setCursor(r.nextCursor); setNote(r.note); setSearched(true); } catch (e) { setNote(e instanceof Error ? e.message : "Search failed."); } finally { setBusy(false); } }
@@ -33,6 +46,7 @@ export function ScrolltideTemplates({ projectId, disabled, onBuild, initialQuery
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-3xl w-[calc(100%-1rem)] max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>Scrolltide templates</DialogTitle></DialogHeader>
       <p className="text-xs text-muted-foreground">Yearly & Lifetime · Up to {SCROLLTIDE_ITEM_ALLOWANCE} different items per 24 hours, shared with Scrolltide.</p>
       {!connected && <a href="/admin/integrations" className="text-primary underline">Connect Scrolltide in Admin</a>}
+      {drafts.length > 0 && <div className="space-y-2 border-b border-border pb-3"><h3 className="font-semibold">Saved drafts</h3>{drafts.map(d => <div key={d.id} className="flex gap-2 items-center"><span className="text-sm flex-1 min-w-0 break-words">{d.title}</span><Button size="sm" disabled={busy || disabled} onClick={() => void resumeDraft(d.id, d.title, d.state)}>Review approval</Button></div>)}</div>}
       <form className="flex gap-2" onSubmit={e => { e.preventDefault(); void find(); }}><Input aria-label="Search Scrolltide templates" placeholder="Portfolio, product hero, pricing…" value={query} onChange={e => setQuery(e.target.value)} /><Button type="submit" size="icon" aria-label="Search templates" disabled={busy || !query.trim() || !connected}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</Button></form>
       {note && <p role="status" className="text-sm whitespace-pre-wrap">{note}</p>}
       {selected ? <div className="space-y-3"><Button variant="ghost" onClick={() => setSelected(null)}>Back to results</Button><h3 className="font-semibold text-lg">{selected.title}</h3><pre className="text-sm whitespace-pre-wrap break-words max-h-64 overflow-auto bg-muted p-3 rounded-md">{selected.brief}</pre><Textarea aria-label="Your template requirements" placeholder="Your brand, colors, sections to keep…" value={requirements} onChange={e => setRequirements(e.target.value)} /><Button disabled={busy || disabled} onClick={() => void useTemplate()}>Use template</Button><a href={selected.source} target="_blank" rel="noopener noreferrer" className="inline-flex gap-1 text-sm text-primary ml-3">Open on Scrolltide<ExternalLink className="h-4 w-4" /></a></div> : <>

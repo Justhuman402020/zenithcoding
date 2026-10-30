@@ -2,6 +2,7 @@ import { auth, createMCPClient, UnauthorizedError, type OAuthClientProvider, typ
 import { encryptSecret, decryptSecret } from "@/lib/secrets-crypto.server";
 import { SCROLLTIDE_URL, allowedScrolltideOrigin } from "./scrolltide-policy";
 import { mcpFetch } from "./fetch.server";
+import { validOAuthReturn } from "./oauth-policy";
 
 type AuthData = { tokens?: OAuthTokens; client?: OAuthClientInformation; verifier?: string; state?: string; server?: OAuthAuthorizationServerInformation; authUrl?: string };
 async function db() { return (await import("@/integrations/supabase/client.server")).supabaseAdmin; }
@@ -62,6 +63,7 @@ export async function finishScrolltide(state: string, code: string, issuer?: str
   const { data, error } = await (await db()).rpc("claim_scrolltide_oauth", { p_state: state });
   const row = data?.[0];
   if (error || !row) throw new Error("Authorization expired or was already used. Connect again.");
+  if (!validOAuthReturn(state, code, row.oauth_expires_at)) throw new Error("Authorization expired.");
   const { data: owner } = await (await db()).auth.admin.getUserById(row.user_id);
   const { isOwner } = await import("@/lib/owner-policy");
   if (!isOwner(owner.user)) throw new Error("Not available");
