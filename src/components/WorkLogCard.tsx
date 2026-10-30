@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft, Clock, FileCode2, FilePen, Lightbulb, ListChecks, Search, SquareTerminal, X } from "lucide-react";
 
 type Step = { time: string; text: string };
@@ -42,9 +42,9 @@ function iconFor(text: string) {
   return SquareTerminal;
 }
 
-export function WorkLogCard({ log, title }: { log: string; title: string }) {
+export function WorkLogCard({ log, title, checks }: { log: string; title: string; checks?: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"timeline" | "changes">("timeline");
+  const [tab, setTab] = useState<"timeline" | "changes" | "checks">("timeline");
   const { steps, files } = parseWorkLog(log);
   const dur = workedFor(steps);
 
@@ -75,7 +75,7 @@ export function WorkLogCard({ log, title }: { log: string; title: string }) {
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="flex rounded-full border border-border p-1">
-              {(["timeline", "changes"] as const).map((k) => (
+              {((checks ? ["timeline", "changes", "checks"] : ["timeline", "changes"]) as ("timeline" | "changes" | "checks")[]).map((k) => (
                 <button
                   key={k}
                   onClick={() => setTab(k)}
@@ -92,7 +92,7 @@ export function WorkLogCard({ log, title }: { log: string; title: string }) {
             <span>{steps.length} steps</span>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4">
-            {tab === "timeline" ? (
+            {tab === "checks" ? checks : tab === "timeline" ? (
               steps.length ? (
                 <ol className="relative space-y-5 pl-9 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-border">
                   {steps.map((s, i) => {
