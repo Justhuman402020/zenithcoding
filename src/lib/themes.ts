@@ -7,6 +7,7 @@ export type SiteTheme = {
 };
 
 export const THEMES: SiteTheme[] = [
+  { id: "black", name: "Pure Black", emoji: "⚫", base: "#000000", card: "#141414", primary: "#fafafa", primaryFg: "#000000", fg: "#f5f5f5", muted: "#a3a3a3", accent: "#262626", ink: "transparent", glyphs: [] },
   { id: "math", name: "Mathematics", emoji: "📐", base: "#0d100f", card: "#181d1b", primary: "#7fd1b9", primaryFg: "#08120e", fg: "#eef4f1", muted: "#9fb3aa", accent: "#24302b", ink: "rgba(255,255,255,0.09)", glyphs: ["∑", "π", "√x", "x²", "∫", "÷", "∞", "△", "≠", "f(x)", "θ", "±", "%", "7", "3"] },
   { id: "space", name: "Space", emoji: "🪐", base: "#14112b", card: "#1f1a40", primary: "#a78bfa", primaryFg: "#120e26", fg: "#f1eeff", muted: "#a8a1cf", accent: "#2d2660", ink: "rgba(255,255,255,0.10)", glyphs: ["✦", "☾", "🪐", "★", "✧", "☄", "◯", "·"] },
   { id: "party", name: "Party", emoji: "🎉", base: "#2a1630", card: "#3a1f43", primary: "#ff6fb5", primaryFg: "#2a0b1c", fg: "#fff0f8", muted: "#d4a8c4", accent: "#4d2a57", ink: "rgba(255,255,255,0.10)", glyphs: ["🎈", "✶", "♪", "🎁", "✿", "♥", "◆"] },
@@ -18,11 +19,12 @@ export const THEMES: SiteTheme[] = [
   { id: "light", name: "Day", emoji: "☀️", base: "#f3efe6", card: "#ffffff", primary: "#7c3aed", primaryFg: "#ffffff", fg: "#1c1a22", muted: "#6b6575", accent: "#e8e0f5", ink: "rgba(30,20,60,0.08)", glyphs: ["∑", "✎", "★", "π", "✿", "△", "♪"] },
 ];
 
-export const DEFAULT_THEME = "math";
+export const DEFAULT_THEME = "black";
 export const themeById = (id?: string | null) => THEMES.find((t) => t.id === id) ?? THEMES[0]!;
 
 /** Builds a tiled doodle SVG as a CSS url(). Deterministic layout per theme. */
 export function doodleUrl(t: SiteTheme): string {
+  if (!t.glyphs.length) return "none";
   if (t.id === "math") return `url("${mathWallpaper.url}")`;
   const size = 240;
   let seed = [...t.id].reduce((a, c) => a + c.charCodeAt(0), 7);
@@ -46,9 +48,13 @@ export function applyTheme(id: string) {
   const t = themeById(id);
   const r = document.documentElement.style;
   r.setProperty("--theme-base", t.base);
-  r.setProperty("--background", `color-mix(in oklab, ${t.base} 72%, transparent)`);
+  const solid = t.id === "black";
+  r.setProperty("--background", solid ? t.base : `color-mix(in oklab, ${t.base} 72%, transparent)`);
   r.setProperty("--foreground", t.fg);
-  r.setProperty("--card", `color-mix(in oklab, ${t.card} 92%, transparent)`);
+  r.setProperty("--card", solid ? t.card : `color-mix(in oklab, ${t.card} 92%, transparent)`);
+  r.setProperty("--border", solid ? "#2a2a2a" : "");
+  r.setProperty("--input", solid ? "#2a2a2a" : "");
+  r.setProperty("--font-sans", solid ? '"Inter Tight", "Helvetica Neue", Arial, system-ui, sans-serif' : "");
   r.setProperty("--card-foreground", t.fg);
   r.setProperty("--popover", t.card);
   r.setProperty("--popover-foreground", t.fg);

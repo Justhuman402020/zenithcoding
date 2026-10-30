@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X, Zap, ImagePlus, ClipboardList } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X, Zap, ImagePlus, ClipboardList, BookOpen, Eye, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,6 +110,11 @@ function ChatPage() {
           <div className="truncate font-semibold">{data.chat.title}</div>
           <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
+        {data.chat.projectId && <div className="flex gap-1">
+          <Button variant="outline" size="sm" title="Scrolltide templates" onClick={() => navigate({ to: "/p/$projectId", params: { projectId: data.chat.projectId! }, search: { scrolltide: "1" } })}><BookOpen className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" title="Preview, test and fix" onClick={() => navigate({ to: "/p/$projectId", params: { projectId: data.chat.projectId! }, search: { tab: "preview" } })}><Eye className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" title="Build and publish" onClick={() => navigate({ to: "/p/$projectId", params: { projectId: data.chat.projectId! } })}><Rocket className="h-4 w-4" /></Button>
+        </div>}
         <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
         <NeuronsBar />
       </header>
