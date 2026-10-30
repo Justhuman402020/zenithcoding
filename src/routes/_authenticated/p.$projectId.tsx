@@ -871,6 +871,13 @@ function ProjectEditor() {
   const scrolltideDraftRef = useRef<string | null>(null);
   const [scrolltideQuery, setScrolltideQuery] = useState("");
   const [scrolltideOpen, setScrolltideOpen] = useState(0);
+  // Arriving from the Scrolltide library page with ?scrolltide=1 opens the
+  // template panel so the saved draft's approval card is right there.
+  useEffect(() => {
+    if (!scrolltideParam) return;
+    setScrolltideOpen((v) => v + 1);
+    navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+  }, [scrolltideParam, projectId, navigate]);
   async function discardUnansweredMessage() {
     const rowId = pendingUserRowRef.current;
     pendingUserRowRef.current = null;
