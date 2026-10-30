@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ listTools: vi.fn(), callTool: vi.fn() }));
-vi.mock("../src/lib/runtime-mcp/scrolltide.server", () => ({ withScrolltide: async (_user: string, work: (client: typeof mock) => unknown) => work(mock) }));
+const catalog = vi.hoisted(() => ({ browseCatalog: vi.fn() }));
+vi.mock("../src/lib/runtime-mcp/scrolltide.server", () => ({ withScrolltide: async (_user: string, work: (client: typeof mock) => unknown) => work(mock), connectionFor: async () => ({ state: "ready" }) }));
+vi.mock("../src/lib/runtime-mcp/catalog.server", () => catalog);
 import { fetchTemplate, searchTemplates } from "../src/lib/runtime-mcp/templates.server";
 describe("advertised Scrolltide tools", () => {
   beforeEach(() => { vi.resetAllMocks(); });
@@ -26,35 +28,18 @@ describe("advertised Scrolltide tools", () => {
     await expect(searchTemplates("owner", "portfolio")).rejects.toThrow();
     expect(mock.callTool).not.toHaveBeenCalled();
   });
-  it("browses all summaries with no search term and never retrieves instructions", async () => {
-    mock.listTools.mockResolvedValue({ tools: [
-      { name: "list_templates", inputSchema: { properties: { cursor: {} } }, annotations: { readOnlyHint: true } },
-      { name: "get_prompt", description: "Get full template instructions", inputSchema: { properties: { id: {} } } },
-    ] });
-    mock.callTool.mockResolvedValueOnce({ structuredContent: { items: [{ id: "a", title: "A" }], nextCursor: "second" } }).mockResolvedValueOnce({ structuredContent: { items: [{ id: "b", title: "B" }] } });
+  it("browses the full library from public shelves without any Scrolltide tool call", async () => {
+    catalog.browseCatalog.mockResolvedValueOnce({ items: [{ id: "a", title: "A" }], nextCursor: "codehaven-shelf:1", note: "" }).mockResolvedValueOnce({ items: [{ id: "b", title: "B" }], nextCursor: null, note: "" });
     const first = await searchTemplates("owner", "");
     const second = await searchTemplates("owner", "", first.nextCursor ?? undefined);
-    expect(first.items.map(i => i.id)).toEqual(["a"]);
-    expect(second.items.map(i => i.id)).toEqual(["b"]);
-    expect(mock.callTool.mock.calls).toEqual([[{ name: "list_templates", arguments: {} }], [{ name: "list_templates", arguments: { cursor: "second" } }]]);
-  });
-  it("supports empty-query catalog searches", async () => {
-    mock.listTools.mockResolvedValue({ tools: [{ name: "list_categories", description: "All categories in the template library", inputSchema: { properties: {} } }, { name: "search_library", inputSchema: { properties: { query: {} }, required: ["query"] } }] });
-    mock.callTool.mockResolvedValue({ structuredContent: { items: [] } });
-    await searchTemplates("owner", "");
-    expect(mock.callTool).toHaveBeenCalledWith({ name: "search_library", arguments: { query: "" } });
-  });
-  it("keeps numbered catalog pages available", async () => {
-    mock.listTools.mockResolvedValue({ tools: [{ name: "browse_templates", inputSchema: { properties: { page: { type: "integer", minimum: 1 } } } }] });
-    mock.callTool.mockResolvedValueOnce({ structuredContent: { items: [{ id: "a", title: "A" }], pagination: { totalPages: 2 } } }).mockResolvedValueOnce({ structuredContent: { items: [{ id: "b", title: "B" }], pagination: { totalPages: 2 } } });
-    const first = await searchTemplates("owner", "");
-    const second = await searchTemplates("owner", "", first.nextCursor ?? undefined);
-    expect(mock.callTool).toHaveBeenLastCalledWith({ name: "browse_templates", arguments: { page: 2 } });
-    expect(second.nextCursor).toBeNull();
+    expect(second.items[0].id).toBe("b");
+    expect(catalog.browseCatalog).toHaveBeenLastCalledWith("codehaven-shelf:1");
+    expect(mock.listTools).not.toHaveBeenCalled();
+    expect(mock.callTool).not.toHaveBeenCalled();
   });
   it("stops a repeated result cursor", async () => {
-    mock.listTools.mockResolvedValue({ tools: [{ name: "list_templates", inputSchema: { properties: { cursor: {} } } }] });
+    mock.listTools.mockResolvedValue({ tools: [{ name: "search_templates", inputSchema: { properties: { query: {}, cursor: {} } } }] });
     mock.callTool.mockResolvedValue({ structuredContent: { items: [{ id: "a", title: "A" }], nextCursor: "same" } });
-    expect((await searchTemplates("owner", "", "same")).nextCursor).toBeNull();
+    expect((await searchTemplates("owner", "x", "same")).nextCursor).toBeNull();
   });
 });
