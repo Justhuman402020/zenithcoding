@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Smartphone, Tablet, Monitor, RefreshCw, ExternalLink, Terminal, Trash2 } from "lucide-react";
+import { Smartphone, Tablet, Monitor, RefreshCw, ExternalLink, Terminal, Trash2, ScanEye } from "lucide-react";
 
 type Device = "mobile" | "tablet" | "desktop";
 type LogLevel = "log" | "info" | "warn" | "error";
@@ -52,11 +52,15 @@ export function PreviewFrame({
   previewKey,
   onRefresh,
   openInNewTab,
+  onTest,
+  testing,
 }: {
   srcDoc: string;
   previewKey: number;
   onRefresh: () => void;
   openInNewTab?: () => void;
+  onTest?: () => void;
+  testing?: boolean;
 }) {
   const [device, setDevice] = useState<Device>("mobile");
   const [consoleOpen, setConsoleOpen] = useState(false);
@@ -137,6 +141,11 @@ export function PreviewFrame({
               </span>
             )}
           </button>
+          {onTest && (
+            <button onClick={onTest} disabled={testing} title="Test in a real browser" className="h-7 px-2 inline-flex items-center gap-1 text-xs rounded text-muted-foreground hover:text-primary hover:bg-accent/30 disabled:opacity-60">
+              <ScanEye className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} /> Test
+            </button>
+          )}
           <button onClick={onRefresh} title="Rebuild preview" className="h-7 w-7 inline-flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-accent/30">
             <RefreshCw className="h-3.5 w-3.5" />
           </button>

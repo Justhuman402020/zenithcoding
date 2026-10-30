@@ -41,12 +41,12 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 ```
 
 ### Vite config note
-`vite.config.ts` uses `@lovable.dev/vite-tanstack-config`'s `defineConfig`, which bundles all Vite plugins (tanstackStart, viteReact, tailwindcss, etc.). Do NOT add those plugins manually. Additional Vite config goes under the `vite:` key.
+`vite.config.ts` uses `@lovable.dev/vite-tanstack-config`'s `defineConfig`, which bundles all Vite plugins; don't add them manually. Additional Vite config goes under the `vite:` key.
 
 - Route image attachments through a dedicated vision-planner pass, persist its brief per project, then let the selected coding model edit files from that brief; this keeps image interpretation separate from code execution.
 - Store the global Cloudflare coding model in the database so every pool key follows one admin-selected working free-tier model.
 - Global agent rules and admin credentials live in service-role-only tables; the agent sees vault names only and copies values into project secrets via a tool, so raw keys never enter prompts.
-- Cloudflare pool rules (order, quota vs rate-limit, 9k handoff, 9.5k preflight, run cap, counting, file validation) live as pure functions in src/lib/cf-pool-policy.ts; chat.ts only calls them — keeps every rule unit-testable without provider calls.
+- Cloudflare pool rules live as pure functions in src/lib/cf-pool-policy.ts; chat.ts only calls them, so rules stay unit-testable.
 - Site themes are pure data in src/lib/themes.ts (SVG doodles + CSS vars applied on <html>); the saved choice lives in user_settings so it follows the owner across devices.
 - Chat-approved Cloudflare edits are started by the database (pg_net via public.start_build_job) with the resume token, so the build is held open server-side and never depends on the phone staying online.
 - Owner access is revalidated in app function middleware and restrictive session policies; never gate public published sites or signed provider callbacks with workspace access.
@@ -66,3 +66,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Lazy-load Scrolltide previews separately from paid instructions.
 - Retain ZIP data URLs and runtime assets for preview/publish.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
+- Browser tests run on pool Cloudflare accounts via hashed short-lived preview tokens; test-found fixes use normal chat approval.

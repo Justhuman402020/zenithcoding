@@ -1,4 +1,4 @@
-export type CallSection = "plan" | "build" | "image_build" | "chat" | "assistant" | "skill";
+export type CallSection = "plan" | "build" | "image_build" | "chat" | "assistant" | "skill" | "browser_test";
 
 export const SECTION_LABELS: Record<CallSection, string> = {
   plan: "Plan",
@@ -7,6 +7,7 @@ export const SECTION_LABELS: Record<CallSection, string> = {
   chat: "Chat",
   assistant: "Assistant chat",
   skill: "Skill",
+  browser_test: "Browser test",
 };
 
 export function classifySection(o: { plan?: boolean; imageBuild?: boolean; fileChange?: boolean; skill?: boolean }): CallSection {
