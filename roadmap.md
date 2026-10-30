@@ -48,3 +48,4 @@
 - [x] Agent execute_sql + attach_credential tools.
 - [x] Image parts preserved for vision models (image + file shapes).
 - [x] Admin Brain: global rules + credential vault with Test & Scan Models / import.
+- [ ] Home menu Scrolltide icon: library page usable both for existing projects and creating a new project from a template (plan approved, pending build).
