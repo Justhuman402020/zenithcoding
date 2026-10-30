@@ -61,3 +61,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Editor builds dispatch persisted input through a service-role-only database starter before returning to the viewer; the independent connection and existing recovery timer survive a phone disconnect.
 - Auth event invalidation compares user identities so repeated same-user SIGNED_IN events on wake do not rerun the generated admission guard.
 - Runtime Scrolltide MCP connections use server-only encrypted owner-scoped OAuth storage and SDK clients, separate from the app-hosted MCP server and saved key vaults; approved project drafts are persisted into job recovery before dispatch so template use survives disconnects without exposing credentials.
+- Scrolltide OAuth return origins are exact project-owned hosts, including the embedded preview host; keep a direct sign-in link when browser popup restrictions prevent opening the approval window.

@@ -17,6 +17,9 @@ describe("Scrolltide integration safeguards", () => {
   });
   it("only accepts known connection return origins", () => {
     expect(allowedScrolltideOrigin("https://boostallsocial.org/admin")).toBe("https://boostallsocial.org");
+    expect(allowedScrolltideOrigin("https://4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovableproject.com/admin/integrations")).toBe("https://4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovableproject.com");
+    expect(() => allowedScrolltideOrigin("https://other-project.lovableproject.com")).toThrow();
+    expect(() => allowedScrolltideOrigin("https://4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovableproject.com.attacker.example")).toThrow();
     expect(() => allowedScrolltideOrigin("https://boostallsocial.org.attacker.example")).toThrow();
   });
   it("template lookup is not a build request", () => {
