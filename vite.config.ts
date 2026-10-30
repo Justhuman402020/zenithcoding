@@ -17,6 +17,10 @@ export default defineConfig({
   vite: {
     resolve: { alias: { "pkce-challenge": fileURLToPath(new URL("./node_modules/pkce-challenge/dist/index.browser.js", import.meta.url)) } },
     plugins: [mcpPlugin()],
+    // Cold starts deadlocked: the server-fn compiler loads `zod` while transforming
+    // *.functions.ts files with module-level schemas, and the optimized zod waited
+    // for that same crawl. Serving zod unoptimized (it is native ESM) breaks the cycle.
+    optimizeDeps: { exclude: ["zod"] },
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).
       allowedHosts: true,
