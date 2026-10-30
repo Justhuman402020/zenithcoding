@@ -16,6 +16,9 @@ import { cleanChatRows } from "@/lib/chat-history";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { WorkLogCard } from "@/components/WorkLogCard";
+import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
+import { runBrowserCheck } from "@/lib/browser-check.functions";
+import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -973,6 +976,60 @@ function ProjectEditor() {
   // Busy = this device is streaming, or another device/earlier run is working.
   const isBusy = isStreaming || !!remoteWorking;
 
+  // "Test it like a real visitor": opens the preview/published site in Cloudflare's real browser.
+  const [browserCheck, setBrowserCheck] = useState<BrowserCheck | null>(null);
+  const [checkOpen, setCheckOpen] = useState(false);
+  const [fixRounds, setFixRounds] = useState(0);
+  const pendingAutoTest = useRef(false);
+  const fixingFromTest = useRef(false);
+  const wasBusyRef = useRef(false);
+  const runTest = useCallback(async (target: "preview" | "published" = "preview", show = true) => {
+    if (browserCheck?.status === "running") return;
+    setBrowserCheck({ status: "running", target });
+    if (show) setCheckOpen(true);
+    try {
+      const res = await runBrowserCheck({ data: { projectId, target, html: target === "preview" ? previewDoc : undefined } });
+      if (res.ok) {
+        setBrowserCheck({ status: "done", target, findings: res.findings, shots: res.shots, durationMs: res.durationMs });
+        const n = issueCount(res.findings);
+        if (!n) setFixRounds(0);
+        if (!show) n ? toast.warning(`Browser test found ${n} problem${n === 1 ? "" : "s"}`, { action: { label: "View", onClick: () => setCheckOpen(true) } }) : toast.success("Browser test passed");
+      } else {
+        setBrowserCheck({ status: "failed", target, error: res.error, missingPermission: res.missingPermission });
+        if (!show) toast.error("Browser test couldn't run", { action: { label: "Why", onClick: () => setCheckOpen(true) } });
+      }
+    } catch (e) {
+      setBrowserCheck({ status: "failed", target, error: e instanceof Error ? e.message : "Browser test failed", missingPermission: [] });
+    }
+  }, [browserCheck?.status, projectId, previewDoc]);
+  const fixGate = nextFixRound(fixRounds);
+  const fixFromTest = useCallback((findings: string) => {
+    const gate = nextFixRound(fixRounds);
+    if (!gate.allowed) { toast.error(gate.reason); return; }
+    setFixRounds((r) => r + 1);
+    setCheckOpen(false);
+    fixingFromTest.current = true;
+    void sendMessage({ text: `A real-browser test of the preview found these problems. Fix the root cause of each one without changing unrelated code:\n\n${findings}` });
+  }, [fixRounds, sendMessage]);
+  // After a build finishes, test it automatically once the preview has rebuilt.
+  useEffect(() => {
+    if (wasBusyRef.current && !isBusy) {
+      const last = [...messages].reverse().find((m) => m.role === "assistant");
+      const text = last ? last.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("") : "";
+      if (/<!-- worklog -->[\s\S]*Files changed:/.test(text)) pendingAutoTest.current = true;
+      else fixingFromTest.current = false;
+    }
+    wasBusyRef.current = isBusy;
+  }, [isBusy, messages]);
+  useEffect(() => {
+    if (!pendingAutoTest.current || isBusy || autoBuild.status === "building") return;
+    if (previewDoc.includes("Building your site…")) return;
+    pendingAutoTest.current = false;
+    fixingFromTest.current = false;
+    const t = setTimeout(() => void runTest("preview", false), 1500);
+    return () => clearTimeout(t);
+  }, [isBusy, autoBuild.status, previewDoc, runTest]);
+
   // Job timer: starts when work begins, ticks every second while busy.
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(0);
@@ -1520,6 +1577,11 @@ function ProjectEditor() {
     if (!navigator.onLine) {
       setIsOnline(false);
       toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
+      return;
+    }
+    if (/^\s*(please\s+)?(test|check)\s+(my\s+|the\s+)?(site|preview|app|website)(\s+like\s+a\s+(real\s+)?visitor)?\W*$/i.test(text) && attachments.length === 0) {
+      setInput("");
+      void runTest(/published|live/i.test(text) ? "published" : "preview");
       return;
     }
     if (/^\s*i\s+have\s+(it|the\s+key)(\s+(now|ready))?\W*$/i.test(text) && hasWaitingSecretCard()) {
@@ -2843,6 +2905,8 @@ function ProjectEditor() {
               await refreshFiles();
               setPreviewKey((k) => k + 1);
             }}
+            onTest={() => void runTest("preview")}
+            testing={browserCheck?.status === "running"}
             openInNewTab={
               published && slug
                 ? () => window.open(`/s/${slug}`, "_blank")
