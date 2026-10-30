@@ -165,6 +165,17 @@ export const Route = createFileRoute("/api/public/chat")({
           else if (!body.messages.some(m => m.parts?.some(p => p.type === "text" && p.text.includes("<scrolltide-reference>")))) body.messages.splice(lastUserIndex, 0, { id: `template-${draft.id}`, role: "user", parts: [{ type: "text", text: lastUserText }] });
         }
         if (!planMode && needsFileChange && !isResume && request.headers.get("x-forge-approved") !== "yes") return fail(403, "Build approval required");
+        const { isScrolltideLookup } = await import("@/lib/runtime-mcp/scrolltide-policy");
+        if (isScrolltideLookup(lastUserText)) {
+          let reply: string;
+          try {
+            const { searchTemplates } = await import("@/lib/runtime-mcp/templates.server");
+            const found = await searchTemplates(userId, lastUserText.replace(/scrolltide/ig, "").slice(0, 500));
+            reply = found.items.length ? found.items.map(i => `**${i.title}** — ${i.description}\n${i.source}`).join("\n\n") + "\n\nChoose a template using the Scrolltide templates button." : found.note || "No matching Scrolltide templates found.";
+          } catch { reply = "Scrolltide could not be searched. Check its connection in Admin → Integrations & API keys."; }
+          await supabase.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: reply + `\n\n<!-- worklog -->\n- ${new Date().toISOString().slice(11, 19)} UTC · Scrolltide lookup; no build started` });
+          return createUIMessageStreamResponse({ stream: createUIMessageStream({ execute: ({ writer }) => { const id = crypto.randomUUID(); writer.write({ type: "text-start", id }); writer.write({ type: "text-delta", id, delta: reply }); writer.write({ type: "text-end", id }); } }) });
+        }
         trace.log("request.parsed", {
           detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
