@@ -1,4 +1,3 @@
-import { parseHTML } from "linkedom";
 import { mcpFetch } from "./fetch.server";
 
 export type CatalogItem = { id: string; title: string; description: string; source: string; preview: string | null; poster?: string | null };
@@ -7,8 +6,9 @@ function https(value: unknown): string | null {
   if (typeof value !== "string" || !value) return null;
   try { const u = new URL(value, "https://www.scrolltide.co"); return u.protocol === "https:" ? u.href : null; } catch { return null; }
 }
-export function parseCatalog(html: string, shelf: string): CatalogItem[] {
-  const { document } = parseHTML(html);
+export async function parseCatalog(html: string, shelf: string): Promise<CatalogItem[]> {
+  const { parse } = await import("node-html-parser");
+  const document = parse(html, { blockTextElements: { script: true } });
   const items: CatalogItem[] = [];
   const posters = new Map<string, string>();
   const collect = (value: unknown) => {
@@ -20,7 +20,7 @@ export function parseCatalog(html: string, shelf: string): CatalogItem[] {
     Object.values(row).forEach(collect);
   };
   for (const script of document.querySelectorAll("script")) {
-    const text = script.textContent ?? "";
+    const text = script.rawText ?? "";
     if (!text.startsWith("self.__next_f.push(")) continue;
     try {
       const entry = JSON.parse(text.slice("self.__next_f.push(".length).replace(/\);?\s*$/, ""));
@@ -49,7 +49,7 @@ export function parseCatalog(html: string, shelf: string): CatalogItem[] {
       Object.values(row).forEach(visit);
     };
     for (const script of document.querySelectorAll("script")) {
-      const text = script.textContent ?? "";
+      const text = script.rawText ?? "";
       const prefix = "self.__next_f.push(";
       if (!text.startsWith(prefix)) continue;
       try {
@@ -68,7 +68,7 @@ export async function browseCatalog(cursor?: string) {
   // Workers reject redirect:"error"; mcpFetch uses manual redirects and refuses 3xx.
   const response = await mcpFetch(`https://www.scrolltide.co/${shelf}`, { signal: AbortSignal.timeout(20000) });
   if (!response.ok) throw new Error("Scrolltide’s library is unavailable. Try again.");
-  const items = parseCatalog(await response.text(), shelf);
+  const items = await parseCatalog(await response.text(), shelf);
   if (!items.length) throw new Error("Scrolltide’s catalog format changed. This shelf could not be loaded.");
   return { items, nextCursor: index + 1 < LIBRARY_SHELVES.length ? `codehaven-shelf:${index + 1}` : null, note: "" };
 }
