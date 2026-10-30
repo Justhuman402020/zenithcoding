@@ -22,7 +22,9 @@ export default defineConfig({
     // for that same crawl. Serving zod unoptimized (it is native ESM) breaks the cycle.
     // holdUntilCrawlEnd: false — the optimizer must not wait for the browser crawl to
     // finish, because crawl requests for optimized deps wait on the optimizer (deadlock).
-    optimizeDeps: { exclude: ["zod"], holdUntilCrawlEnd: false },
+    // Keep React prebundled, but avoid the unbounded route/dependency discovery
+    // crawl that leaves every browser module waiting on cold starts.
+    optimizeDeps: { exclude: ["zod"], holdUntilCrawlEnd: false, noDiscovery: true },
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).
       allowedHosts: true,
