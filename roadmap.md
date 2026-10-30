@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Show Scrolltide templates on opening the library and load every available catalog page while scrolling; verify browsing without starting builds or retrieving full instructions.
+
 - [x] Fix Scrolltide sign-in launch in the embedded preview, renew client registration when its return address changes, and provide a direct link when popups are blocked; both paths verified reaching Scrolltide's real login page, 12 tests pass.
 - [x] Add Scrolltide OAuth connection, template panel, persistent reviewable drafts and server-enforced approved build handoff; owner Connect opens Scrolltide sign-in, template panel checked on phone/desktop without builds.
 - [ ] Verify real Scrolltide tool formats/search/retrieval and approved template→files/log flow: waiting for owner's Scrolltide sign-in/consent; no subscribed template or live build tested yet.
