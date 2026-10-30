@@ -40,3 +40,17 @@ describe("preview stylesheets", () => {
     expect(css).toContain("/layers/sky.webp");
   });
 });
+
+describe("preview setup script", () => {
+  it("is valid JavaScript so preview placeholder keys load", async () => {
+    const files = [
+      { path: "package.json", content: "{}" },
+      { path: "index.html", content: '<html><head></head><body><script type="module" src="/src/main.ts"></script></body></html>' },
+      { path: "src/main.ts", content: "console.log(import.meta.env.VITE_X);" },
+    ];
+    const result = await buildInBrowser(files);
+    const html = result.files!.find((f) => f.path === "index.html")!.content;
+    const inline = html.match(/<script>([\s\S]*?)<\/script>/)![1];
+    expect(() => new Function(inline)).not.toThrow();
+  });
+});
