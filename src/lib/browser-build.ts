@@ -361,6 +361,8 @@ export async function buildInBrowser(
       minify: true,
       sourcemap: false,
       splitting: false,
+      // Required so imported stylesheets (import "./index.css") get their own output file.
+      outdir: "/out",
       plugins: [virtualPlugin],
       define: {
         "process.env.NODE_ENV": '"production"',
@@ -392,11 +394,12 @@ export async function buildInBrowser(
 
     // Rewrite index.html: strip original entry script, inject built assets.
     let html = stripScript(indexHtml, entry);
-    const tailwindCdn = hasTailwind
+    const tailwindCdn = hasTailwind || tailwindSheets.length
       ? `<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>`
       : "";
     const headInjects: string[] = [envRuntimeScript(opts.env || {})];
     if (tailwindCdn) headInjects.push(tailwindCdn);
+    for (const sheet of tailwindSheets) headInjects.push(`<style type="text/tailwindcss">\n${sheet}\n</style>`);
     if (cssName) headInjects.push(`<link rel="stylesheet" href="/${cssName}">`);
     const bodyInjects: string[] = [
       `<script type="module" src="/${jsName}"></script>`,

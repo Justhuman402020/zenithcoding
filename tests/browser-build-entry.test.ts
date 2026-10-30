@@ -20,3 +20,23 @@ describe("preview entry file", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe("preview stylesheets", () => {
+  it("hands Tailwind v4 styles to the page and bundles plain CSS", async () => {
+    const files = [
+      { path: "package.json", content: JSON.stringify({ dependencies: { react: "^19.1.0" } }) },
+      { path: "index.html", content: '<!doctype html><html><head></head><body><script type="module" src="/src/main.tsx"></script></body></html>' },
+      { path: "src/main.tsx", content: 'import "./index.css";\nimport "./plain.css";\nconsole.log(1);' },
+      { path: "src/index.css", content: '@import "tailwindcss";\n@theme { --color-void: #05070c; }' },
+      { path: "src/plain.css", content: ".hero { background: url(/layers/sky.webp); color: red; }" },
+    ];
+    const result = await buildInBrowser(files);
+    expect(result.ok).toBe(true);
+    const html = result.files!.find((f) => f.path === "index.html")!.content;
+    expect(html).toContain('<style type="text/tailwindcss">');
+    expect(html).toContain("--color-void: #05070c");
+    expect(html).not.toContain('@import "tailwindcss"');
+    const css = result.files!.find((f) => f.path.endsWith(".css"))!.content;
+    expect(css).toContain("/layers/sky.webp");
+  });
+});
