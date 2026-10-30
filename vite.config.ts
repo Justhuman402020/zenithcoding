@@ -17,10 +17,12 @@ export default defineConfig({
   vite: {
     resolve: { alias: { "pkce-challenge": fileURLToPath(new URL("./node_modules/pkce-challenge/dist/index.browser.js", import.meta.url)) } },
     plugins: [mcpPlugin()],
-    // Cold starts deadlocked: the server-fn compiler loads these packages while
-    // transforming *.functions.ts / route modules, and their optimized copies waited
-    // for that same crawl. Serving them unoptimized (all native ESM) breaks the cycle.
-    optimizeDeps: { exclude: ["zod", "seroval", "@tanstack/router-core", "@tanstack/history", "@tanstack/react-router", "@tanstack/start-client-core"] },
+    // Cold starts deadlocked: the server-fn compiler loads `zod` while transforming
+    // *.functions.ts files with module-level schemas, and the optimized zod waited
+    // for that same crawl. Serving zod unoptimized (it is native ESM) breaks the cycle.
+    // holdUntilCrawlEnd: false — the optimizer must not wait for the browser crawl to
+    // finish, because crawl requests for optimized deps wait on the optimizer (deadlock).
+    optimizeDeps: { exclude: ["zod"], holdUntilCrawlEnd: false },
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).
       allowedHosts: true,

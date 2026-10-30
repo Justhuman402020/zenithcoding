@@ -49,3 +49,4 @@
 - [x] Image parts preserved for vision models (image + file shapes).
 - [x] Admin Brain: global rules + credential vault with Test & Scan Models / import.
 - [ ] Home menu Scrolltide icon: library page usable both for existing projects and creating a new project from a template (plan approved, pending build).
+- [ ] Preview dev server hangs on cold start (optimizer never finishes; SSR fine, published site unaffected). Tried cache clear, dep exclusions, holdUntilCrawlEnd — still wedged. Needs deeper diagnosis next turn.
