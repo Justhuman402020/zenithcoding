@@ -31,7 +31,7 @@ const CONSOLE_BRIDGE = `<script>(()=>{
   const snap=()=>{try{const b=document.body;return{title:document.title,path:location.pathname+location.hash,text:(b&&b.innerText||'').replace(/\\s+/g,' ').trim().slice(0,1500),elements:b?b.getElementsByTagName('*').length:0,empty:!b||!(b.innerText||'').trim()}}catch(_){return null}};
   const report=(o)=>{const k=String(o.message||'').slice(0,300);const c=rseen[k]||(rseen[k]={n:0,t:0});c.n++;const now=Date.now();if(now-c.t<3000||c.n>20)return;c.t=now;o.count=c.n;try{setTimeout(()=>parent.postMessage(Object.assign({type:'forge-preview-error'},o,{snapshot:snap()}),'*'),50)}catch(_){}};
   window.addEventListener('error',e=>{
-    if(!e.message&&e.target&&e.target!==window){const u=e.target.src||e.target.href||e.target.tagName;send('error',['Failed to load resource: '+u]);report({kind:'resource',message:'Failed to load resource: '+u});return;}
+    if(!e.message&&e.target&&e.target!==window){const t=e.target;const pick=v=>v&&typeof v==='object'&&'baseVal' in v?v.baseVal:v;const u=pick(t.currentSrc)||pick(t.src)||pick(t.href)||t.tagName;send('error',['Failed to load resource: '+u]);report({kind:'resource',message:'Failed to load resource: '+u});return;}
     send('error',[e.message+' ('+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)+')'+(e.error&&e.error.stack?'\\n'+e.error.stack:'')]);
     report({kind:'exception',message:String(e.message),stack:e.error&&e.error.stack||'',file:e.filename||'',line:e.lineno||0,col:e.colno||0});
   },true);
