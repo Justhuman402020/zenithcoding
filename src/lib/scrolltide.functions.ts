@@ -18,7 +18,7 @@ export const removeScrolltide = createServerFn({ method: "POST" }).middleware([r
   await (await import("./runtime-mcp/scrolltide.server")).disconnectScrolltide(context.userId);
   return { ok: true };
 });
-export const findScrolltideTemplates = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth]).inputValidator((v: unknown) => z.object({ query: z.string().min(1).max(500), cursor: z.string().max(2000).optional() }).parse(v)).handler(async ({ data, context }) => {
+export const findScrolltideTemplates = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth]).inputValidator((v: unknown) => z.object({ query: z.string().max(500).default(""), cursor: z.string().max(2000).optional() }).parse(v)).handler(async ({ data, context }) => {
   await assertAdminRole(context);
   return (await import("./runtime-mcp/templates.server")).searchTemplates(context.userId, data.query, data.cursor);
 });
