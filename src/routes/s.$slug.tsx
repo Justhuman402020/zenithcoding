@@ -96,6 +96,9 @@ export const Route = createFileRoute("/s/$slug")({
         const forgeSdk = `${backendCfg}<script src="/forge-sdk.js" defer></script>`;
         const injection = `${forgeSdk}${navigationBridge}`;
         html = html.includes("</body>") ? html.replace(/<\/body>/i, `${injection}</body>`) : `${html}${injection}`;
+        // Pictures/fonts/media from the project load from the project, not this site's root.
+        const { injectPreviewAssets } = await import("@/lib/preview-assets");
+        html = injectPreviewAssets(html, serving);
 
         return new Response(html, {
           status: 200,
