@@ -42,5 +42,7 @@ export const decideScrolltideDraft = createServerFn({ method: "POST" }).middlewa
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: row, error } = await supabaseAdmin.from("scrolltide_drafts").update({ state: data.approve ? "approved" : "denied" }).eq("id", data.id).eq("user_id", context.userId).eq("state", "draft").select("id").maybeSingle();
   if (error || !row) throw new Error("This draft was already decided or is not available.");
+  const { data: draft } = await supabaseAdmin.from("scrolltide_drafts").select("project_id,title").eq("id", row.id).single();
+  if (draft) await supabaseAdmin.from("chat_messages").insert({ project_id: draft.project_id, user_id: context.userId, role: "assistant", content: `${data.approve ? "Approved" : "Denied"}: ${draft.title}\n\n<!-- worklog -->\n- ${new Date().toISOString().slice(11, 19)} UTC · Template ${data.approve ? "approved for build" : "denied; no files changed"}` });
   return { id: row.id, approved: data.approve };
 });

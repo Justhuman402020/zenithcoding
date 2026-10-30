@@ -14,7 +14,7 @@ async function definitions(client: MCPClient) {
   return list;
 }
 function selectTool(tools: Descriptor[], kind: "search" | "detail") {
-  const candidates = tools.filter(t => t.annotations?.readOnlyHint !== false && (kind === "search" ? /search/i : /get|fetch|read|detail/i).test(`${t.name} ${t.description ?? ""}`) && /template|library|prompt|item|section/i.test(`${t.name} ${t.description ?? ""}`));
+  const candidates = tools.filter(t => t.annotations?.readOnlyHint !== false && t.annotations?.destructiveHint !== true && !/delete|pay|billing|send|publish|write|update|create/i.test(t.name) && (kind === "search" ? /search/i : /get|fetch|read|detail/i).test(`${t.name} ${t.description ?? ""}`) && /template|library|prompt|item|section/i.test(`${t.name} ${t.description ?? ""}`));
   const tool = candidates.find(t => kind === "search" ? /search/i.test(t.name) : /prompt|detail/i.test(t.name)) ?? candidates[0];
   if (!tool) throw new Error(`Scrolltide did not advertise a supported ${kind} tool.`);
   return tool;
