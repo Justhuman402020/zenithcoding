@@ -128,7 +128,8 @@ type PreviewErrorCtx = {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview" } => ({
+    ...(search.tab === "preview" ? { tab: "preview" as const } : {}),
     ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
     ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
   }),
@@ -363,7 +364,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt, scrolltide: scrolltideParam } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -375,7 +376,7 @@ function ProjectEditor() {
   const [previewKey, setPreviewKey] = useState(0);
   const [previewPath, setPreviewPath] = useState("index.html");
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("chat");
+  const [tab, setTab] = useState<TabKey>(tabParam === "preview" ? "preview" : "chat");
 
   // publish state
   const [published, setPublished] = useState(false);
