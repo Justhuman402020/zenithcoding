@@ -59,14 +59,14 @@ export function findingsMessage(f: Findings): string {
 }
 
 /** Runs inside the tested page; writes a JSON report into #__ch_report. */
-export const REPORTER_SCRIPT = `(()=>{var R={pageErrors:[],failedLoads:[]};
+export const REPORTER_SCRIPT = `(()=>{var R={pageErrors:[],failedLoads:[]};var s=new URLSearchParams(location.search).get('__scroll');try{history.replaceState(null,'','/')}catch(e){}
 addEventListener('error',function(e){var t=e.target;if(t&&t!==window&&(t.src||t.href)){R.failedLoads.push(String(t.src||t.href).slice(0,200))}else{R.pageErrors.push(String(e.message||e.error||'error').slice(0,300))}},true);
 addEventListener('unhandledrejection',function(e){R.pageErrors.push('Unhandled: '+String(e.reason&&e.reason.message||e.reason).slice(0,280))});
 function out(){var im=[].slice.call(document.images);var b=im.filter(function(i){return i.complete&&i.naturalWidth===0}).map(function(i){return (i.getAttribute('src')||'').slice(0,120)});
 var el=document.getElementById('__ch_report');if(!el){el=document.createElement('pre');el.id='__ch_report';el.style.display='none';(document.body||document.documentElement).appendChild(el)}
 el.textContent=JSON.stringify({brokenImages:b,pageErrors:R.pageErrors,failedLoads:R.failedLoads,imageCount:im.length,pageHeight:document.documentElement.scrollHeight})}
 window.__chReport=out;setInterval(out,500);
-var s=new URLSearchParams(location.search).get('__scroll');if(s)addEventListener('load',function(){setTimeout(function(){scrollTo(0,Number(s))},800)});})();`;
+if(s)addEventListener('load',function(){setTimeout(function(){scrollTo(0,Number(s))},800)});})();`;
 
 export function injectReporter(html: string): string {
   const tag = `<script>${REPORTER_SCRIPT}</script>`;
