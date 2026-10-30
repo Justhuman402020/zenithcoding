@@ -85,6 +85,7 @@ import { SetupMatrix } from "@/components/SetupMatrix";
 import { getPreviewEnv } from "@/lib/project-secrets.functions";
 import { BuildDialog } from "@/components/BuildDialog";
 import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
+import { injectPreviewAssets } from "@/lib/preview-assets";
 import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react";
 import { BuildApprovalHost, requestApproval } from "@/components/BuildApprovalDialog";
 import { BrainPanel } from "@/components/BrainPanel";
@@ -771,7 +772,8 @@ function ProjectEditor() {
     });
     const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
     const withNav = html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
-    return injectConsoleBridge(withNav);
+    // Project pictures/fonts/media (e.g. /layers/sky.webp) load from the project, not Code Haven's site.
+    return injectConsoleBridge(injectPreviewAssets(withNav, sourceFiles));
   }, [files, previewPath, needsBuild, autoBuild]);
 
   useEffect(() => {
