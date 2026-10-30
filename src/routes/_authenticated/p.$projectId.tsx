@@ -360,7 +360,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
