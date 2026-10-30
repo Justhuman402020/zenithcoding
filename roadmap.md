@@ -1,10 +1,11 @@
 # Roadmap
 
-- [ ] Show Scrolltide templates on opening the library and load every available catalog page while scrolling; verify browsing without starting builds or retrieving full instructions.
+- [x] Show Scrolltide library on opening and load all shelves while scrolling; real owner-connected phone/desktop checks reached 287 items (132 templates, 66 components, 20 sections, 14 UI, 55 shaders), with 19 passing tests and no full prompt retrieval or build.
 
 - [x] Fix Scrolltide sign-in launch in the embedded preview, renew client registration when its return address changes, and provide a direct link when popups are blocked; both paths verified reaching Scrolltide's real login page, 12 tests pass.
 - [x] Add Scrolltide OAuth connection, template panel, persistent reviewable drafts and server-enforced approved build handoff; owner Connect opens Scrolltide sign-in, template panel checked on phone/desktop without builds.
-- [ ] Verify real Scrolltide tool formats/search/retrieval and approved template→files/log flow: waiting for owner's Scrolltide sign-in/consent; no subscribed template or live build tested yet.
+- [x] Verify real Scrolltide tool formats and summary browsing using the owner's connected account.
+- [ ] Verify full instruction retrieval and approved template→files/log flow: requires permission to open a subscribed item and run a build; not part of library browsing.
 
 - [x] Enlarge editor chat message box: full-width text area with attach/camera/skills and send on their own row below; verified on phone (364x150) and wide screen (1254x134) with no clipping.
 

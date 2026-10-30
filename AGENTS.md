@@ -62,4 +62,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Auth event invalidation compares user identities so repeated same-user SIGNED_IN events on wake do not rerun the generated admission guard.
 - Runtime Scrolltide MCP connections use server-only encrypted owner-scoped OAuth storage and SDK clients, separate from the app-hosted MCP server and saved key vaults; approved project drafts are persisted into job recovery before dispatch so template use survives disconnects without exposing credentials.
 - Scrolltide OAuth uses exact project-owned return hosts and origin-bound client registrations; renew registration when the origin changes, preserve account tokens, and provide a sign-in link when popups are blocked.
-- Scrolltide library opening loads advertised read-only catalog summaries and paginates on scroll without fetching rebuild instructions, so browsing stays separate from item retrieval and approved builds.
+- Scrolltide browsing reads public shelf summaries when MCP has no pagination; authenticated MCP handles search/retrieval, keeping full-library scrolling separate from paid prompts and approved builds.
