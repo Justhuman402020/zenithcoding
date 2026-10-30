@@ -1,4 +1,5 @@
 import { parseHTML } from "linkedom";
+import { mcpFetch } from "./fetch.server";
 
 export type CatalogItem = { id: string; title: string; description: string; source: string; preview: string | null; poster?: string | null };
 export const LIBRARY_SHELVES = ["templates", "components", "sections", "ui", "shaders"] as const;
@@ -64,7 +65,8 @@ export async function browseCatalog(cursor?: string) {
   const index = cursor ? Number(cursor.replace("codehaven-shelf:", "")) : 0;
   const shelf = LIBRARY_SHELVES[index];
   if (!Number.isInteger(index) || !shelf || (cursor && !cursor.startsWith("codehaven-shelf:"))) throw new Error("Reload the Scrolltide library.");
-  const response = await fetch(`https://www.scrolltide.co/${shelf}`, { redirect: "error", signal: AbortSignal.timeout(20000) });
+  // Workers reject redirect:"error"; mcpFetch uses manual redirects and refuses 3xx.
+  const response = await mcpFetch(`https://www.scrolltide.co/${shelf}`, { signal: AbortSignal.timeout(20000) });
   if (!response.ok) throw new Error("Scrolltide’s library is unavailable. Try again.");
   const items = parseCatalog(await response.text(), shelf);
   if (!items.length) throw new Error("Scrolltide’s catalog format changed. This shelf could not be loaded.");

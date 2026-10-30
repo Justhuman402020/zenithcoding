@@ -59,6 +59,13 @@ function decoded(result: Awaited<ReturnType<MCPClient["callTool"]>>) {
   try { return JSON.parse(text) as unknown; } catch { return text; }
 }
 export async function searchTemplates(userId: string, query: string, cursor?: string) {
+  // Browsing the full library reads Scrolltide's public shelves directly; it needs no MCP call or allowance.
+  if (!query.trim() && (!cursor || cursor.startsWith("codehaven-shelf:"))) {
+    const { connectionFor } = await import("./scrolltide.server");
+    const row = await connectionFor(userId);
+    if (!row || row.state !== "ready") throw new Error("Connect Scrolltide in Admin → Integrations & API keys first.");
+    return browseCatalog(cursor);
+  }
   return withScrolltide(userId, async client => {
     const kind = query.trim() ? "search" : "browse";
     const tool = selectTool(await definitions(client), kind);

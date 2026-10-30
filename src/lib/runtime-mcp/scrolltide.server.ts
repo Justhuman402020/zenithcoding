@@ -95,7 +95,7 @@ export async function withScrolltide<T>(userId: string, work: (client: Awaited<R
       await (await db()).from("runtime_mcp_connections").update({ state: "authenticating" }).eq("id", row.id);
       throw new Error("Scrolltide needs your sign-in approval again. Reconnect in Admin.");
     }
-    // Never echo upstream responses: they can include authorization material.
+    console.error("[scrolltide]", (error as Error)?.name, String((error as Error)?.message).slice(0,300)); // Never echo upstream responses: they can include authorization material.
     throw new Error("Scrolltide could not complete this request. Check your connection or plan and try again.");
   } finally { if (client) await client.close(); }
 }
