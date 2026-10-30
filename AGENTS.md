@@ -66,3 +66,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Lazy-load Scrolltide previews separately from paid instructions.
 - Retain ZIP data URLs and runtime assets for preview/publish.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
+- Browser tests use Cloudflare Browser Rendering via pool accounts in pool order; previews reach it only through hashed, 15-minute `/api/public/preview/$token` addresses, and test-found fixes go through the normal chat/approval flow.

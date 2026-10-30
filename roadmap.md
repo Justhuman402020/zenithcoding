@@ -51,3 +51,5 @@
 - [x] Place Scrolltide beside ZIP and Import in the home prompt controls; verified visible on phone/desktop and opens the library on phone.
 - [x] Verify imported ZIP pictures with another ZIP: real upload, public/static, CSS background, dynamic and SVG pictures loaded; scrolling worked; 7 regression tests and automatic typecheck passed.
 - [x] Restore preview cold starts with bounded dependency discovery and explicit CommonJS prebundling; home, library and project editor verified without console errors.
+
+- [x] Agent browser test (Test button, "test my site", after-build test, Checks tab) — live run needs Browser Rendering permission on Cloudflare tokens
