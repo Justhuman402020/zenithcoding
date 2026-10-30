@@ -20,7 +20,7 @@ export default defineConfig({
     // Cold starts deadlocked: the server-fn compiler loads these packages while
     // transforming *.functions.ts / route modules, and their optimized copies waited
     // for that same crawl. Serving them unoptimized (all native ESM) breaks the cycle.
-    optimizeDeps: { exclude: ["zod", "seroval", "@tanstack/router-core", "@tanstack/history", "@tanstack/react-router", "@tanstack/start-client-core"] },
+    optimizeDeps: { exclude: ["zod", "seroval", "@tanstack/router-core", "@tanstack/history", "@tanstack/react-router", "@tanstack/start-client-core", "ai", "@ai-sdk/openai-compatible", "@supabase/supabase-js"] },
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).
       allowedHosts: true,
