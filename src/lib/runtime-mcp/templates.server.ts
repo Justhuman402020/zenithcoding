@@ -1,5 +1,6 @@
 import { withScrolltide } from "./scrolltide.server";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { browseCatalog } from "./catalog.server";
 
 type Descriptor = Awaited<ReturnType<MCPClient["listTools"]>>["tools"][number];
 export type TemplateResult = { id: string; title: string; description: string; source: string; preview: string | null };
@@ -61,6 +62,8 @@ export async function searchTemplates(userId: string, query: string, cursor?: st
   return withScrolltide(userId, async client => {
     const kind = query.trim() ? "search" : "browse";
     const tool = selectTool(await definitions(client), kind);
+    const properties = object(tool.inputSchema.properties) ?? {};
+    if (kind === "browse" && "limit" in properties && !Object.keys(properties).some(n => /^(cursor|next_cursor|page|page_number|offset|skip)$/i.test(n))) return browseCatalog(cursor);
     const { args, supportsCursor, pageField, offsetField } = argsFor(tool, kind, query.trim(), cursor);
     const data = decoded(await client.callTool({ name: tool.name, arguments: args }));
     const root = object(data);
