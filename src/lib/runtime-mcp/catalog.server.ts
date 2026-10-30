@@ -1,4 +1,3 @@
-import { parseHTML } from "linkedom";
 import { mcpFetch } from "./fetch.server";
 
 export type CatalogItem = { id: string; title: string; description: string; source: string; preview: string | null; poster?: string | null };
@@ -7,7 +6,8 @@ function https(value: unknown): string | null {
   if (typeof value !== "string" || !value) return null;
   try { const u = new URL(value, "https://www.scrolltide.co"); return u.protocol === "https:" ? u.href : null; } catch { return null; }
 }
-export function parseCatalog(html: string, shelf: string): CatalogItem[] {
+export async function parseCatalog(html: string, shelf: string): Promise<CatalogItem[]> {
+  const { parseHTML } = await import("linkedom");
   const { document } = parseHTML(html);
   const items: CatalogItem[] = [];
   const posters = new Map<string, string>();
@@ -68,7 +68,7 @@ export async function browseCatalog(cursor?: string) {
   // Workers reject redirect:"error"; mcpFetch uses manual redirects and refuses 3xx.
   const response = await mcpFetch(`https://www.scrolltide.co/${shelf}`, { signal: AbortSignal.timeout(20000) });
   if (!response.ok) throw new Error("Scrolltide’s library is unavailable. Try again.");
-  const items = parseCatalog(await response.text(), shelf);
+  const items = await parseCatalog(await response.text(), shelf);
   if (!items.length) throw new Error("Scrolltide’s catalog format changed. This shelf could not be loaded.");
   return { items, nextCursor: index + 1 < LIBRARY_SHELVES.length ? `codehaven-shelf:${index + 1}` : null, note: "" };
 }
