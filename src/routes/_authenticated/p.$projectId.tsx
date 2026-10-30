@@ -2330,6 +2330,7 @@ function ProjectEditor() {
                                 </div>
                                 {log && (
                                   <WorkLogCard
+                                    checks={mi === messages.length - 1 || messages.slice(mi + 1).every((x) => x.role !== "assistant") ? <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} /> : undefined}
                                     log={log}
                                     title={(() => {
                                       const prev = [...messages.slice(0, mi)].reverse().find((x) => x.role === "user");
@@ -2896,6 +2897,19 @@ function ProjectEditor() {
 
         {tab === "preview" && (
           <SetupMatrix projectId={projectId} files={files} />
+        )}
+        {checkOpen && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-background">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-3">
+              <span className="text-base font-medium">Browser test</span>
+              <button onClick={() => void runTest("preview")} disabled={browserCheck?.status === "running"} className="rounded-full border border-border px-3 py-1.5 text-sm disabled:opacity-60">Test preview</button>
+              {published && slug && <button onClick={() => void runTest("published")} disabled={browserCheck?.status === "running"} className="rounded-full border border-border px-3 py-1.5 text-sm disabled:opacity-60">Test published site</button>}
+              <button onClick={() => setCheckOpen(false)} className="ml-auto rounded-full border border-border px-3 py-1.5 text-sm">Close</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} />
+            </div>
+          </div>
         )}
         {tab === "preview" && (
           <PreviewFrame
