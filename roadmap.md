@@ -48,5 +48,6 @@
 - [x] Agent execute_sql + attach_credential tools.
 - [x] Image parts preserved for vision models (image + file shapes).
 - [x] Admin Brain: global rules + credential vault with Test & Scan Models / import.
-- [ ] Home menu Scrolltide icon: library page usable both for existing projects and creating a new project from a template (plan approved, pending build).
+- [ ] Place Scrolltide beside ZIP and Import in the home prompt controls; verify the library opens on phone and desktop.
+- [ ] Verify imported ZIP pictures in the preview with another ZIP, and fix remaining local asset loading errors.
 - [ ] Preview dev server hangs on cold start (optimizer never finishes; SSR fine, published site unaffected). Tried cache clear, dep exclusions, holdUntilCrawlEnd — still wedged. Needs deeper diagnosis next turn.
