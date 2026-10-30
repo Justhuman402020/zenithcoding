@@ -17,10 +17,10 @@ async function definitions(client: MCPClient) {
 function selectTool(tools: Descriptor[], kind: "search" | "detail" | "browse") {
   const candidates = tools.filter(t => t.annotations?.readOnlyHint !== false && t.annotations?.destructiveHint !== true && !/delete|pay|billing|send|publish|write|update|create/i.test(t.name) && (kind === "search" ? /search/i : kind === "browse" ? /list|browse|catalog|search/i : /get|fetch|read|detail/i).test(`${t.name} ${t.description ?? ""}`) && /template|library|prompt|item|section/i.test(`${t.name} ${t.description ?? ""}`));
   if (kind === "browse") {
-    const browse = candidates.find(t => /list|browse|catalog/i.test(t.name) && !/prompt|instructions|detail/i.test(t.name));
+    const browse = candidates.find(t => /list|browse|catalog/i.test(t.name) && !/prompt|instructions|detail|categor/i.test(t.name));
     if (browse) return browse;
   }
-  const tool = candidates.find(t => kind === "search" ? /search/i.test(t.name) : /prompt|detail/i.test(t.name)) ?? candidates[0];
+  const tool = candidates.find(t => kind !== "detail" ? /search/i.test(t.name) : /prompt|detail/i.test(t.name)) ?? candidates[0];
   if (!tool) throw new Error(`Scrolltide did not advertise a supported ${kind} tool.`);
   return tool;
 }
@@ -71,7 +71,7 @@ export async function searchTemplates(userId: string, query: string, cursor?: st
       const id = valueText(row, ["id", "slug", "template_id", "item_id"]);
       const title = valueText(row, ["title", "name"]);
       if (!id || !title) return [];
-      return [{ id, title, description: valueText(row, ["description", "summary", "category"]), source: safeUrl(valueText(row, ["url", "source_url", "link"])) || "https://www.scrolltide.co", preview: safeUrl(valueText(row, ["preview_url", "thumbnail", "image_url", "image"]), true) || null }];
+      return [{ id, title, description: valueText(row, ["description", "summary", "category"]), source: safeUrl(valueText(row, ["url", "source_url", "link"])) || "https://www.scrolltide.co", preview: safeUrl(valueText(row, ["preview_url", "preview", "thumbnail", "image_url", "image"]), true) || null }];
     });
     const pagination = object(root?.pagination) ?? root;
     const next = pagination ? valueText(pagination, ["nextCursor", "next_cursor"]) : "";
