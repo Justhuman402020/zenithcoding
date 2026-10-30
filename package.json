@@ -60,6 +60,7 @@
     "esbuild-wasm": "^0.28.1",
     "fflate": "^0.8.3",
     "input-otp": "^1.4.2",
+    "linkedom": "^0.18.14",
     "lucide-react": "^0.575.0",
     "monaco-editor": "^0.55.1",
     "react": "^19.2.0",

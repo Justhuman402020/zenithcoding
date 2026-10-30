@@ -1,5 +1,6 @@
 import { withScrolltide } from "./scrolltide.server";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { browseCatalog } from "./catalog.server";
 
 type Descriptor = Awaited<ReturnType<MCPClient["listTools"]>>["tools"][number];
 export type TemplateResult = { id: string; title: string; description: string; source: string; preview: string | null };
@@ -10,26 +11,45 @@ function safeUrl(value: string, image = false) {
 }
 async function definitions(client: MCPClient) {
   const list: Descriptor[] = []; let cursor: string | undefined;
-  do { const page = await client.listTools({ params: cursor ? { cursor } : undefined }); list.push(...page.tools); cursor = page.nextCursor; } while (cursor && list.length < 100);
+  const seen = new Set<string>();
+  do { const page = await client.listTools({ params: cursor ? { cursor } : undefined }); list.push(...page.tools); cursor = page.nextCursor; if (cursor && seen.has(cursor)) throw new Error("Scrolltide repeated its catalog cursor. Try again."); if (cursor) seen.add(cursor); } while (cursor);
   return list;
 }
-function selectTool(tools: Descriptor[], kind: "search" | "detail") {
-  const candidates = tools.filter(t => t.annotations?.readOnlyHint !== false && t.annotations?.destructiveHint !== true && !/delete|pay|billing|send|publish|write|update|create/i.test(t.name) && (kind === "search" ? /search/i : /get|fetch|read|detail/i).test(`${t.name} ${t.description ?? ""}`) && /template|library|prompt|item|section/i.test(`${t.name} ${t.description ?? ""}`));
-  const tool = candidates.find(t => kind === "search" ? /search/i.test(t.name) : /prompt|detail/i.test(t.name)) ?? candidates[0];
+function selectTool(tools: Descriptor[], kind: "search" | "detail" | "browse") {
+  const candidates = tools.filter(t => t.annotations?.readOnlyHint !== false && t.annotations?.destructiveHint !== true && !/delete|pay|billing|send|publish|write|update|create/i.test(t.name) && (kind === "search" ? /search/i : kind === "browse" ? /list|browse|catalog|search/i : /get|fetch|read|detail/i).test(`${t.name} ${t.description ?? ""}`) && /template|library|prompt|item|section/i.test(`${t.name} ${t.description ?? ""}`));
+  if (kind === "browse") {
+    const browse = candidates.find(t => /list|browse|catalog/i.test(t.name) && !/prompt|instructions|detail|categor/i.test(t.name));
+    if (browse) return browse;
+  }
+  const tool = candidates.find(t => kind !== "detail" ? /search/i.test(t.name) : /prompt|detail/i.test(t.name)) ?? candidates[0];
   if (!tool) throw new Error(`Scrolltide did not advertise a supported ${kind} tool.`);
   return tool;
 }
-function argsFor(tool: Descriptor, kind: "search" | "detail", input: string, cursor?: string) {
+function argsFor(tool: Descriptor, kind: "search" | "detail" | "browse", input: string, cursor?: string) {
   const properties = object(tool.inputSchema.properties) ?? {};
   const names = Object.keys(properties);
-  const field = names.find(n => kind === "search" ? /^(query|search|q|search_query)$/i.test(n) : /^(id|slug|template_id|item_id|templateId|itemId|prompt_id)$/i.test(n));
-  if (!field) throw new Error("Scrolltide’s tool format needs review before use.");
-  const args: Record<string, unknown> = { [field]: input };
+  const field = names.find(n => kind !== "detail" ? /^(query|search|q|search_query)$/i.test(n) : /^(id|slug|template_id|item_id|templateId|itemId|prompt_id)$/i.test(n));
+  if (!field && kind !== "browse") throw new Error("Scrolltide’s tool format needs review before use.");
+  const args: Record<string, unknown> = {};
+  if (field) {
+    const schema = object(properties[field]);
+    if (kind === "browse" && typeof schema?.minLength === "number" && schema.minLength > 0) throw new Error("Scrolltide currently requires a search term for this catalog.");
+    args[field] = input;
+  }
   const cursorField = names.find(n => /^(cursor|next_cursor)$/i.test(n));
-  if (cursor && cursorField) args[cursorField] = cursor;
+  const pageField = names.find(n => /^(page|page_number)$/i.test(n));
+  const offsetField = names.find(n => /^(offset|skip)$/i.test(n));
+  if (cursor?.startsWith("codehaven-page:")) {
+    const paging = object(JSON.parse(cursor.slice("codehaven-page:".length)));
+    if (pageField && typeof paging?.page === "number") args[pageField] = paging.page;
+    else if (offsetField && typeof paging?.offset === "number") args[offsetField] = paging.offset;
+    else throw new Error("Scrolltide pagination changed. Reload the library.");
+  } else if (cursor && cursorField) args[cursorField] = cursor;
+  if (pageField && !(pageField in args)) args[pageField] = object(properties[pageField])?.default ?? object(properties[pageField])?.minimum ?? 1;
+  if (offsetField && !(offsetField in args)) args[offsetField] = 0;
   const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : [];
   if (required.some(n => typeof n === "string" && !(n in args))) throw new Error("Scrolltide requires additional search options. Its tool format needs review.");
-  return { args, supportsCursor: Boolean(cursorField) };
+  return { args, supportsCursor: Boolean(cursorField), pageField, offsetField };
 }
 function decoded(result: Awaited<ReturnType<MCPClient["callTool"]>>) {
   if (result.isError) throw new Error("Scrolltide rejected the request. Check your subscription or daily allowance.");
@@ -40,8 +60,11 @@ function decoded(result: Awaited<ReturnType<MCPClient["callTool"]>>) {
 }
 export async function searchTemplates(userId: string, query: string, cursor?: string) {
   return withScrolltide(userId, async client => {
-    const tool = selectTool(await definitions(client), "search");
-    const { args, supportsCursor } = argsFor(tool, "search", query, cursor);
+    const kind = query.trim() ? "search" : "browse";
+    const tool = selectTool(await definitions(client), kind);
+    const properties = object(tool.inputSchema.properties) ?? {};
+    if (kind === "browse" && "limit" in properties && !Object.keys(properties).some(n => /^(cursor|next_cursor|page|page_number|offset|skip)$/i.test(n))) return browseCatalog(cursor);
+    const { args, supportsCursor, pageField, offsetField } = argsFor(tool, kind, query.trim(), cursor);
     const data = decoded(await client.callTool({ name: tool.name, arguments: args }));
     const root = object(data);
     const raw = Array.isArray(data) ? data : root?.items ?? root?.templates ?? root?.results ?? root?.data;
@@ -51,10 +74,20 @@ export async function searchTemplates(userId: string, query: string, cursor?: st
       const id = valueText(row, ["id", "slug", "template_id", "item_id"]);
       const title = valueText(row, ["title", "name"]);
       if (!id || !title) return [];
-      return [{ id, title, description: valueText(row, ["description", "summary", "category"]), source: safeUrl(valueText(row, ["url", "source_url", "link"])) || "https://www.scrolltide.co", preview: safeUrl(valueText(row, ["preview_url", "thumbnail", "image_url", "image"]), true) || null }];
+      return [{ id, title, description: valueText(row, ["description", "summary", "category"]), source: safeUrl(valueText(row, ["url", "source_url", "link"])) || "https://www.scrolltide.co", preview: safeUrl(valueText(row, ["preview_url", "preview", "thumbnail", "image_url", "image"]), true) || null }];
     });
-    const next = root ? valueText(root, ["nextCursor", "next_cursor"]) : "";
-    return { items, nextCursor: supportsCursor && next ? next : null, note: "" };
+    const pagination = object(root?.pagination) ?? root;
+    const next = pagination ? valueText(pagination, ["nextCursor", "next_cursor"]) : "";
+    let nextCursor = supportsCursor && next && next !== cursor ? next : null;
+    const nextPage = pagination?.nextPage ?? pagination?.next_page;
+    const nextOffset = pagination?.nextOffset ?? pagination?.next_offset;
+    const currentPage = pageField ? Number(args[pageField]) : 0;
+    const totalPages = pagination?.totalPages ?? pagination?.total_pages;
+    const hasMore = pagination?.hasMore === true || pagination?.has_more === true || (typeof totalPages === "number" && currentPage < totalPages) || (typeof pagination?.total === "number" && offsetField && Number(args[offsetField]) + raw.length < pagination.total);
+    if (!nextCursor && raw.length && pageField && (typeof nextPage === "number" || hasMore)) nextCursor = `codehaven-page:${JSON.stringify({ page: typeof nextPage === "number" ? nextPage : currentPage + 1 })}`;
+    if (!nextCursor && raw.length && offsetField && (typeof nextOffset === "number" || hasMore)) nextCursor = `codehaven-page:${JSON.stringify({ offset: typeof nextOffset === "number" ? nextOffset : Number(args[offsetField]) + raw.length })}`;
+    if (nextCursor === cursor) nextCursor = null;
+    return { items, nextCursor, note: "" };
   });
 }
 export async function fetchTemplate(userId: string, id: string) {
