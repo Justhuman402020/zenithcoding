@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { browseCatalog, parseCatalog } from "../src/lib/runtime-mcp/catalog.server";
 describe("full library summaries", () => {
   afterEach(() => vi.unstubAllGlobals());
+  it("preserves Scrolltide video previews instead of treating them as thumbnails", () => {
+    const url = "https://pub-1e5b4001b36b47e28e6a2fb775966a79.r2.dev/previews/selene.mp4";
+    const items = parseCatalog(`<a href="/templates/selene"><video><source src="${url}" type="video/mp4"></video><h3>SELENE</h3></a>`, "templates");
+    expect(items[0].preview).toBe(url);
+  });
   it("does not cap the public template library at 50 results", () => {
     const html = Array.from({ length: 132 }, (_, i) => `<a href="/templates/item-${i}"><h3>Item ${i}</h3><p>Description</p></a>`).join("");
     expect(parseCatalog(html, "templates")).toHaveLength(132);
