@@ -125,8 +125,10 @@ type PreviewErrorCtx = {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
-    typeof search.prompt === "string" ? { prompt: search.prompt } : {},
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string } => ({
+    ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
+    ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
+  }),
 
   component: ProjectEditor,
 });
@@ -358,7 +360,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -869,6 +871,13 @@ function ProjectEditor() {
   const scrolltideDraftRef = useRef<string | null>(null);
   const [scrolltideQuery, setScrolltideQuery] = useState("");
   const [scrolltideOpen, setScrolltideOpen] = useState(0);
+  // Arriving from the Scrolltide library page with ?scrolltide=1 opens the
+  // template panel so the saved draft's approval card is right there.
+  useEffect(() => {
+    if (!scrolltideParam) return;
+    setScrolltideOpen((v) => v + 1);
+    navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+  }, [scrolltideParam, projectId, navigate]);
   async function discardUnansweredMessage() {
     const rowId = pendingUserRowRef.current;
     pendingUserRowRef.current = null;
