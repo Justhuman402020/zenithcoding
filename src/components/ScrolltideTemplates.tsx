@@ -10,7 +10,7 @@ import { requestApproval } from "@/components/BuildApprovalDialog";
 import { SCROLLTIDE_ITEM_ALLOWANCE } from "@/lib/runtime-mcp/scrolltide-policy";
 import { ScrolltidePreview } from "@/components/ScrolltidePreview";
 
-type Item = { id: string; title: string; description: string; source: string; preview: string | null };
+type Item = { id: string; title: string; description: string; source: string; preview: string | null; poster?: string | null };
 export function ScrolltideTemplates({ projectId, disabled, onBuild, initialQuery = "", openRequested = 0 }: { projectId: string; disabled: boolean; onBuild: (draftId: string, title: string) => Promise<void>; initialQuery?: string; openRequested?: number }) {
   const [open, setOpen] = useState(false); const [query, setQuery] = useState(initialQuery); const [items, setItems] = useState<Item[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [note, setNote] = useState(""); const [busy, setBusy] = useState(false); const [searched, setSearched] = useState(false); const [connected, setConnected] = useState(false);
   const [selected, setSelected] = useState<{ id: string; title: string; brief: string; source: string } | null>(null); const [requirements, setRequirements] = useState("");
@@ -43,7 +43,7 @@ export function ScrolltideTemplates({ projectId, disabled, onBuild, initialQuery
     try {
       const r = await search({ data: { query: term, cursor: more && cursor ? cursor : undefined } });
       if (version !== requestVersion.current) return;
-      setItems(p => more ? [...p, ...r.items.filter(i => !p.some(x => x.id === i.id))] : r.items);
+      setItems(p => more ? [...p, ...r.items.filter(i => !p.some(x => x.id === i.id && x.source === i.source))] : r.items);
       setCursor(r.nextCursor === cursor && more ? null : r.nextCursor); setNote(r.note); setSearched(true);
     } catch (e) { if (version === requestVersion.current) { setPageError(true); setNote(e instanceof Error ? e.message : "Could not load templates."); } }
     finally { if (version === requestVersion.current) { loading.current = false; setBusy(false); } }

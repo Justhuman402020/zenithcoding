@@ -4,8 +4,11 @@ describe("full library summaries", () => {
   afterEach(() => vi.unstubAllGlobals());
   it("preserves Scrolltide video previews instead of treating them as thumbnails", () => {
     const url = "https://pub-1e5b4001b36b47e28e6a2fb775966a79.r2.dev/previews/selene.mp4";
-    const items = parseCatalog(`<a href="/templates/selene"><video><source src="${url}" type="video/mp4"></video><h3>SELENE</h3></a>`, "templates");
+    const poster = url.replace(".mp4", "-poster.jpg");
+    const media = JSON.stringify([1, `10:${JSON.stringify({ previewVideo: url, posterImage: poster })}\n`]);
+    const items = parseCatalog(`<a href="/templates/selene"><video><source src="${url}" type="video/mp4"></video><h3>SELENE</h3></a><script>self.__next_f.push(${media})</script>`, "templates");
     expect(items[0].preview).toBe(url);
+    expect(items[0].poster).toBe(poster);
   });
   it("does not cap the public template library at 50 results", () => {
     const html = Array.from({ length: 132 }, (_, i) => `<a href="/templates/item-${i}"><h3>Item ${i}</h3><p>Description</p></a>`).join("");

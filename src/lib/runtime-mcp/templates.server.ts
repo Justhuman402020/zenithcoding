@@ -3,7 +3,7 @@ import type { MCPClient } from "@ai-sdk/mcp";
 import { browseCatalog } from "./catalog.server";
 
 type Descriptor = Awaited<ReturnType<MCPClient["listTools"]>>["tools"][number];
-export type TemplateResult = { id: string; title: string; description: string; source: string; preview: string | null };
+export type TemplateResult = { id: string; title: string; description: string; source: string; preview: string | null; poster?: string | null };
 function object(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function valueText(row: Record<string, unknown>, names: string[]) { for (const name of names) { if (typeof row[name] === "string") return row[name] as string; } return ""; }
 function safeUrl(value: string, image = false) {
@@ -69,13 +69,20 @@ export async function searchTemplates(userId: string, query: string, cursor?: st
     const root = object(data);
     const raw = Array.isArray(data) ? data : root?.items ?? root?.templates ?? root?.results ?? root?.data;
     if (!Array.isArray(raw)) return { items: [] as TemplateResult[], nextCursor: null, note: typeof data === "string" ? data.slice(0, 12000) : "Scrolltide returned a catalog format that needs review." };
-    const items = raw.flatMap(item => {
+    let items: TemplateResult[] = raw.flatMap(item => {
       const row = object(item); if (!row) return [];
       const id = valueText(row, ["id", "slug", "template_id", "item_id"]);
       const title = valueText(row, ["title", "name"]);
       if (!id || !title) return [];
       return [{ id, title, description: valueText(row, ["description", "summary", "category"]), source: safeUrl(valueText(row, ["url", "source_url", "link"])) || "https://www.scrolltide.co", preview: safeUrl(valueText(row, ["preview_url", "preview", "thumbnail", "image_url", "image"]), true) || null }];
     });
+    // MCP summaries omit posters; enrich from the public catalog, not paid instructions.
+    if (items.some(item => item.preview && /\.(mp4|webm)(?:\?|$)/i.test(item.preview))) {
+      try {
+        const catalog = await browseCatalog();
+        items = items.map(item => ({ ...item, poster: catalog.items.find(entry => entry.preview === item.preview)?.poster ?? null }));
+      } catch { /* Search remains usable if the public shelf is temporarily unavailable. */ }
+    }
     const pagination = object(root?.pagination) ?? root;
     const next = pagination ? valueText(pagination, ["nextCursor", "next_cursor"]) : "";
     let nextCursor = supportsCursor && next && next !== cursor ? next : null;
