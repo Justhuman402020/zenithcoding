@@ -273,6 +273,12 @@ export async function buildInBrowser(
     const virtualPlugin: esbuild.Plugin = {
       name: "forge-virtual-fs",
       setup(build) {
+        // Entry points are always project files. A bare entry such as "src/main.tsx"
+        // would otherwise match the package rule below and be marked external.
+        build.onResolve({ filter: /.*/ }, (args) =>
+          args.kind === "entry-point" ? { path: args.path, namespace: "vfs" } : undefined,
+        );
+
         // esm.sh URLs -> external (browser fetches them)
         build.onResolve({ filter: /^https?:\/\// }, (args) => ({
           path: args.path,
