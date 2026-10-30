@@ -39,7 +39,7 @@ describe("advertised Scrolltide tools", () => {
     expect(mock.callTool.mock.calls).toEqual([[{ name: "list_templates", arguments: {} }], [{ name: "list_templates", arguments: { cursor: "second" } }]]);
   });
   it("supports empty-query catalog searches", async () => {
-    mock.listTools.mockResolvedValue({ tools: [{ name: "search_library", inputSchema: { properties: { query: {} }, required: ["query"] } }] });
+    mock.listTools.mockResolvedValue({ tools: [{ name: "list_categories", description: "All categories in the template library", inputSchema: { properties: {} } }, { name: "search_library", inputSchema: { properties: { query: {} }, required: ["query"] } }] });
     mock.callTool.mockResolvedValue({ structuredContent: { items: [] } });
     await searchTemplates("owner", "");
     expect(mock.callTool).toHaveBeenCalledWith({ name: "search_library", arguments: { query: "" } });
