@@ -125,8 +125,10 @@ type PreviewErrorCtx = {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
-    typeof search.prompt === "string" ? { prompt: search.prompt } : {},
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string } => ({
+    ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
+    ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
+  }),
 
   component: ProjectEditor,
 });

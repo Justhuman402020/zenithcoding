@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen, Library } from "lucide-react";
 
 import { X, MessageSquare } from "lucide-react";
 import { ThemePicker } from "@/components/ThemePicker";
@@ -735,6 +735,9 @@ function Dashboard() {
               <AdminNavItem onNavigate={(to = "/admin/users") => { setSidebarOpen(false); void navigate({ to }); }} />
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
+              </Link>
+              <Link to="/scrolltide" onClick={() => setSidebarOpen(false)} className="block w-full">
+                <SidebarItem icon={Library} label="Scrolltide" />
               </Link>
               <SidebarItem icon={Globe} label="Domains & publish" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
             </nav>

@@ -18,6 +18,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as DotwellKnownOauthClientRouteImport } from './routes/[.]well-known.oauth-client'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedScrolltideRouteImport } from './routes/_authenticated/scrolltide'
 import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
@@ -92,6 +93,11 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedScrolltideRoute = AuthenticatedScrolltideRouteImport.update({
+  id: '/scrolltide',
+  path: '/scrolltide',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const LiveProjectIdRoute = LiveProjectIdRouteImport.update({
@@ -265,6 +271,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof TemplatesRoute
   '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/scrolltide': typeof AuthenticatedScrolltideRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
@@ -304,6 +311,7 @@ export interface FileRoutesByTo {
   '/templates': typeof TemplatesRoute
   '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/scrolltide': typeof AuthenticatedScrolltideRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/templates': typeof TemplatesRoute
   '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/_authenticated/scrolltide': typeof AuthenticatedScrolltideRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
@@ -389,6 +398,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/.well-known/oauth-client'
     | '/.well-known/oauth-protected-resource'
+    | '/scrolltide'
     | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
@@ -428,6 +438,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/.well-known/oauth-client'
     | '/.well-known/oauth-protected-resource'
+    | '/scrolltide'
     | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
@@ -469,6 +480,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/.well-known/oauth-client'
     | '/.well-known/oauth-protected-resource'
+    | '/_authenticated/scrolltide'
     | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
@@ -593,6 +605,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/scrolltide': {
+      id: '/_authenticated/scrolltide'
+      path: '/scrolltide'
+      fullPath: '/scrolltide'
+      preLoaderRoute: typeof AuthenticatedScrolltideRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/live/$projectId': {
@@ -823,6 +842,7 @@ const AuthenticatedPProjectIdRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedScrolltideRoute: typeof AuthenticatedScrolltideRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
   AuthenticatedAdminBackendRoute: typeof AuthenticatedAdminBackendRoute
@@ -839,6 +859,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedScrolltideRoute: AuthenticatedScrolltideRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
   AuthenticatedAdminBackendRoute: AuthenticatedAdminBackendRoute,
