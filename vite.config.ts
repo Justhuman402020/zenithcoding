@@ -17,6 +17,9 @@ export default defineConfig({
   vite: {
     resolve: { alias: { "pkce-challenge": fileURLToPath(new URL("./node_modules/pkce-challenge/dist/index.browser.js", import.meta.url)) } },
     plugins: [mcpPlugin()],
+    // Cold starts deadlocked: the optimizer held deps until the crawl ended, while
+    // server-fn transforms of some *.functions.ts files waited on those deps.
+    optimizeDeps: { holdUntilCrawlEnd: false },
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).
       allowedHosts: true,
