@@ -6,6 +6,7 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   tanstackStart: {
@@ -14,6 +15,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    resolve: { alias: { "pkce-challenge": fileURLToPath(new URL("./node_modules/pkce-challenge/dist/index.browser.js", import.meta.url)) } },
     plugins: [mcpPlugin()],
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).

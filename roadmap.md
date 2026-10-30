@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Add Scrolltide OAuth connection, template search/drafts, approved build context and saved logs; verify real retrieval after owner consent.
+
 - [x] Enlarge editor chat message box: full-width text area with attach/camera/skills and send on their own row below; verified on phone (364x150) and wide screen (1254x134) with no clipping.
 
 
