@@ -70,6 +70,9 @@ function loaderFor(path: string): esbuild.Loader {
     case ".jpeg":
     case ".gif":
     case ".webp":
+    case ".avif":
+    case ".bmp":
+    case ".apng":
     case ".ico": return "dataurl";
     default: return "text";
   }
@@ -336,6 +339,8 @@ export async function buildInBrowser(
         build.onLoad({ filter: /.*/, namespace: "vfs" }, (args) => {
           const contents = fsMap.get(args.path);
           if (contents == null) return { errors: [{ text: `Missing file: ${args.path}` }] };
+          // ZIP media is already a URL; encoding its text again breaks images.
+          if (contents.startsWith("data:")) return { contents, loader: "text" };
           // Tailwind stylesheets (@import "tailwindcss", @theme, @apply…) are compiled
           // in the page by Tailwind's browser runtime, not by the bundler.
           if (args.path.endsWith(".css") && isTailwindCss(contents)) {
@@ -419,11 +424,13 @@ export async function buildInBrowser(
     built.push({ path: jsName, content: js });
     if (cssName) built.push({ path: cssName, content: css });
 
-    // Copy public/* and any non-source assets that /s/$slug might reference.
+    // Retain media referenced at runtime, not just files under public/.
     for (const f of files) {
       const p = normalizePath(f.path);
       if (p.startsWith("public/")) {
         built.push({ path: p.slice("public/".length), content: f.content });
+      } else if (f.content.startsWith("data:") || /\.(svg|json|gltf|txt)$/i.test(p)) {
+        built.push({ path: p, content: f.content });
       }
     }
 

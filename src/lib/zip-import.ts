@@ -3,7 +3,7 @@ import { unzipSync, strFromU8 } from "fflate";
 const SKIP = /(^|\/)(__MACOSX|node_modules|\.git|\.DS_Store|Thumbs\.db)(\/|$)/i;
 const BINARY: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
-  ico: "image/x-icon", avif: "image/avif", bmp: "image/bmp",
+  ico: "image/x-icon", avif: "image/avif", bmp: "image/bmp", apng: "image/apng",
   woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf",
   mp3: "audio/mpeg", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm", pdf: "application/pdf",
 };
@@ -43,11 +43,12 @@ export async function unpackZip(file: File): Promise<{ files: { path: string; co
   let skipped = 0;
   for (const path of paths) {
     const data = entries[path];
-    if (!data || !path || data.length > MAX_FILE) { skipped++; continue; }
+    if (!data || !path) { skipped++; continue; }
     const ext = path.split(".").pop()?.toLowerCase() ?? "";
     const mime = BINARY[ext];
     if (mime) files.push({ path, content: `data:${mime};base64,${toBase64(data)}` });
     else {
+      if (data.length > MAX_FILE) { skipped++; continue; }
       const text = strFromU8(data);
       if (text.includes("\u0000")) { skipped++; continue; }
       files.push({ path, content: text });
