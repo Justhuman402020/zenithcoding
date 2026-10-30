@@ -48,6 +48,6 @@
 - [x] Agent execute_sql + attach_credential tools.
 - [x] Image parts preserved for vision models (image + file shapes).
 - [x] Admin Brain: global rules + credential vault with Test & Scan Models / import.
-- [ ] Place Scrolltide beside ZIP and Import in the home prompt controls; verify the library opens on phone and desktop.
-- [ ] Verify imported ZIP pictures in the preview with another ZIP, and fix remaining local asset loading errors.
-- [ ] Preview dev server hangs on cold start (optimizer never finishes; SSR fine, published site unaffected). Tried cache clear, dep exclusions, holdUntilCrawlEnd — still wedged. Needs deeper diagnosis next turn.
+- [x] Place Scrolltide beside ZIP and Import in the home prompt controls; verified visible on phone/desktop and opens the library on phone.
+- [x] Verify imported ZIP pictures with another ZIP: real upload, public/static, CSS background, dynamic and SVG pictures loaded; scrolling worked; 7 regression tests and automatic typecheck passed.
+- [x] Restore preview cold starts with bounded dependency discovery and explicit CommonJS prebundling; home, library and project editor verified without console errors.
