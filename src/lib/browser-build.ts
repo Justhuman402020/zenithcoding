@@ -202,6 +202,15 @@ function readAliases(fsMap: Map<string, string>): [string, string][] {
 
 const ENTRY_CANDIDATES = ["src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js", "src/index.tsx", "src/index.jsx", "src/index.ts", "src/index.js", "main.tsx", "main.jsx", "index.tsx", "index.jsx"];
 
+const TAILWIND_IMPORT = /@import\s+(?:url\()?["']tailwindcss(?:\/[^"']*)?["']\)?[^;]*;/g;
+export function isTailwindCss(css: string): boolean {
+  return /@import\s+(?:url\()?["']tailwindcss|@tailwind\s|@theme\b|@apply\s|@utility\s|@custom-variant\s|@plugin\s/.test(css);
+}
+// The browser runtime already includes Tailwind, so its import/v3 directives are dropped.
+export function toBrowserTailwind(css: string): string {
+  return css.replace(TAILWIND_IMPORT, "").replace(/@tailwind\s+[a-z-]+\s*;/g, "").replace(/<\/style/gi, "<\\/style");
+}
+
 // Preview-only env runtime: real values when saved, safe placeholders otherwise,
 // so createClient()/fetch setup never crashes into a blank page.
 function envRuntimeScript(env: Record<string, string>): string {
@@ -270,6 +279,7 @@ export async function buildInBrowser(
     log("info", `Detected: ${hasReact ? "React " : ""}${hasVue ? "Vue " : ""}${hasSvelte ? "Svelte " : ""}${hasTailwind ? "+ Tailwind" : ""}`.trim() || "vanilla");
     log("info", `Bundling entry: ${resolvedEntry}`);
 
+    const tailwindSheets: string[] = [];
     const virtualPlugin: esbuild.Plugin = {
       name: "forge-virtual-fs",
       setup(build) {
@@ -316,6 +326,8 @@ export async function buildInBrowser(
             : joinPath(importerPath, args.path);
           const resolved = tryResolve(fsMap, abs);
           if (!resolved) {
+            // CSS url()/@import of served files (e.g. "/images/bg.webp" from public/) stay as links.
+            if (args.kind === "url-token" || args.kind === "import-rule") return { path: args.path, external: true };
             return { errors: [{ text: `Cannot resolve "${args.path}" from ${importerPath}` }] };
           }
           return { path: resolved, namespace: "vfs" };
@@ -324,6 +336,12 @@ export async function buildInBrowser(
         build.onLoad({ filter: /.*/, namespace: "vfs" }, (args) => {
           const contents = fsMap.get(args.path);
           if (contents == null) return { errors: [{ text: `Missing file: ${args.path}` }] };
+          // Tailwind stylesheets (@import "tailwindcss", @theme, @apply…) are compiled
+          // in the page by Tailwind's browser runtime, not by the bundler.
+          if (args.path.endsWith(".css") && isTailwindCss(contents)) {
+            tailwindSheets.push(toBrowserTailwind(contents));
+            return { contents: "", loader: "css", resolveDir: "/" };
+          }
           return { contents, loader: loaderFor(args.path), resolveDir: "/" };
         });
       },
