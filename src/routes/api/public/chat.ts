@@ -158,9 +158,11 @@ export const Route = createFileRoute("/api/public/chat")({
           if (!draft || !(isResume ? draft.state === "dispatched" : draft.state === "approved")) return fail(403, "Template approval required or already used.");
           const { templateBuildText } = await import("@/lib/runtime-mcp/scrolltide-policy");
           lastUserText = templateBuildText(draft.title, draft.brief, draft.requirements);
-          const lastUserIndex = body.messages.findLastIndex(m => m.role === "user");
+          const reversedUserIndex = [...body.messages].reverse().findIndex(m => m.role === "user");
+          const lastUserIndex = reversedUserIndex < 0 ? -1 : body.messages.length - 1 - reversedUserIndex;
           if (lastUserIndex < 0) return fail(400, "Template build requires a message.");
-          body.messages[lastUserIndex] = { ...body.messages[lastUserIndex], parts: [{ type: "text", text: lastUserText }] };
+          if (!isResume) body.messages[lastUserIndex] = { ...body.messages[lastUserIndex], parts: [{ type: "text", text: lastUserText }] };
+          else if (!body.messages.some(m => m.parts?.some(p => p.type === "text" && p.text.includes("<scrolltide-reference>")))) body.messages.splice(lastUserIndex, 0, { id: `template-${draft.id}`, role: "user", parts: [{ type: "text", text: lastUserText }] });
         }
         if (!planMode && needsFileChange && !isResume && request.headers.get("x-forge-approved") !== "yes") return fail(403, "Build approval required");
         trace.log("request.parsed", {

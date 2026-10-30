@@ -71,7 +71,9 @@ export async function finishScrolltide(state: string, code: string, issuer?: str
   return allowedScrolltideOrigin(row.origin);
 }
 async function createClient(row: Connection) {
-  const { provider } = await providerFor(row);
+  const fresh = await connectionFor(row.user_id);
+  if (!fresh) throw new Error("Scrolltide connection is no longer available.");
+  const { provider } = await providerFor(fresh);
   return createMCPClient({ transport: { type: "http", url: SCROLLTIDE_URL, authProvider: provider, redirect: "error", fetch: mcpFetch } });
 }
 export async function withScrolltide<T>(userId: string, work: (client: Awaited<ReturnType<typeof createClient>>) => Promise<T>) {
