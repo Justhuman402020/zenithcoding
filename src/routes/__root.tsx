@@ -180,6 +180,7 @@ function WorkspaceGate({ children }: { children: ReactNode }) {
     async function check() {
       if (checking || !live) return;
       checking = true;
+      const slow = setTimeout(() => { if (live) setUnavailable(true); }, 15_000);
       try {
         // The protected layout owns login; this check owns owner/device access.
         // Do not redirect or discard a verified session on transport failures.
@@ -191,7 +192,7 @@ function WorkspaceGate({ children }: { children: ReactNode }) {
           setAllowed(false);
           await router.navigate({ to: "/not-available", replace: true });
         } else setUnavailable(true);
-      } finally { checking = false; }
+      } finally { clearTimeout(slow); checking = false; }
     }
     void check();
     const timer = setInterval(() => void check(), 30_000);
