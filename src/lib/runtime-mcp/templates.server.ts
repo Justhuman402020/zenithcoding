@@ -34,7 +34,8 @@ function argsFor(tool: Descriptor, kind: "search" | "detail", input: string, cur
 function decoded(result: Awaited<ReturnType<MCPClient["callTool"]>>) {
   if (result.isError) throw new Error("Scrolltide rejected the request. Check your subscription or daily allowance.");
   if (result.structuredContent) return result.structuredContent;
-  const text = result.content.filter(c => c.type === "text").map(c => c.type === "text" ? c.text : "").join("\n");
+  const content: unknown[] = Array.isArray(result.content) ? result.content : [];
+  const text = content.map(c => { const row = object(c); return row?.type === "text" && typeof row.text === "string" ? row.text : ""; }).filter(Boolean).join("\n");
   try { return JSON.parse(text) as unknown; } catch { return text; }
 }
 export async function searchTemplates(userId: string, query: string, cursor?: string) {
