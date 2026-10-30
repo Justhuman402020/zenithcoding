@@ -49,6 +49,7 @@ export function applyTheme(id: string) {
   const r = document.documentElement.style;
   r.setProperty("--theme-base", t.base);
   const solid = t.id === "black";
+  document.documentElement.classList.toggle("theme-black", solid);
   r.setProperty("--background", solid ? t.base : `color-mix(in oklab, ${t.base} 72%, transparent)`);
   r.setProperty("--foreground", t.fg);
   r.setProperty("--card", solid ? t.card : `color-mix(in oklab, ${t.card} 92%, transparent)`);
