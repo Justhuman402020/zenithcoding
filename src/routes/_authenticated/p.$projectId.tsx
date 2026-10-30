@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
+import { isScrolltideLookup } from "@/lib/runtime-mcp/scrolltide-policy";
 import { editorRequestChoice, type EditorBuildMode } from "@/lib/image-delivery";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { NeuronLog } from "@/components/NeuronLog";
@@ -862,6 +864,9 @@ function ProjectEditor() {
   // Row id of the question currently waiting for an answer. If the turn dies,
   // the row is removed so the chat never fills up with unanswered messages.
   const pendingUserRowRef = useRef<string | null>(null);
+  const scrolltideDraftRef = useRef<string | null>(null);
+  const [scrolltideQuery, setScrolltideQuery] = useState("");
+  const [scrolltideOpen, setScrolltideOpen] = useState(0);
   async function discardUnansweredMessage() {
     const rowId = pendingUserRowRef.current;
     pendingUserRowRef.current = null;
@@ -892,7 +897,8 @@ function ProjectEditor() {
           headers["x-forge-mode"] = choice.mode;
           headers["x-forge-engine"] = choice.engine;
           if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
-          if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
+          if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
+          else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
           headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
           if (poolFromRef.current) {
@@ -1414,6 +1420,11 @@ function ProjectEditor() {
   // Actually hands one message to the agent. Used both for an immediate send
   // and for a message that waited in the queue while Code Haven was busy.
   async function deliverMessage(text: string, atts: Attachment[], requestedMode = modeRef.current) {
+    if (isScrolltideLookup(text)) {
+      setScrolltideQuery(text.replace(/scrolltide/ig, "").replace(/\b(find|search|show|templates?)\b/ig, "").trim() || "templates");
+      setScrolltideOpen(n => n + 1);
+      return;
+    }
     if (requestedMode === "image" && !atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0)) {
       toast.error("Attach an image for Image build.");
       return;
@@ -2775,6 +2786,11 @@ function ProjectEditor() {
                       /
                     </Button>
                     <div className="flex-1" />
+                    <ScrolltideTemplates projectId={projectId} disabled={isBusy || !token} initialQuery={scrolltideQuery} openRequested={scrolltideOpen} onBuild={async (draftId, title) => {
+                      scrolltideDraftRef.current = draftId;
+                      try { await deliverMessage(`Build the approved Scrolltide template: ${title}`, [], "build"); }
+                      finally { scrolltideDraftRef.current = null; }
+                    }} />
                     {isBusy ? (
                       <Button
                         type="button"

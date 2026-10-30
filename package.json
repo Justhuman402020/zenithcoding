@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/mcp": "^2.0.86",
     "@ai-sdk/openai-compatible": "^2.0.51",
     "@ai-sdk/react": "^3.0.210",
     "@hookform/resolvers": "^5.2.2",

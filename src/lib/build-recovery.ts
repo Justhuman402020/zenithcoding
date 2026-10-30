@@ -1,4 +1,4 @@
-export const RECOVERY_HEADERS = ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-image-build", "x-forge-approval", "x-forge-approved", "x-forge-pool-from"] as const;
+export const RECOVERY_HEADERS = ["x-forge-model", "x-forge-auto", "x-forge-mode", "x-forge-clone", "x-forge-vision-model", "x-forge-engine", "x-forge-image-build", "x-forge-approval", "x-forge-approved", "x-forge-pool-from", "x-forge-scrolltide-draft"] as const;
 
 /** Persist the chosen mode/model alongside input; a restart must not reselect it. */
 export function recoveryHeaders(headers: Headers, snapshot?: { engine: string; provider: string; model: string }) {

@@ -138,7 +138,7 @@ export const Route = createFileRoute("/api/public/chat")({
           return fail(400, "messages required");
         }
 
-        const lastUserText = [...body.messages]
+        let lastUserText = [...body.messages]
           .reverse()
           .find((message) => message.role === "user")
           ?.parts
@@ -150,7 +150,33 @@ export const Route = createFileRoute("/api/public/chat")({
         const cloneMode = request.headers.get("x-forge-clone") === "1";
         const needsFileChange = planMode ? false : detectFileChangeIntent(lastUserText);
         const requestKey = request.headers.get("x-forge-request-key") || crypto.randomUUID();
+        const scrolltideDraftId = request.headers.get("x-forge-scrolltide-draft");
+        if (scrolltideDraftId) {
+          if (!/^[0-9a-f-]{36}$/i.test(scrolltideDraftId) || planMode || imageBuild) return fail(400, "Invalid template build mode.");
+          const { supabaseAdmin: draftDb } = await import("@/integrations/supabase/client.server");
+          const { data: draft } = await draftDb.from("scrolltide_drafts").select("*").eq("id", scrolltideDraftId).eq("user_id", userId).eq("project_id", projectId).maybeSingle();
+          const { canUseTemplateDraft } = await import("@/lib/runtime-mcp/oauth-policy");
+          if (!draft || !canUseTemplateDraft(draft, userId, projectId, requestKey, isResume)) return fail(403, "Template approval required or already used.");
+          const { templateBuildText } = await import("@/lib/runtime-mcp/scrolltide-policy");
+          lastUserText = templateBuildText(draft.title, draft.brief, draft.requirements);
+          const reversedUserIndex = [...body.messages].reverse().findIndex(m => m.role === "user");
+          const lastUserIndex = reversedUserIndex < 0 ? -1 : body.messages.length - 1 - reversedUserIndex;
+          if (lastUserIndex < 0) return fail(400, "Template build requires a message.");
+          if (!isResume) body.messages[lastUserIndex] = { ...body.messages[lastUserIndex], parts: [{ type: "text", text: lastUserText }] };
+          else if (!body.messages.some(m => m.parts?.some(p => p.type === "text" && p.text.includes("<scrolltide-reference>")))) body.messages.splice(lastUserIndex, 0, { id: `template-${draft.id}`, role: "user", parts: [{ type: "text", text: lastUserText }] });
+        }
         if (!planMode && needsFileChange && !isResume && request.headers.get("x-forge-approved") !== "yes") return fail(403, "Build approval required");
+        const { isScrolltideLookup } = await import("@/lib/runtime-mcp/scrolltide-policy");
+        if (isScrolltideLookup(lastUserText)) {
+          let reply: string;
+          try {
+            const { searchTemplates } = await import("@/lib/runtime-mcp/templates.server");
+            const found = await searchTemplates(userId, lastUserText.replace(/scrolltide/ig, "").slice(0, 500));
+            reply = found.items.length ? found.items.map(i => `**${i.title}** — ${i.description}\n${i.source}`).join("\n\n") + "\n\nChoose a template using the Scrolltide templates button." : found.note || "No matching Scrolltide templates found.";
+          } catch { reply = "Scrolltide could not be searched. Check its connection in Admin → Integrations & API keys."; }
+          await supabase.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: reply + `\n\n<!-- worklog -->\n- ${new Date().toISOString().slice(11, 19)} UTC · Scrolltide lookup; no build started` });
+          return createUIMessageStreamResponse({ stream: createUIMessageStream({ execute: ({ writer }) => { const id = crypto.randomUUID(); writer.write({ type: "text-start", id }); writer.write({ type: "text-delta", id, delta: reply }); writer.write({ type: "text-end", id }); } }) });
+        }
         trace.log("request.parsed", {
           detail: { messages: body.messages.length, planMode, needsFileChange, prompt: lastUserText, requestKey },
         });
@@ -382,6 +408,10 @@ export const Route = createFileRoute("/api/public/chat")({
             resume_payload: { messages: body.messages, headers: recoveryHeaders(request.headers, { engine: selection.engine, ...selected }) } as any,
           }).eq("id", jobId);
           if (savedError) return fail(503, "Could not save the background build. No model work has started.");
+          if (scrolltideDraftId) {
+            const { data: claimed, error: claimError } = await supabaseAdmin.rpc("claim_scrolltide_draft", { p_id: scrolltideDraftId, p_user: userId, p_project: projectId, p_key: requestKey });
+            if (claimError || !claimed?.length) return fail(409, "This template build was already started.");
+          }
           const { error: dispatchError } = await (supabaseAdmin as any).rpc("dispatch_saved_build", { _job: jobId });
           if (dispatchError) return fail(503, "Could not start the background build. No model work has started.");
           await trace.flush();
@@ -642,6 +672,7 @@ export const Route = createFileRoute("/api/public/chat")({
           if (heartbeat) clearInterval(heartbeat);
         };
         const timeline: string[] = [];
+        if (scrolltideDraftId) timeline.push(`${new Date().toISOString().slice(11, 19)} UTC · Approved Scrolltide template restored from saved draft`);
         const setProgress = (text: string) => {
           progressText = text;
           if (timeline[timeline.length - 1]?.endsWith(text) !== true) timeline.push(`${new Date().toISOString().slice(11, 19)} UTC · ${text}`);

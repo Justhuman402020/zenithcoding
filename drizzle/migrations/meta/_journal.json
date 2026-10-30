@@ -134,6 +134,13 @@
       "when": 1793127509504,
       "tag": "0018_model_call_log",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793328021373,
+      "tag": "0019_scrolltide_runtime_connections",
+      "breakpoints": true
     }
   ]
 }

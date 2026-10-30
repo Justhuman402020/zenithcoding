@@ -7,6 +7,7 @@ import { ArrowLeft, CheckCircle2, ExternalLink, FlaskConical, KeyRound, Loader2,
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VaultKeyList } from "@/components/VaultKeyList";
+import { ScrolltideConnection } from "@/components/ScrolltideConnection";
 import { INTEGRATIONS, type IntegrationDef } from "@/lib/integrations-catalog";
 import {
   listAllSavedKeys,
@@ -57,6 +58,7 @@ function IntegrationsPage() {
           </p>
         </div>
         <div className="space-y-2">
+          <ScrolltideConnection />
           <h2 className="font-display text-xl">All saved keys</h2>
           <p className="text-sm text-muted-foreground">
             Only keys saved through the Brain section. AI model keys live in Admin → AI Models and are not listed here.

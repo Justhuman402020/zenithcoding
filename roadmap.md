@@ -1,5 +1,8 @@
 # Roadmap
 
+- [x] Add Scrolltide OAuth connection, template panel, persistent reviewable drafts and server-enforced approved build handoff; owner Connect opens Scrolltide sign-in, template panel checked on phone/desktop without builds.
+- [ ] Verify real Scrolltide tool formats/search/retrieval and approved template→files/log flow: waiting for owner's Scrolltide sign-in/consent; no subscribed template or live build tested yet.
+
 - [x] Enlarge editor chat message box: full-width text area with attach/camera/skills and send on their own row below; verified on phone (364x150) and wide screen (1254x134) with no clipping.
 
 
