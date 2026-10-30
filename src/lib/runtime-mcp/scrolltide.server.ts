@@ -4,7 +4,7 @@ import { SCROLLTIDE_URL, allowedScrolltideOrigin } from "./scrolltide-policy";
 import { mcpFetch } from "./fetch.server";
 import { validOAuthReturn } from "./oauth-policy";
 
-type AuthData = { tokens?: OAuthTokens; client?: OAuthClientInformation; verifier?: string; state?: string; server?: OAuthAuthorizationServerInformation; authUrl?: string };
+type AuthData = { tokens?: OAuthTokens; client?: OAuthClientInformation; registeredOrigin?: string; verifier?: string; state?: string; server?: OAuthAuthorizationServerInformation; authUrl?: string };
 async function db() { return (await import("@/integrations/supabase/client.server")).supabaseAdmin; }
 export async function connectionFor(userId: string) {
   const { data, error } = await (await db()).from("runtime_mcp_connections").select("*").eq("user_id", userId).eq("provider", "scrolltide").maybeSingle();
@@ -25,7 +25,7 @@ async function providerFor(row: Connection) {
     saveTokens: async (tokens) => { saved.tokens = tokens; await persist(); },
     clientInformation: () => saved.client,
     isClientInformationDynamicallyRegistered: () => true,
-    saveClientInformation: async (client) => { saved.client = client; await persist(); },
+    saveClientInformation: async (client) => { saved.client = client; saved.registeredOrigin = row.origin; await persist(); },
     authorizationServerInformation: () => saved.server,
     saveAuthorizationServerInformation: async (server) => { saved.server = server; await persist(); },
     saveCodeVerifier: async (verifier) => { saved.verifier = verifier; await persist(); },
@@ -44,7 +44,7 @@ export async function startScrolltide(userId: string, originInput: string) {
   const priorAuth: AuthData = prior ? JSON.parse(await decryptSecret(prior.encrypted_auth)) : {};
   // OAuth clients register exact callback addresses. A preview/domain change needs
   // a new client registration; retain account tokens, never reuse a mismatched client.
-  if (prior && (prior.origin !== origin || !priorAuth.client?.redirect_uris?.includes(`${origin}/api/public/mcp/scrolltide/callback`))) {
+  if (priorAuth.registeredOrigin !== origin) {
     priorAuth.client = undefined;
     priorAuth.server = undefined;
     priorAuth.authUrl = undefined;
