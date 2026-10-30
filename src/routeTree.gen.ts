@@ -15,6 +15,7 @@ import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as NotAvailableRouteImport } from './routes/not-available'
 import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as DotwellKnownOauthClientRouteImport } from './routes/[.]well-known.oauth-client'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
@@ -43,6 +44,7 @@ import { Route as ApiPublicJobsResumeRouteImport } from './routes/api/public/job
 import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
+import { Route as ApiPublicMcpScrolltideCallbackRouteImport } from './routes/api/public/mcp/scrolltide/callback'
 import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/sites.auth.me'
 import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
 import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
@@ -74,6 +76,11 @@ const NotAvailableRoute = NotAvailableRouteImport.update({
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownOauthClientRoute = DotwellKnownOauthClientRouteImport.update({
+  id: '/.well-known/oauth-client',
+  path: '/.well-known/oauth-client',
   getParentRoute: () => rootRouteImport,
 } as any)
 const Char91DotwellKnownChar93OauthProtectedResourceRoute =
@@ -225,6 +232,12 @@ const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
   path: '/api/public/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicMcpScrolltideCallbackRoute =
+  ApiPublicMcpScrolltideCallbackRouteImport.update({
+    id: '/api/public/mcp/scrolltide/callback',
+    path: '/api/public/mcp/scrolltide/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
   id: '/api/public/sites/auth/me',
   path: '/api/public/sites/auth/me',
@@ -250,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/mcp': typeof McpRoute
   '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
@@ -277,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -287,6 +302,7 @@ export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
   '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
@@ -315,6 +331,7 @@ export interface FileRoutesByTo {
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -327,6 +344,7 @@ export interface FileRoutesById {
   '/mcp': typeof McpRoute
   '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
@@ -355,6 +373,7 @@ export interface FileRoutesById {
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -368,6 +387,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/not-available'
     | '/templates'
+    | '/.well-known/oauth-client'
     | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
     | '/s/$slug'
@@ -395,6 +415,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
+    | '/api/public/mcp/scrolltide/callback'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -405,6 +426,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/not-available'
     | '/templates'
+    | '/.well-known/oauth-client'
     | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
     | '/s/$slug'
@@ -433,6 +455,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
+    | '/api/public/mcp/scrolltide/callback'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -444,6 +467,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/not-available'
     | '/templates'
+    | '/.well-known/oauth-client'
     | '/.well-known/oauth-protected-resource'
     | '/live/$projectId'
     | '/s/$slug'
@@ -472,6 +496,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
+    | '/api/public/mcp/scrolltide/callback'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -484,6 +509,7 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   NotAvailableRoute: typeof NotAvailableRoute
   TemplatesRoute: typeof TemplatesRoute
+  DotwellKnownOauthClientRoute: typeof DotwellKnownOauthClientRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   LiveProjectIdRoute: typeof LiveProjectIdRoute
   SSlugRoute: typeof SSlugRoute
@@ -498,6 +524,7 @@ export interface RootRouteChildren {
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
   ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
+  ApiPublicMcpScrolltideCallbackRoute: typeof ApiPublicMcpScrolltideCallbackRoute
   ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
   ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
   ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
@@ -545,6 +572,13 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/templates'
       preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-client': {
+      id: '/.well-known/oauth-client'
+      path: '/.well-known/oauth-client'
+      fullPath: '/.well-known/oauth-client'
+      preLoaderRoute: typeof DotwellKnownOauthClientRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.well-known/oauth-protected-resource': {
@@ -743,6 +777,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mcp/scrolltide/callback': {
+      id: '/api/public/mcp/scrolltide/callback'
+      path: '/api/public/mcp/scrolltide/callback'
+      fullPath: '/api/public/mcp/scrolltide/callback'
+      preLoaderRoute: typeof ApiPublicMcpScrolltideCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sites/auth/me': {
       id: '/api/public/sites/auth/me'
       path: '/api/public/sites/auth/me'
@@ -823,6 +864,7 @@ const rootRouteChildren: RootRouteChildren = {
   McpRoute: McpRoute,
   NotAvailableRoute: NotAvailableRoute,
   TemplatesRoute: TemplatesRoute,
+  DotwellKnownOauthClientRoute: DotwellKnownOauthClientRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
   LiveProjectIdRoute: LiveProjectIdRoute,
@@ -838,6 +880,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
   ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
+  ApiPublicMcpScrolltideCallbackRoute: ApiPublicMcpScrolltideCallbackRoute,
   ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
   ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
   ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,
