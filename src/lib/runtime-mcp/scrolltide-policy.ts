@@ -3,7 +3,7 @@ export const SCROLLTIDE_ITEM_ALLOWANCE = 40;
 export function allowedScrolltideOrigin(value: string) {
   const origin = new URL(value).origin;
   const u = new URL(origin);
-  if (origin === "http://localhost:8080" || (u.protocol === "https:" && (u.hostname === "boostallsocial.org" || u.hostname === "www.boostallsocial.org" || u.hostname === "zenithcoding2630.lovable.app" || u.hostname === "id-preview--4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovable.app"))) return origin;
+  if (origin === "http://localhost:8080" || (u.protocol === "https:" && (u.hostname === "boostallsocial.org" || u.hostname === "www.boostallsocial.org" || u.hostname === "zenithcoding2630.lovable.app" || u.hostname === "id-preview--4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovable.app" || u.hostname === "4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovableproject.com"))) return origin;
   throw new Error("Unrecognized connection return address.");
 }
 export function isScrolltideLookup(text: string) {

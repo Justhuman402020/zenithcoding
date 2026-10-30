@@ -1,5 +1,6 @@
 # Roadmap
 
+- [ ] Fix Scrolltide sign-in launch in the embedded preview and provide a direct link when popups are blocked; verify both launch paths without completing owner consent.
 - [x] Add Scrolltide OAuth connection, template panel, persistent reviewable drafts and server-enforced approved build handoff; owner Connect opens Scrolltide sign-in, template panel checked on phone/desktop without builds.
 - [ ] Verify real Scrolltide tool formats/search/retrieval and approved template→files/log flow: waiting for owner's Scrolltide sign-in/consent; no subscribed template or live build tested yet.
 
