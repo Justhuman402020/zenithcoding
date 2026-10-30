@@ -44,7 +44,7 @@ export async function startScrolltide(userId: string, originInput: string) {
   const priorAuth: AuthData = prior ? JSON.parse(await decryptSecret(prior.encrypted_auth)) : {};
   // OAuth clients register exact callback addresses. A preview/domain change needs
   // a new client registration; retain account tokens, never reuse a mismatched client.
-  if (prior && prior.origin !== origin) {
+  if (prior && (prior.origin !== origin || !priorAuth.client?.redirect_uris?.includes(`${origin}/api/public/mcp/scrolltide/callback`))) {
     priorAuth.client = undefined;
     priorAuth.server = undefined;
     priorAuth.authUrl = undefined;
