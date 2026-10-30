@@ -10,7 +10,8 @@ function safeUrl(value: string, image = false) {
 }
 async function definitions(client: MCPClient) {
   const list: Descriptor[] = []; let cursor: string | undefined;
-  do { const page = await client.listTools({ params: cursor ? { cursor } : undefined }); list.push(...page.tools); cursor = page.nextCursor; } while (cursor && list.length < 100);
+  const seen = new Set<string>();
+  do { const page = await client.listTools({ params: cursor ? { cursor } : undefined }); list.push(...page.tools); cursor = page.nextCursor; if (cursor && seen.has(cursor)) throw new Error("Scrolltide repeated its catalog cursor. Try again."); if (cursor) seen.add(cursor); } while (cursor);
   return list;
 }
 function selectTool(tools: Descriptor[], kind: "search" | "detail" | "browse") {
