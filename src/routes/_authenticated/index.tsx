@@ -822,7 +822,7 @@ function Dashboard() {
               className="resize-none border-0 bg-transparent focus-visible:ring-0 text-base min-h-[64px] p-2 placeholder:text-muted-foreground/70"
             />
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="grid w-full grid-cols-3 items-center gap-1 sm:flex sm:w-auto sm:flex-wrap">
                 <Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" disabled={!prompt.trim() || creating} onClick={(event) => void createFromPrompt(event as any, "plan")} title="Plan the work and estimate Neurons before building">
                   <ListChecks className="h-4 w-4" /> Plan
                 </Button>
@@ -846,6 +846,9 @@ function Dashboard() {
                 >
                   {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />} Import
                 </button>
+                <Button asChild type="button" size="sm" variant="ghost" className="h-8 justify-start gap-1.5 px-2.5 text-xs text-muted-foreground" title="Browse Scrolltide templates for a new or existing project">
+                  <Link to="/scrolltide" aria-label="Scrolltide templates"><Library className="h-4 w-4 shrink-0" />Scrolltide</Link>
+                </Button>
                 {ghConnected.connected && (
                   <button
                     type="button"
