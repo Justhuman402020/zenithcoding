@@ -1,7 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { allowedScrolltideOrigin, isScrolltideLookup, mayApproveDraft, SCROLLTIDE_ITEM_ALLOWANCE, templateBuildText } from "../src/lib/runtime-mcp/scrolltide-policy";
 import { recoveryHeaders } from "../src/lib/build-recovery";
+import { canUseTemplateDraft, validOAuthReturn } from "../src/lib/runtime-mcp/oauth-policy";
 describe("Scrolltide integration safeguards", () => {
+  it("rejects expired or malformed approval returns", () => {
+    expect(validOAuthReturn("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "code", "2026-10-30T03:00:00Z", Date.parse("2026-10-30T02:00:00Z"))).toBe(true);
+    expect(validOAuthReturn("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "code", "2026-10-30T01:00:00Z", Date.parse("2026-10-30T02:00:00Z"))).toBe(false);
+    expect(validOAuthReturn("bad", "code", "2026-10-30T03:00:00Z", Date.parse("2026-10-30T02:00:00Z"))).toBe(false);
+  });
+  it("requires the owning project and matching job for a resumed draft", () => {
+    const draft = { state: "dispatched", user_id: "owner", project_id: "project", request_key: "job" };
+    expect(canUseTemplateDraft(draft, "owner", "project", "job", true)).toBe(true);
+    expect(canUseTemplateDraft(draft, "other", "project", "job", true)).toBe(false);
+    expect(canUseTemplateDraft(draft, "owner", "project", "other-job", true)).toBe(false);
+    expect(canUseTemplateDraft(draft, "owner", "project", "job", false)).toBe(false);
+  });
   it("only accepts known connection return origins", () => {
     expect(allowedScrolltideOrigin("https://boostallsocial.org/admin")).toBe("https://boostallsocial.org");
     expect(() => allowedScrolltideOrigin("https://boostallsocial.org.attacker.example")).toThrow();

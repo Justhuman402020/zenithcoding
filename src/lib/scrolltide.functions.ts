@@ -26,6 +26,12 @@ export const readScrolltideTemplate = createServerFn({ method: "POST" }).middlew
   await assertAdminRole(context);
   return (await import("./runtime-mcp/templates.server")).fetchTemplate(context.userId, data.id);
 });
+export const listScrolltideDrafts = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).inputValidator((v: unknown) => z.object({ projectId: z.string().uuid() }).parse(v)).handler(async ({ data, context }) => {
+  await assertAdminRole(context);
+  const { data: rows, error } = await context.supabase.from("scrolltide_drafts").select("id,title,brief,requirements,source,state").eq("project_id", data.projectId).eq("user_id", context.userId).in("state", ["draft", "approved"]).order("created_at", { ascending: false }).limit(20);
+  if (error) throw new Error("Could not load saved template drafts.");
+  return rows ?? [];
+});
 export const saveScrolltideDraft = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth]).inputValidator((v: unknown) => z.object({ projectId: z.string().uuid(), templateId: z.string().min(1).max(500), requirements: z.string().max(10000) }).parse(v)).handler(async ({ data, context }) => {
   await assertAdminRole(context);
   const { data: project } = await context.supabase.from("projects").select("id").eq("id", data.projectId).eq("user_id", context.userId).maybeSingle();

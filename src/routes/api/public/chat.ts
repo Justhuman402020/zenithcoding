@@ -155,7 +155,8 @@ export const Route = createFileRoute("/api/public/chat")({
           if (!/^[0-9a-f-]{36}$/i.test(scrolltideDraftId) || planMode || imageBuild) return fail(400, "Invalid template build mode.");
           const { supabaseAdmin: draftDb } = await import("@/integrations/supabase/client.server");
           const { data: draft } = await draftDb.from("scrolltide_drafts").select("*").eq("id", scrolltideDraftId).eq("user_id", userId).eq("project_id", projectId).maybeSingle();
-          if (!draft || !(isResume ? draft.state === "dispatched" && draft.request_key === requestKey : draft.state === "approved")) return fail(403, "Template approval required or already used.");
+          const { canUseTemplateDraft } = await import("@/lib/runtime-mcp/oauth-policy");
+          if (!draft || !canUseTemplateDraft(draft, userId, projectId, requestKey, isResume)) return fail(403, "Template approval required or already used.");
           const { templateBuildText } = await import("@/lib/runtime-mcp/scrolltide-policy");
           lastUserText = templateBuildText(draft.title, draft.brief, draft.requirements);
           const reversedUserIndex = [...body.messages].reverse().findIndex(m => m.role === "user");
