@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { browseCatalog, parseCatalog } from "../src/lib/runtime-mcp/catalog.server";
 describe("full library summaries", () => {
   afterEach(() => vi.unstubAllGlobals());
-  it("preserves Scrolltide video previews instead of treating them as thumbnails", () => {
+  it("preserves Scrolltide video previews instead of treating them as thumbnails", async () => {
     const url = "https://pub-1e5b4001b36b47e28e6a2fb775966a79.r2.dev/previews/selene.mp4";
     const poster = url.replace(".mp4", "-poster.jpg");
     const media = JSON.stringify([1, `10:${JSON.stringify({ previewVideo: url, posterImage: poster })}\n`]);
@@ -10,11 +10,11 @@ describe("full library summaries", () => {
     expect(items[0].preview).toBe(url);
     expect(items[0].poster).toBe(poster);
   });
-  it("does not cap the public template library at 50 results", () => {
+  it("does not cap the public template library at 50 results", async () => {
     const html = Array.from({ length: 132 }, (_, i) => `<a href="/templates/item-${i}"><h3>Item ${i}</h3><p>Description</p></a>`).join("");
     expect(await parseCatalog(html, "templates")).toHaveLength(132);
   });
-  it("uses the real shelf slug, not the preview filename, for instructions", () => {
+  it("uses the real shelf slug, not the preview filename, for instructions", async () => {
     const record = JSON.stringify({ items: [{ slug: "scroll-key", name: "Scroll Key", kind: "component", previewVideo: "https://media.example/scroll-key-v2.mp4" }] });
     const html = `<script>self.__next_f.push(${JSON.stringify([1, `10:${record}\n`])})</script>`;
     expect((await parseCatalog(html, "components"))[0].id).toBe("scroll-key");
