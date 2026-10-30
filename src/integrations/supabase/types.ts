@@ -1412,6 +1412,92 @@ export type Database = {
           },
         ]
       }
+      runtime_mcp_connections: {
+        Row: {
+          encrypted_auth: string
+          id: string
+          oauth_expires_at: string | null
+          oauth_state: string | null
+          origin: string
+          provider: string
+          state: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          encrypted_auth: string
+          id?: string
+          oauth_expires_at?: string | null
+          oauth_state?: string | null
+          origin: string
+          provider: string
+          state?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          encrypted_auth?: string
+          id?: string
+          oauth_expires_at?: string | null
+          oauth_state?: string | null
+          origin?: string
+          provider?: string
+          state?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      scrolltide_drafts: {
+        Row: {
+          brief: string
+          created_at: string
+          id: string
+          project_id: string
+          request_key: string | null
+          requirements: string
+          source: string
+          state: string
+          template_id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          brief: string
+          created_at?: string
+          id?: string
+          project_id: string
+          request_key?: string | null
+          requirements?: string
+          source: string
+          state?: string
+          template_id: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          brief?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          request_key?: string | null
+          requirements?: string
+          source?: string
+          state?: string
+          template_id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scrolltide_drafts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       share_links: {
         Row: {
           created_at: string
@@ -1804,6 +1890,48 @@ export type Database = {
     }
     Functions: {
       arm_job_resume: { Args: never; Returns: undefined }
+      claim_scrolltide_draft: {
+        Args: { p_id: string; p_key: string; p_project: string; p_user: string }
+        Returns: {
+          brief: string
+          created_at: string
+          id: string
+          project_id: string
+          request_key: string | null
+          requirements: string
+          source: string
+          state: string
+          template_id: string
+          title: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "scrolltide_drafts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_scrolltide_oauth: {
+        Args: { p_state: string }
+        Returns: {
+          encrypted_auth: string
+          id: string
+          oauth_expires_at: string | null
+          oauth_state: string | null
+          origin: string
+          provider: string
+          state: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "runtime_mcp_connections"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       disarm_job_resume_if_idle: { Args: never; Returns: undefined }
       dispatch_saved_build: { Args: { _job: string }; Returns: number }
       get_credit_balance: { Args: { _user: string }; Returns: number }
