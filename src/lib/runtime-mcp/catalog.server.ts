@@ -7,8 +7,8 @@ function https(value: unknown): string | null {
   try { const u = new URL(value, "https://www.scrolltide.co"); return u.protocol === "https:" ? u.href : null; } catch { return null; }
 }
 export async function parseCatalog(html: string, shelf: string): Promise<CatalogItem[]> {
-  const { parseHTML } = await import("linkedom");
-  const { document } = parseHTML(html);
+  const { parse } = await import("node-html-parser");
+  const document = parse(html, { blockTextElements: { script: true } });
   const items: CatalogItem[] = [];
   const posters = new Map<string, string>();
   const collect = (value: unknown) => {
@@ -20,7 +20,7 @@ export async function parseCatalog(html: string, shelf: string): Promise<Catalog
     Object.values(row).forEach(collect);
   };
   for (const script of document.querySelectorAll("script")) {
-    const text = script.textContent ?? "";
+    const text = script.rawText ?? "";
     if (!text.startsWith("self.__next_f.push(")) continue;
     try {
       const entry = JSON.parse(text.slice("self.__next_f.push(".length).replace(/\);?\s*$/, ""));
@@ -49,7 +49,7 @@ export async function parseCatalog(html: string, shelf: string): Promise<Catalog
       Object.values(row).forEach(visit);
     };
     for (const script of document.querySelectorAll("script")) {
-      const text = script.textContent ?? "";
+      const text = script.rawText ?? "";
       const prefix = "self.__next_f.push(";
       if (!text.startsWith(prefix)) continue;
       try {
