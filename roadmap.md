@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Fix blank Scrolltide library previews and verify all public shelves render on phone and desktop without retrieving paid instructions.
+- [x] Fix blank Scrolltide previews using the real public poster images; verified Selene search preview and all 287 library items on phone/desktop, 20 tests passed, no paid instructions or builds.
 
 - [x] Show Scrolltide library on opening and load all shelves while scrolling; real owner-connected phone/desktop checks reached 287 items (132 templates, 66 components, 20 sections, 14 UI, 55 shaders), with 19 passing tests and no full prompt retrieval or build.
 
