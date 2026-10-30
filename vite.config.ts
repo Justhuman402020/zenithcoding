@@ -24,7 +24,7 @@ export default defineConfig({
     // finish, because crawl requests for optimized deps wait on the optimizer (deadlock).
     // Keep React prebundled, but avoid the unbounded route/dependency discovery
     // crawl that leaves every browser module waiting on cold starts.
-    optimizeDeps: { exclude: ["zod"], holdUntilCrawlEnd: false, noDiscovery: true },
+    optimizeDeps: { exclude: ["zod"], include: ["ai", "@ai-sdk/react", "@vercel/oidc"], holdUntilCrawlEnd: false, noDiscovery: true },
     server: {
       // Allow the preview proxy hostname (changes when the environment is recreated).
       allowedHosts: true,
