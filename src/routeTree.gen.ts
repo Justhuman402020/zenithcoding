@@ -39,6 +39,7 @@ import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authentic
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
+import { Route as AuthenticatedWorkProjectIdRunIdRouteImport } from './routes/_authenticated/work.$projectId.$runId'
 import { Route as ApiPublicAssetIdRouteImport } from './routes/api/public/asset.$id'
 import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
 import { Route as ApiPublicJobsResumeRouteImport } from './routes/api/public/jobs.resume'
@@ -209,6 +210,12 @@ const AuthenticatedPProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedPProjectIdRoute,
   } as any)
+const AuthenticatedWorkProjectIdRunIdRoute =
+  AuthenticatedWorkProjectIdRunIdRouteImport.update({
+    id: '/work/$projectId/$runId',
+    path: '/work/$projectId/$runId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicAssetIdRoute = ApiPublicAssetIdRouteImport.update({
   id: '/api/public/asset/$id',
   path: '/api/public/asset/$id',
@@ -298,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/chats/': typeof AuthenticatedChatsIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/work/$projectId/$runId': typeof AuthenticatedWorkProjectIdRunIdRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
@@ -340,6 +348,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/work/$projectId/$runId': typeof AuthenticatedWorkProjectIdRunIdRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
@@ -384,6 +393,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/_authenticated/work/$projectId/$runId': typeof AuthenticatedWorkProjectIdRunIdRoute
   '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
   '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
@@ -428,6 +438,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/chats/'
     | '/p/$projectId/settings'
+    | '/work/$projectId/$runId'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
     | '/api/public/jobs/resume'
@@ -470,6 +481,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/chats'
     | '/p/$projectId/settings'
+    | '/work/$projectId/$runId'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
     | '/api/public/jobs/resume'
@@ -513,6 +525,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/'
     | '/_authenticated/chats/'
     | '/_authenticated/p/$projectId/settings'
+    | '/_authenticated/work/$projectId/$runId'
     | '/api/public/asset/$id'
     | '/api/public/github/callback'
     | '/api/public/jobs/resume'
@@ -767,6 +780,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdSettingsRouteImport
       parentRoute: typeof AuthenticatedPProjectIdRoute
     }
+    '/_authenticated/work/$projectId/$runId': {
+      id: '/_authenticated/work/$projectId/$runId'
+      path: '/work/$projectId/$runId'
+      fullPath: '/work/$projectId/$runId'
+      preLoaderRoute: typeof AuthenticatedWorkProjectIdRunIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/asset/$id': {
       id: '/api/public/asset/$id'
       path: '/api/public/asset/$id'
@@ -876,6 +896,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
+  AuthenticatedWorkProjectIdRunIdRoute: typeof AuthenticatedWorkProjectIdRunIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -893,6 +914,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
+  AuthenticatedWorkProjectIdRunIdRoute: AuthenticatedWorkProjectIdRunIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
