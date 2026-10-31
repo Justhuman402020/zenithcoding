@@ -106,7 +106,8 @@ export const Route = createFileRoute("/api/public/chat")({
           userId = userRes.user.id;
         }
 
-        const trace = createTrace({ projectId, userId });
+        const previousTrace = isResume ? await supabase.from("chat_jobs").select("trace_id").eq("project_id", projectId).eq("user_id", userId).eq("request_key", request.headers.get("x-forge-request-key") ?? "").maybeSingle() : { data: null };
+        const trace = createTrace({ projectId, userId, traceId: previousTrace.data?.trace_id ?? undefined });
         const traceHeaders = { "x-forge-trace-id": trace.traceId };
         const fail = async (status: number, body: string, contentType = "text/plain") => {
           const key = request.headers.get("x-forge-request-key");
@@ -263,8 +264,6 @@ export const Route = createFileRoute("/api/public/chat")({
               .select("id")
               .single();
         const jobId = createdJob?.id;
-        // Expose the same durable trace while the job is running and after it finishes.
-        if (jobId) await supabaseAdmin.from("chat_jobs").update({ trace_id: trace.traceId }).eq("id", jobId);
         // A retry from the viewer must observe the saved job, never launch it twice.
         if (!isResume && existingJob && ["queued", "running"].includes(existingJob.status)) {
           return createUIMessageStreamResponse({
@@ -277,6 +276,7 @@ export const Route = createFileRoute("/api/public/chat")({
           });
         }
         // Save what's needed to restart this build on the server if the worker
+        if (jobId) await supabaseAdmin.from("chat_jobs").update({ trace_id: trace.traceId }).eq("id", jobId);
         // is cut off after the phone disconnects, then arm the restart check.
         if (jobId && !planMode) {
           const resumePayload = {

@@ -24,7 +24,7 @@ export const getWorkDetails = createServerFn({ method: "POST" }).middleware([req
       edit = row;
     }
     if (kind === "m" || kind === "a") {
-      let q = db.from(kind === "a" ? "assistant_messages" : "chat_messages").select("id,content,parts,created_at").eq("id", id).eq("user_id", context.userId);
+      let q = db.from(kind === "a" ? "assistant_messages" : "chat_messages").select(kind === "a" ? "id,content,parts,created_at" : "id,content,created_at").eq("id", id).eq("user_id", context.userId);
       q = kind === "a" ? q.eq("chat_id", data.chatId) : q.eq("project_id", data.projectId);
       const { data: row, error } = await q.maybeSingle();
       if (error || !row) throw new Error("Work log not available.");
