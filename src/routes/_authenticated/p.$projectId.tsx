@@ -129,10 +129,11 @@ type PreviewErrorCtx = {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview" } => ({
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview"; zipcheck?: string } => ({
     ...(search.tab === "preview" ? { tab: "preview" as const } : {}),
     ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
     ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
+    ...(search.zipcheck != null ? { zipcheck: String(search.zipcheck) } : {}),
   }),
 
   component: ProjectEditor,
@@ -673,14 +674,17 @@ function ProjectEditor() {
         await supabase.from("files").delete().eq("project_id", projectId).in("path", paths.slice(i, i + 100));
       }
       const rows = unpacked.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content }));
-      for (let i = 0; i < rows.length; i += 50) {
-        const { error } = await supabase.from("files").insert(rows.slice(i, i + 50));
-        if (error) throw new Error(error.message);
-      }
+      const { uploadRows } = await import("@/lib/zip-upload");
+      await uploadRows(
+        rows,
+        (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),
+        (done, total) => toast.loading(`Uploading ${file.name} · ${done}/${total} files (${total ? Math.round((done / total) * 100) : 0}%)`, { id: t }),
+      );
       await refreshFiles();
       setActivePath(paths.find((p) => /(^|\/)index\.html$/i.test(p)) ?? paths[0]);
       setPreviewKey((k) => k + 1);
-      toast.success(`Imported ${unpacked.length} files${skipped ? ` (${skipped} skipped)` : ""}`, { id: t });
+      startZipCheck();
+      toast.success(`Imported ${unpacked.length} files${skipped ? ` (${skipped} skipped)` : ""} · checking the preview for errors`, { id: t });
     } catch (e: any) {
       toast.error(e?.message || "Could not import that zip", { id: t });
     } finally {
