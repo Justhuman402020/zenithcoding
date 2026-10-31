@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import type { Database } from "@/integrations/supabase/types";
 import {
   parseWorkLog,
   safeLogText,
@@ -8,6 +9,10 @@ import {
   type WorkStep,
   type FileEvidence,
 } from "./work-log";
+type Job = Pick<Database["public"]["Tables"]["chat_jobs"]["Row"], "id" | "prompt" | "status" | "progress" | "error" | "outcome" | "steps_done" | "files_changed" | "created_at" | "completed_at" | "trace_id">;
+type Edit = Database["public"]["Tables"]["assistant_edit_requests"]["Row"];
+type SavedMessage = { content: string; parts?: { editId?: string; log?: string[] } };
+type Event = { phase: string; status: string; message: string | null; detail: { path?: string; change?: FileEvidence }; duration_ms: number | null; created_at: string };
 
 export const getWorkDetails = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -21,7 +26,7 @@ export const getWorkDetails = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const db = context.supabase as any;
+    const db = context.supabase;
     const { data: project, error: projectError } = await db
       .from("projects")
       .select("id")
@@ -31,9 +36,9 @@ export const getWorkDetails = createServerFn({ method: "POST" })
     if (projectError || !project) throw new Error("Work log not available.");
     const [kind, ...rest] = data.runId.split("-");
     const id = rest.join("-");
-    let job: any = null;
-    let message: any = null;
-    let edit: any = null;
+    let job: Job | null = null;
+    let message: SavedMessage | null = null;
+    let edit: Edit | null = null;
     if (data.chatId) {
       const { data: chat } = await db
         .from("assistant_chats")
@@ -55,15 +60,12 @@ export const getWorkDetails = createServerFn({ method: "POST" })
       edit = row;
     }
     if (kind === "m" || kind === "a") {
-      let q = db
-        .from(kind === "a" ? "assistant_messages" : "chat_messages")
-        .select(kind === "a" ? "id,content,parts,created_at" : "id,content,created_at")
-        .eq("id", id)
-        .eq("user_id", context.userId);
-      q = kind === "a" ? q.eq("chat_id", data.chatId) : q.eq("project_id", data.projectId);
-      const { data: row, error } = await q.maybeSingle();
+      if (kind === "a" && !data.chatId) throw new Error("Chat not available.");
+      const { data: row, error } = kind === "a"
+        ? await db.from("assistant_messages").select("content,parts").eq("id", id).eq("user_id", context.userId).eq("chat_id", data.chatId ?? "").maybeSingle()
+        : await db.from("chat_messages").select("content").eq("id", id).eq("user_id", context.userId).eq("project_id", data.projectId).maybeSingle();
       if (error || !row) throw new Error("Work log not available.");
-      message = row;
+      message = row as SavedMessage;
     }
     if (kind === "a" && message?.parts?.editId) {
       const { data: row } = await db
@@ -71,7 +73,7 @@ export const getWorkDetails = createServerFn({ method: "POST" })
         .select("*")
         .eq("id", message.parts.editId)
         .eq("project_id", data.projectId)
-        .eq("chat_id", data.chatId)
+        .eq("chat_id", data.chatId ?? "")
         .eq("user_id", context.userId)
         .maybeSingle();
       edit = row;
@@ -93,7 +95,7 @@ export const getWorkDetails = createServerFn({ method: "POST" })
       if (error) throw new Error("Could not load this work log.");
       job = row;
     }
-    let events: any[] = [];
+    let events: Event[] = [];
     if (job?.trace_id) {
       const { data: rows, error } = await db
         .from("chat_traces")
@@ -105,11 +107,11 @@ export const getWorkDetails = createServerFn({ method: "POST" })
         .order("seq")
         .limit(2000);
       if (error) throw new Error("Could not load recorded steps.");
-      events = rows ?? [];
+      events = (rows ?? []) as unknown as Event[];
     }
     const legacy = parseWorkLog(
       message?.content?.split("\n\n<!-- worklog -->\n")[1] ??
-        (message?.parts?.log ?? edit?.report?.log ?? []).join("\n"),
+        (message?.parts?.log ?? (edit?.report as { log?: string[] } | null)?.log ?? []).join("\n"),
     );
     const steps: WorkStep[] = events
       .filter(
