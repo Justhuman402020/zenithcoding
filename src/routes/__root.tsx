@@ -7,10 +7,17 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { verifyWorkspaceAccess } from "@/lib/workspace.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "@/components/ui/sonner";
+import { ThemeBoot } from "@/components/ThemePicker";
+import { Button } from "@/components/ui/button";
+import { authIdentityChanged, isWorkspaceAccessDenied } from "@/lib/session-policy";
 
 function NotFoundComponent() {
   return (
@@ -34,7 +41,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
@@ -77,20 +84,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Forge — your private AI coding atelier" },
-      { name: "description", content: "Forge is a private, premium AI coding workspace. Build, publish, and ship beautiful sites in pure gold and noir." },
+      { title: "Code Haven — AI website builder and coding workspace" },
+      { name: "description", content: "Plan, build, preview, and publish websites with AI coding agents, image understanding, GitHub, and your own domains." },
       { name: "theme-color", content: "#0a0a0a" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { name: "apple-mobile-web-app-title", content: "Forge" },
-      { property: "og:title", content: "Forge — your private AI coding atelier" },
-      { property: "og:description", content: "A premium AI coding workspace. Build, publish, and ship beautiful sites in pure gold and noir." },
+      { name: "apple-mobile-web-app-title", content: "Code Haven" },
+      { property: "og:title", content: "Code Haven — AI website builder and coding workspace" },
+      { property: "og:description", content: "Plan, build, preview, and publish websites with AI coding agents." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "Forge — your private AI coding atelier" },
-      { name: "twitter:description", content: "A premium AI coding workspace. Build, publish, and ship beautiful sites in pure gold and noir." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d8c760d5-cd86-4ab2-9df1-8b5d7c99c21e" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d8c760d5-cd86-4ab2-9df1-8b5d7c99c21e" },
+      { name: "twitter:title", content: "Code Haven — AI website builder" },
+      { name: "twitter:description", content: "Plan, build, preview, and publish websites with AI coding agents." },
     ],
     links: [
       {
@@ -101,10 +106,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@300;400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@300;400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap",
       },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png" },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
       { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png" },
       { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
     ],
@@ -131,11 +137,68 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  useEffect(() => {
+    let identity: string | null = null;
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextIdentity = session?.user.id ?? null;
+      if (event === "INITIAL_SESSION") { identity = nextIdentity; return; }
+      if (!["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) return;
+      const changed = authIdentityChanged(identity, nextIdentity);
+      identity = nextIdentity;
+      if (!changed && event !== "USER_UPDATED") return;
+      void router.invalidate();
+      if (event !== "SIGNED_OUT") void queryClient.invalidateQueries();
+    });
+    return () => data.subscription.unsubscribe();
+  }, [router, queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <ThemeBoot />
+      <WorkspaceGate><Outlet /></WorkspaceGate>
+      <Toaster position="top-center" richColors />
     </QueryClientProvider>
   );
+}
+
+function WorkspaceGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const verify = useServerFn(verifyWorkspaceAccess);
+  const [allowed, setAllowed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [unavailable, setUnavailable] = useState(false);
+  const path = router.state.location.pathname;
+  const privatePath = path === "/" || /^\/(admin|chats|p|account)(\/|$)/.test(path);
+  useEffect(() => {
+    if (!privatePath) return;
+    let live = true;
+    let checking = false;
+    setAllowed(false);
+    setUnavailable(false);
+    async function check() {
+      if (checking || !live) return;
+      checking = true;
+      const slow = setTimeout(() => { if (live) setUnavailable(true); }, 15_000);
+      try {
+        // The protected layout owns login; this check owns owner/device access.
+        // Do not redirect or discard a verified session on transport failures.
+        await verify();
+        if (live) { setAllowed(true); setUnavailable(false); }
+      } catch (error) {
+        if (!live) return;
+        if (isWorkspaceAccessDenied(error)) {
+          setAllowed(false);
+          await router.navigate({ to: "/not-available", replace: true });
+        } else setUnavailable(true);
+      } finally { clearTimeout(slow); checking = false; }
+    }
+    void check();
+    const timer = setInterval(() => void check(), 30_000);
+    return () => { live = false; clearInterval(timer); };
+  }, [path, privatePath, verify, router, retry]);
+  return !privatePath || allowed ? children : <div className="min-h-screen flex flex-col gap-4 items-center justify-center text-muted-foreground">
+    {unavailable ? <>Connection interrupted. Your sign-in has not been cleared.<Button variant="outline" onClick={() => setRetry((value) => value + 1)}>Try again</Button></> : "Checking access…"}
+  </div>;
 }

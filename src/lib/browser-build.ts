@@ -70,6 +70,9 @@ function loaderFor(path: string): esbuild.Loader {
     case ".jpeg":
     case ".gif":
     case ".webp":
+    case ".avif":
+    case ".bmp":
+    case ".apng":
     case ".ico": return "dataurl";
     default: return "text";
   }
@@ -176,9 +179,56 @@ function stripScript(html: string, src: string): string {
   return html.replace(re, "");
 }
 
+export type BuildOptions = { env?: Record<string, string> };
+
+// Reads tsconfig/jsconfig "paths" (e.g. "@/*": ["./src/*"]); defaults to @/ and ~/ -> src/.
+function readAliases(fsMap: Map<string, string>): [string, string][] {
+  const out: [string, string][] = [];
+  for (const name of ["tsconfig.app.json", "tsconfig.json", "jsconfig.json"]) {
+    const raw = fsMap.get(name);
+    if (!raw) continue;
+    try {
+      const j = JSON.parse(raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"])\/\/.*$/gm, "$1").replace(/,\s*([}\]])/g, "$1"));
+      const base = normalizePath(j.compilerOptions?.baseUrl || ".").replace(/^\.$/, "");
+      const paths = j.compilerOptions?.paths || {};
+      for (const [k, v] of Object.entries(paths)) {
+        const target = Array.isArray(v) ? String(v[0] || "") : "";
+        if (!k.endsWith("/*") || !target.endsWith("/*")) continue;
+        out.push([k.slice(0, -1), normalizePath([base, target.slice(0, -1)].filter(Boolean).join("/"))]);
+      }
+    } catch {}
+  }
+  if (!out.some(([k]) => k === "@/")) out.push(["@/", "src/"]);
+  if (!out.some(([k]) => k === "~/")) out.push(["~/", "src/"]);
+  return out;
+}
+
+const ENTRY_CANDIDATES = ["src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js", "src/index.tsx", "src/index.jsx", "src/index.ts", "src/index.js", "main.tsx", "main.jsx", "index.tsx", "index.jsx"];
+
+const TAILWIND_IMPORT = /@import\s+(?:url\()?["']tailwindcss(?:\/[^"']*)?["']\)?[^;]*;/g;
+export function isTailwindCss(css: string): boolean {
+  return /@import\s+(?:url\()?["']tailwindcss|@tailwind\s|@theme\b|@apply\s|@utility\s|@custom-variant\s|@plugin\s/.test(css);
+}
+// The browser runtime already includes Tailwind, so its import/v3 directives are dropped.
+export function toBrowserTailwind(css: string): string {
+  return css.replace(TAILWIND_IMPORT, "").replace(/@tailwind\s+[a-z-]+\s*;/g, "").replace(/<\/style/gi, "<\\/style");
+}
+
+// Preview-only env runtime: real values when saved, safe placeholders otherwise,
+// so createClient()/fetch setup never crashes into a blank page.
+function envRuntimeScript(env: Record<string, string>): string {
+  return `<script>(function(){var real=${JSON.stringify(env).replace(/</g, "\\u003c")};var missing={};
+function mock(k){missing[k]=1;if(/SUPABASE_URL/.test(k))return "https://placeholder-project.supabase.co";if(/URL|ENDPOINT|HOST/.test(k))return "https://placeholder.invalid";if(/SUPABASE.*(KEY|ANON|PUBLISHABLE)/.test(k))return "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.placeholder";if(/^(VITE_)?STRIPE/.test(k))return "pk_test_placeholder";return "placeholder_"+k.toLowerCase();}
+var base=Object.assign({MODE:"production",PROD:true,DEV:false,SSR:false,BASE_URL:"/",NODE_ENV:"production"},real);
+globalThis.__CH_ENV__=new Proxy(base,{get:function(t,k){if(k in t)return t[k];if(typeof k!=="string"||!/^[A-Z][A-Z0-9_]*$/.test(k))return undefined;return mock(k);},has:function(){return true;}});
+globalThis.process=globalThis.process||{env:globalThis.__CH_ENV__};
+window.addEventListener("load",function(){setTimeout(function(){var ks=Object.keys(missing);if(!ks.length)return;var b=document.createElement("div");b.setAttribute("data-ch-env-banner","");b.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;background:#2a1748;color:#f3e8ff;border:1px solid #8b5cf6;border-radius:10px;padding:8px 12px;font:13px system-ui;display:flex;gap:8px;align-items:center";b.innerHTML="<span>&#128273; Preview is using placeholders for: <b></b>. Add real keys in the Setup table above the preview.</span><button style='margin-left:auto;background:none;border:0;color:inherit;cursor:pointer;font-size:16px'>&times;</button>";b.querySelector("b").textContent=ks.join(", ");b.querySelector("button").onclick=function(){b.remove()};document.body.appendChild(b);parent.postMessage({type:"ch-env-missing",keys:ks},"*");},400);});})();<\/script>`;
+}
+
 export async function buildInBrowser(
   files: BuildFile[],
   onLog?: Emit,
+  opts: BuildOptions = {},
 ): Promise<BuildResult> {
   const logs: BuildLog[] = [];
   const log = (level: BuildLog["level"], message: string) => {
@@ -201,19 +251,21 @@ export async function buildInBrowser(
       return { ok: false, error: msg, logs };
     }
 
-    const indexHtml = fsMap.get("index.html");
-    if (!indexHtml) {
-      const msg = "No index.html found at project root — nothing to build.";
-      log("error", msg);
-      return { ok: false, error: msg, logs };
-    }
-
-    const { entry } = extractEntryFromHtml(indexHtml);
+    let indexHtml = fsMap.get("index.html") || fsMap.get("public/index.html") || "";
+    let { entry } = extractEntryFromHtml(indexHtml);
     if (!entry) {
-      const msg = "index.html has no <script type=\"module\" src=\"...\"> entry point.";
-      log("error", msg);
-      return { ok: false, error: msg, logs };
+      const found = ENTRY_CANDIDATES.find((c) => fsMap.has(c));
+      if (!found) {
+        const msg = "No entry file found (looked for index.html script, src/main.tsx, src/index.tsx…).";
+        log("error", msg);
+        return { ok: false, error: msg, logs };
+      }
+      entry = "/" + found;
+      log("warn", `No module entry in index.html — using ${found}`);
+      if (!indexHtml) indexHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preview</title></head><body><div id="root"></div><div id="app"></div></body></html>`;
+      indexHtml = indexHtml.replace(/<\/body>/i, `<script type="module" src="${entry}"></script></body>`);
     }
+    const aliases = readAliases(fsMap);
 
     const entryPath = normalizePath(entry.replace(/^\/+/, ""));
     const resolvedEntry = tryResolve(fsMap, entryPath) || entryPath;
@@ -230,14 +282,31 @@ export async function buildInBrowser(
     log("info", `Detected: ${hasReact ? "React " : ""}${hasVue ? "Vue " : ""}${hasSvelte ? "Svelte " : ""}${hasTailwind ? "+ Tailwind" : ""}`.trim() || "vanilla");
     log("info", `Bundling entry: ${resolvedEntry}`);
 
+    const tailwindSheets: string[] = [];
     const virtualPlugin: esbuild.Plugin = {
       name: "forge-virtual-fs",
       setup(build) {
+        // Entry points are always project files. A bare entry such as "src/main.tsx"
+        // would otherwise match the package rule below and be marked external.
+        build.onResolve({ filter: /.*/ }, (args) =>
+          args.kind === "entry-point" ? { path: args.path, namespace: "vfs" } : undefined,
+        );
+
         // esm.sh URLs -> external (browser fetches them)
         build.onResolve({ filter: /^https?:\/\// }, (args) => ({
           path: args.path,
           external: true,
         }));
+
+        // Path aliases (@/, ~/, tsconfig paths) -> virtual FS
+        build.onResolve({ filter: /^[@~#]/ }, (args) => {
+          const hit = aliases.find(([k]) => args.path.startsWith(k));
+          if (!hit) return undefined;
+          const target = hit[1] + args.path.slice(hit[0].length);
+          const resolved = tryResolve(fsMap, target);
+          if (!resolved) return { errors: [{ text: `Cannot resolve alias "${args.path}" (looked in ${target})` }] };
+          return { path: resolved, namespace: "vfs" };
+        });
 
         // Bare imports -> rewrite to esm.sh
         build.onResolve({ filter: /^[^./]/ }, (args) => {
@@ -260,6 +329,8 @@ export async function buildInBrowser(
             : joinPath(importerPath, args.path);
           const resolved = tryResolve(fsMap, abs);
           if (!resolved) {
+            // CSS url()/@import of served files (e.g. "/images/bg.webp" from public/) stay as links.
+            if (args.kind === "url-token" || args.kind === "import-rule") return { path: args.path, external: true };
             return { errors: [{ text: `Cannot resolve "${args.path}" from ${importerPath}` }] };
           }
           return { path: resolved, namespace: "vfs" };
@@ -268,6 +339,14 @@ export async function buildInBrowser(
         build.onLoad({ filter: /.*/, namespace: "vfs" }, (args) => {
           const contents = fsMap.get(args.path);
           if (contents == null) return { errors: [{ text: `Missing file: ${args.path}` }] };
+          // ZIP media is already a URL; encoding its text again breaks images.
+          if (contents.startsWith("data:")) return { contents, loader: "text" };
+          // Tailwind stylesheets (@import "tailwindcss", @theme, @apply…) are compiled
+          // in the page by Tailwind's browser runtime, not by the bundler.
+          if (args.path.endsWith(".css") && isTailwindCss(contents)) {
+            tailwindSheets.push(toBrowserTailwind(contents));
+            return { contents: "", loader: "css", resolveDir: "/" };
+          }
           return { contents, loader: loaderFor(args.path), resolveDir: "/" };
         });
       },
@@ -287,12 +366,16 @@ export async function buildInBrowser(
       minify: true,
       sourcemap: false,
       splitting: false,
+      // Required so imported stylesheets (import "./index.css") get their own output file.
+      outdir: "/out",
       plugins: [virtualPlugin],
       define: {
         "process.env.NODE_ENV": '"production"',
         "import.meta.env.MODE": '"production"',
         "import.meta.env.PROD": "true",
         "import.meta.env.DEV": "false",
+        "import.meta.env": "globalThis.__CH_ENV__",
+        "process.env": "globalThis.__CH_ENV__",
       },
       logLevel: "silent",
       ...jsxOptions,
@@ -316,11 +399,12 @@ export async function buildInBrowser(
 
     // Rewrite index.html: strip original entry script, inject built assets.
     let html = stripScript(indexHtml, entry);
-    const tailwindCdn = hasTailwind
+    const tailwindCdn = hasTailwind || tailwindSheets.length
       ? `<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>`
       : "";
-    const headInjects: string[] = [];
+    const headInjects: string[] = [envRuntimeScript(opts.env || {})];
     if (tailwindCdn) headInjects.push(tailwindCdn);
+    for (const sheet of tailwindSheets) headInjects.push(`<style type="text/tailwindcss">\n${sheet}\n</style>`);
     if (cssName) headInjects.push(`<link rel="stylesheet" href="/${cssName}">`);
     const bodyInjects: string[] = [
       `<script type="module" src="/${jsName}"></script>`,
@@ -340,11 +424,13 @@ export async function buildInBrowser(
     built.push({ path: jsName, content: js });
     if (cssName) built.push({ path: cssName, content: css });
 
-    // Copy public/* and any non-source assets that /s/$slug might reference.
+    // Retain media referenced at runtime, not just files under public/.
     for (const f of files) {
       const p = normalizePath(f.path);
       if (p.startsWith("public/")) {
         built.push({ path: p.slice("public/".length), content: f.content });
+      } else if (f.content.startsWith("data:") || /\.(svg|json|gltf|txt)$/i.test(p)) {
+        built.push({ path: p, content: f.content });
       }
     }
 

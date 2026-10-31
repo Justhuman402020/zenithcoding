@@ -1,12 +1,28 @@
+import { cn } from "@/lib/utils";
+import { uploadRows } from "@/lib/zip-upload";
+import { buildStoragePath } from "@/lib/publish-files";
+import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
+import { isScrolltideLookup } from "@/lib/runtime-mcp/scrolltide-policy";
+import { editorRequestChoice, type EditorBuildMode } from "@/lib/image-delivery";
+import { NeuronsBar } from "@/components/CloudflarePoolPanel";
+import { NeuronLog } from "@/components/NeuronLog";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { deployToCloudflarePages } from "@/lib/cloudflare-pages.functions";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { modelKey, readStoredModelRef } from "@/lib/ai-providers";
-import { buildFollowUpSuggestion, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
+import { buildFollowUpSuggestions, detectSecretIntent, detectPastedApiKey, stripApiKey, type SecretIntent } from "@/lib/chat-followups";
+import { cleanChatRows } from "@/lib/chat-history";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkLogCard } from "@/components/WorkLogCard";
+import { messageRunId } from "@/lib/work-log";
+import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
+import { runBrowserCheck } from "@/lib/browser-check.functions";
+import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
+import { zipCheckDecision, zipFixPrompt, ZIP_QUIET_MS, ZIP_SETTLE_MS } from "@/lib/zip-check";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -19,7 +35,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { SecretRequestCard } from "@/components/SecretRequestCard";
+import { SecretRequestCard, hasWaitingSecretCard, openWaitingSecretCards } from "@/components/SecretRequestCard";
+import { listProjectSecrets } from "@/lib/project-secrets.functions";
 import {
   ArrowLeft,
   File as FileIcon,
@@ -57,17 +74,35 @@ import {
   Wand2,
   Palette,
   Settings,
+  Pause,
+  ListPlus,
+  Square,
+  Upload,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
+import { LightCodeEditor } from "@/components/LightCodeEditor";
 import ReactMarkdown from "react-markdown";
+import { stripLeakedToolJson } from "@/lib/chat-sanitize";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ForgeMark } from "@/components/ForgeMark";
 import { GithubPushDialog } from "@/components/GithubPushDialog";
+import { SetupMatrix } from "@/components/SetupMatrix";
+import { getPreviewEnv } from "@/lib/project-secrets.functions";
 import { BuildDialog } from "@/components/BuildDialog";
-import type { BuildFile } from "@/lib/browser-build";
-import { Github } from "lucide-react";
+import { isBuildable, buildInBrowser, type BuildFile } from "@/lib/browser-build";
+import { injectPreviewAssets } from "@/lib/preview-assets";
+import { Github, Image as ImageIcon, Download, Brain, Timer } from "lucide-react";
+import { BuildApprovalHost, requestApproval } from "@/components/BuildApprovalDialog";
+import { BrainPanel } from "@/components/BrainPanel";
+import { SkillMenu } from "@/components/SkillMenu";
+import { AssetsPanel } from "@/components/AssetsPanel";
+import { BackendBadge } from "@/components/BackendBadge";
+import { ChatModelControls, CLONE_MODE_STORAGE_KEY, VISION_MODEL_STORAGE_KEY } from "@/components/ChatModelControls";
+import { stopChatJobs } from "@/lib/chat-stop.functions";
+import { useServerFn as useStopServerFn, useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -84,20 +119,100 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+type PreviewErrorCtx = {
+  count?: number;
+  kind?: string;
+  message?: string;
+  stack?: string;
+  file?: string;
+  line?: number;
+  col?: number;
+  snapshot?: { title?: string; path?: string; text?: string; elements?: number; empty?: boolean } | null;
+};
+
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
-  head: () => ({ meta: [{ title: "Forge — editor" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string } =>
-    typeof search.prompt === "string" ? { prompt: search.prompt } : {},
+  head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview"; zipcheck?: string } => ({
+    ...(search.tab === "preview" ? { tab: "preview" as const } : {}),
+    ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
+    ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
+    ...(search.zipcheck != null ? { zipcheck: String(search.zipcheck) } : {}),
+  }),
 
   component: ProjectEditor,
 });
 
 type ProjectFile = { id: string; path: string; content: string };
 
-type TabKey = "chat" | "preview" | "code" | "history";
+type TabKey = "chat" | "preview" | "code" | "assets" | "history" | "brain";
+
+function fmtElapsed(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
 
 type AttachmentFrame = { name: string; mediaType: string; url: string };
 type Attachment = AttachmentFrame & { frames?: AttachmentFrame[] };
+type QueuedMessage = { id: string; text: string; attachments: Attachment[]; mode?: EditorBuildMode };
+
+const CHAT_JOB_STALE_MS = 600_000;
+
+type LatestJob = {
+  id: string;
+  status: string;
+  progress: string | null;
+  error: string | null;
+  updated_at: string;
+  outcome: string | null;
+  steps_done: number;
+  files_changed: number;
+  rounds: number;
+  auto_resumes?: number;
+  pool_ledger?: any[] | null;
+  paused_at_key?: number | null;
+  prompt?: string;
+  request_key?: string;
+  created_at?: string;
+};
+
+function PoolLedger({ rows }: { rows: any[] }) {
+  if (!rows.length) return null;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px] tabular-nums">
+        <thead className="text-muted-foreground">
+          <tr className="text-left">
+            {["Key", "Files", "This turn", "At handoff", "Left", "Source", "As of (Lagos)", "Reason", "Next", "Retries"].map((h) => (
+              <th key={h} className="pr-2 font-normal">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t align-top">
+              <td className="pr-2">#{r.key}</td>
+              <td className="pr-2" title={(r.filesDone ?? []).join(", ")}>{(r.filesDone ?? []).length}</td>
+              <td className="pr-2">{Number(r.neuronsThisTurn ?? 0).toLocaleString()}</td>
+              <td className="pr-2">{Number(r.totalAtHandoff ?? 0).toLocaleString()}</td>
+              <td className="pr-2">{Number(r.remaining ?? 0).toLocaleString()}</td>
+              <td className="pr-2">{r.source}</td>
+              <td className="pr-2 whitespace-nowrap">{r.lagos}</td>
+              <td className="pr-2">{r.reason}</td>
+              <td className="pr-2">{r.successor ? `#${r.successor}` : "—"}</td>
+              <td>{r.retries}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function isActiveChatJob(job: { status: string; updated_at?: string | null }, now = Date.now()) {
+  if (job.status !== "queued" && job.status !== "running") return false;
+  const updatedAt = job.updated_at ? new Date(job.updated_at).getTime() : 0;
+  return Number.isFinite(updatedAt) && now - updatedAt < CHAT_JOB_STALE_MS;
+}
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -123,14 +238,21 @@ function formatRelativeTime(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
-function getChatErrorMessage(error: Error): string {
+function getChatErrorMessage(error: unknown): string {
+  const raw = String((error as any)?.message ?? error ?? "").trim();
+  let text = raw;
   try {
-    const parsed = JSON.parse(error.message) as { message?: unknown };
-    if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+    const parsed = JSON.parse(raw) as { message?: unknown; error?: any };
+    if (typeof parsed.message === "string" && parsed.message.trim()) text = parsed.message;
+    else if (typeof parsed.error?.message === "string") text = parsed.error.message;
   } catch {
     // Plain-text and stream errors are already suitable for display.
   }
-  return error.message || "The AI build failed. Please try again.";
+  if (!text || /^bad request$/i.test(text) || /\b400\b/.test(text)) {
+    return "The AI model couldn't read that request. Forge will try another model — please send it once more.";
+  }
+  if (/maximum update depth/i.test(text)) return "The screen got stuck refreshing. Please reload the page.";
+  return text.slice(0, 400);
 }
 
 async function sampleVideoFrames(file: File, maxFrames = 4): Promise<AttachmentFrame[]> {
@@ -217,8 +339,8 @@ function suggestSlug(name: string, projectId: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 32);
-  if (base.length >= 3) return base;
+    .slice(0, 32) || "site";
+  if (base.length >= 3) return `${base}-${projectId.slice(0, 5)}`.slice(0, 40);
   return `site-${projectId.slice(0, 6)}`;
 }
 
@@ -250,7 +372,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam, zipcheck: zipcheckParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -262,7 +384,7 @@ function ProjectEditor() {
   const [previewKey, setPreviewKey] = useState(0);
   const [previewPath, setPreviewPath] = useState("index.html");
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("chat");
+  const [tab, setTab] = useState<TabKey>(tabParam === "preview" ? "preview" : "chat");
 
   // publish state
   const [published, setPublished] = useState(false);
@@ -270,6 +392,9 @@ function ProjectEditor() {
   const [slugDraft, setSlugDraft] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [cfPagesUrl, setCfPagesUrl] = useState<string | null>(null);
+  const [cfDeploying, setCfDeploying] = useState(false);
+  const cfDeployFn = useStopServerFn(deployToCloudflarePages);
   const [buildDialogOpen, setBuildDialogOpen] = useState(false);
   const [pendingPublishSlug, setPendingPublishSlug] = useState<string | null>(null);
 
@@ -288,30 +413,150 @@ function ProjectEditor() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
-  const [openWorkLogs, setOpenWorkLogs] = useState<Record<string, boolean>>({});
-  const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({});
-  const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
-  const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
-  const [nextBuildPrompt, setNextBuildPrompt] = useState<string | null>(null);
-  const thinkingStartRef = useRef<Record<string, number>>({});
+  const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
+  const [nextBuildPrompts, setNextBuildPrompts] = useState<string[]>([]);
+  const stickToBottomRef = useRef(true);
+  const [showJumpDown, setShowJumpDown] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  // Auto-switch: when a model stops mid-work, count 0→10 then hand the job to
+  // the next available model. Turning it off stops all automatic picking.
+  const [autoSwitch, setAutoSwitch] = useState(true);
+  const autoSwitchRef = useRef(true);
+  const [switchCountdown, setSwitchCountdown] = useState<number | null>(null);
+  const userStoppedRef = useRef(false);
+  const switchTriesRef = useRef(0);
+  useEffect(() => {
+    const saved = window.localStorage.getItem("forge:auto-switch");
+    const on = saved !== "off";
+    setAutoSwitch(on);
+    autoSwitchRef.current = on;
+  }, []);
+  const toggleAutoSwitch = useCallback(() => {
+    setAutoSwitch((prev) => {
+      const next = !prev;
+      autoSwitchRef.current = next;
+      window.localStorage.setItem("forge:auto-switch", next ? "on" : "off");
+      if (!next) setSwitchCountdown(null);
+      toast.success(next ? "Auto-switch on" : "Auto-switch off — Code Haven will only use the chosen model");
+      return next;
+    });
+  }, []);
+  // Plan first (think + approve) or build straight away.
+  const [mode, setMode] = useState<EditorBuildMode>("build");
+  const modeRef = useRef<EditorBuildMode>("build");
+  const requestModeRef = useRef<EditorBuildMode | null>(null);
+  // One-shot pre-approval for the automatic ZIP error fix (OpenRouter build model only).
+  const zipAutoApproveRef = useRef(false);
+  const requestImagesRef = useRef(false);
+  // Set when a build started on another device (or before a reload) is running.
+  const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
+  // Messages typed while Forge is working wait here instead of being lost.
+  const [queue, setQueue] = useState<QueuedMessage[]>([]);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const queueLoadedRef = useRef(false);
+  const drainingRef = useRef(false);
+  const autoContinueRef = useRef(0);
+  const poolFromRef = useRef<number | null>(null);
+  // Key number that just stopped (read from the error text "Key #N ...").
+  const failedKeyRef = useRef<number | null>(null);
+  const continuedMessagesRef = useRef<Set<string>>(new Set());
+  const requestKeyRef = useRef<string | null>(null);
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!chatReady || tab !== "chat") return;
+    const saved = sessionStorage.getItem(`work-scroll:${projectId}`);
+    if (saved != null) requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = Number(saved); });
+  }, [chatReady, projectId, tab]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const refreshedToolResultsRef = useRef<Set<string>>(new Set());
   const suggestedMessagesRef = useRef<Set<string>>(new Set());
+  const lastSavedSignatureRef = useRef<string>("");
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("forge:chat-mode");
+    if (saved === "plan" || saved === "build" || saved === "image") {
+      setMode(saved);
+      modeRef.current = saved;
+    }
+  }, []);
+  useEffect(() => {
+    modeRef.current = mode;
+    window.localStorage.setItem("forge:chat-mode", mode);
+  }, [mode]);
+
+  useEffect(() => {
+    let wasOnline = navigator.onLine;
+    let hiddenAt = 0;
+    const report = () =>
+      void supabase
+        .from("chat_jobs")
+        .select("status,progress,error,updated_at")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          const job = data?.[0];
+          if (job && isActiveChatJob(job)) {
+            toast.info(`Connected again · Code Haven kept working: ${job.progress ?? "AI is working"}`, { id: "forge-online" });
+          } else if (job?.status === "completed" && hiddenAt && new Date(job.updated_at).getTime() > hiddenAt) {
+            toast.success("Connected again · Your task finished while you were away", { id: "forge-online" });
+          } else if (job?.status === "completed" || !hiddenAt) {
+            toast.success("Connected again", { id: "forge-online" });
+          }
+          hiddenAt = 0;
+        });
+    const sync = () => {
+      const now = navigator.onLine;
+      setIsOnline(now);
+      if (now && !wasOnline) report();
+      else if (!now && wasOnline) {
+        hiddenAt = Date.now();
+        toast.warning("Offline · Code Haven keeps working on the server", { id: "forge-online" });
+      }
+      wasOnline = now;
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > 5000 && navigator.onLine) report();
+    };
+    setIsOnline(navigator.onLine);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [projectId]);
+
+  // Which API keys are already saved for this project. Used so the secure paste
+  // box never reappears for a key the user has already given us.
+  const refreshSavedSecrets = async () => {
+    try {
+      const res: any = await listProjectSecrets({ data: { projectId } });
+      setSavedSecretKeys((res?.secrets ?? []).map((s: any) => String(s.key).toUpperCase()));
+    } catch {
+      // a failed read must never block chatting
+    }
+  };
+  useEffect(() => {
+    void refreshSavedSecrets();
+  }, [projectId]);
 
   // load project + files + history + token
   useEffect(() => {
     (async () => {
       const [{ data: proj }, { data: fileData }, { data: msgs }, { data: sess }] = await Promise.all([
-        supabase.from("projects").select("name,published,slug").eq("id", projectId).maybeSingle(),
-        supabase.from("files").select("id,path,content").eq("project_id", projectId).order("path"),
+        supabase.from("projects").select("name,published,slug,cloudflare_pages_url").eq("id", projectId).maybeSingle(),
+        supabase.from("files").select("id,path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build").order("path"),
         supabase.from("chat_messages").select("id,role,content,created_at").eq("project_id", projectId).order("created_at"),
         supabase.auth.getSession(),
       ]);
@@ -322,6 +567,7 @@ function ProjectEditor() {
       }
       setProjectName(proj.name);
       setPublished(!!(proj as any).published);
+      setCfPagesUrl((proj as any).cloudflare_pages_url ?? null);
       const existingSlug = (proj as any).slug ?? "";
       setSlug(existingSlug);
       setSlugDraft(existingSlug || suggestSlug(proj.name, projectId));
@@ -345,13 +591,9 @@ function ProjectEditor() {
       setActivePath(list.find((f) => f.path === "index.html")?.path ?? list[0]?.path ?? null);
       setLoadingFiles(false);
       setToken(sess.session?.access_token ?? null);
-      // Drop accidental duplicate rows saved by an earlier bug: same role +
-      // same content appearing back-to-back. Keeps one copy so each question
-      // shows with its own answer underneath.
-      const deduped = (msgs ?? []).filter(
-        (m, i, arr) =>
-          i === 0 || m.role !== arr[i - 1]!.role || m.content.trim() !== arr[i - 1]!.content.trim(),
-      );
+      // Drop duplicate rows AND questions that never received an answer, so a
+      // failed turn never lingers in the chat or in the model's context.
+      const deduped = cleanChatRows((msgs ?? []) as any[]);
       setInitialMessages(
         deduped.map((m) => ({
           id: m.id,
@@ -382,6 +624,7 @@ function ProjectEditor() {
       .from("files")
       .select("id,path,content")
       .eq("project_id", projectId)
+      .or("kind.is.null,kind.neq.build")
       .order("path");
     setFiles((data ?? []) as ProjectFile[]);
   }
@@ -408,6 +651,80 @@ function ProjectEditor() {
     setActivePath(path);
   }
 
+  const zipInputRef = useRef<HTMLInputElement>(null);
+  const [lightEditor, setLightEditor] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px), (pointer: coarse)");
+    const update = () => setLightEditor(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const [zipImporting, setZipImporting] = useState(false);
+  async function importZip(file: File | undefined | null) {
+    if (!file) return;
+    { const { isZipFile } = await import("@/lib/zip-import"); if (!(await isZipFile(file))) return toast.error("That file is not a zip — please choose a .zip file"); }
+    setZipImporting(true);
+    const t = toast.loading(`Unpacking ${file.name}…`);
+    try {
+      const { unpackZip } = await import("@/lib/zip-import");
+      const { files: unpacked, skipped } = await unpackZip(file);
+      if (!unpacked.length) throw new Error("No usable files found in that zip");
+      const { data: userRes } = await supabase.auth.getUser();
+      if (!userRes.user) throw new Error("Please sign in again");
+      const paths = unpacked.map((f) => f.path);
+      for (let i = 0; i < paths.length; i += 100) {
+        await supabase.from("files").delete().eq("project_id", projectId).in("path", paths.slice(i, i + 100));
+      }
+      const rows = unpacked.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content }));
+      await uploadRows(
+        rows,
+        (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),
+        (done, total) => toast.loading(`Uploading ${file.name} · ${done}/${total} files (${total ? Math.round((done / total) * 100) : 0}%)`, { id: t }),
+      );
+      await refreshFiles();
+      setActivePath(paths.find((p) => /(^|\/)index\.html$/i.test(p)) ?? paths[0]);
+      setPreviewKey((k) => k + 1);
+      startZipCheck();
+      toast.success(`Imported ${unpacked.length} files${skipped ? ` (${skipped} skipped)` : ""} · checking the preview for errors`, { id: t });
+    } catch (e: any) {
+      toast.error(e?.message || "Could not import that zip", { id: t });
+    } finally {
+      setZipImporting(false);
+      if (zipInputRef.current) zipInputRef.current.value = "";
+    }
+  }
+
+  async function exportZip() {
+    const { zipSync, strToU8 } = await import("fflate");
+    const { data } = await supabase.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const tree: Record<string, Uint8Array> = {};
+    for (const f of (data ?? []) as { path: string; content: string }[]) {
+      const m = /^data:[^;]+;base64,(.*)$/s.exec(f.content);
+      tree[f.path.replace(/^\/+/, "")] = m ? Uint8Array.from(atob(m[1]!), (c) => c.charCodeAt(0)) : strToU8(f.content);
+    }
+    const blob = new Blob([zipSync(tree) as BlobPart], { type: "application/zip" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(projectName || "project").replace(/[^a-z0-9-_]+/gi, "-")}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast.success(`Saved ${Object.keys(tree).length} files as a .zip`);
+  }
+
+  async function clearAllCode() {
+    if (!confirm("Delete ALL code in this project? A copy is saved in History first so you can restore it.")) return;
+    const { data } = await supabase.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const { data: u } = await supabase.auth.getUser();
+    if (u.user && data?.length) await supabase.from("project_snapshots").insert({ project_id: projectId, user_id: u.user.id, label: "Before clearing all code", files: data as any });
+    const { error } = await supabase.from("files").delete().eq("project_id", projectId);
+    if (error) return toast.error(error.message);
+    setActivePath(null);
+    await refreshFiles();
+    setPreviewKey((k) => k + 1);
+    toast.success("All code cleared — drop a new .zip to start fresh");
+  }
+
   async function deleteFile(path: string) {
     if (!confirm(`Delete ${path}?`)) return;
     await supabase.from("files").delete().eq("project_id", projectId).eq("path", path);
@@ -416,8 +733,39 @@ function ProjectEditor() {
   }
 
   // build preview srcDoc
+  // Auto-build framework projects (Vite/React etc.) so the preview shows the real site, not a blank page.
+  const needsBuild = useMemo(() => isBuildable(files.map((f) => ({ path: f.path, content: f.content }))).buildable, [files]);
+  const [autoBuild, setAutoBuild] = useState<{ files: BuildFile[] | null; status: "idle" | "building" | "error"; error?: string }>({ files: null, status: "idle" });
+  const buildSeq = useRef(0);
+  const getPreviewEnvFn = useServerFn(getPreviewEnv);
+  const previewEnvQ = useQuery({
+    queryKey: ["preview-env", projectId],
+    queryFn: () => getPreviewEnvFn({ data: { projectId } }),
+    enabled: needsBuild,
+  });
+  const previewEnv = previewEnvQ.data?.env;
+  useEffect(() => {
+    if (!needsBuild) { setAutoBuild({ files: null, status: "idle" }); return; }
+    const seq = ++buildSeq.current;
+    setAutoBuild((b) => ({ ...b, status: "building" }));
+    const t = setTimeout(async () => {
+      const res = await buildInBrowser(files.map((f) => ({ path: f.path, content: f.content })), undefined, { env: previewEnv ?? {} });
+      if (seq !== buildSeq.current) return;
+      if (res.ok) setAutoBuild({ files: res.files, status: "idle" });
+      else setAutoBuild((b) => ({ files: b.files, status: "error", error: res.error }));
+    }, 700);
+    return () => clearTimeout(t);
+  }, [files, needsBuild, previewEnv]);
+
   const previewDoc = useMemo(() => {
-    const fileMap = new Map(files.map((f) => [normalizeAssetPath(f.path), f.content]));
+    if (needsBuild && !autoBuild.files) {
+      const msg = autoBuild.status === "error"
+        ? `Could not build this project yet: ${String(autoBuild.error || "").replace(/[<>&]/g, "").slice(0, 600)}`
+        : "Building your site…";
+      return injectConsoleBridge(`<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem;white-space:pre-wrap'>${msg}</body></html>`);
+    }
+    const sourceFiles = needsBuild && autoBuild.files ? autoBuild.files : files;
+    const fileMap = new Map(sourceFiles.map((f) => [normalizeAssetPath(f.path), f.content]));
     const currentPath = fileMap.has(normalizeAssetPath(previewPath)) ? normalizeAssetPath(previewPath) : "index.html";
     const currentHtml = fileMap.get(currentPath);
     if (!currentHtml) return "<html><body style='font-family:sans-serif;background:#1a1525;color:#bbb;padding:2rem'>No <code>index.html</code> yet. Ask the AI to create one.</body></html>";
@@ -437,8 +785,9 @@ function ProjectEditor() {
     });
     const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    parent.postMessage({ type: 'forge-preview-navigate', path: href }, '*');\n  });\n})();\n<\/script>`;
     const withNav = html.includes("</body>") ? html.replace(/<\/body>/i, `${navigationBridge}</body>`) : `${html}${navigationBridge}`;
-    return injectConsoleBridge(withNav);
-  }, [files, previewPath]);
+    // Project pictures/fonts/media (e.g. /layers/sky.webp) load from the project, not Code Haven's site.
+    return injectConsoleBridge(injectPreviewAssets(withNav, sourceFiles));
+  }, [files, previewPath, needsBuild, autoBuild]);
 
   useEffect(() => {
     const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
@@ -447,9 +796,71 @@ function ProjectEditor() {
     }
   }, [files, previewPath]);
 
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewErrorCtxRef = useRef<PreviewErrorCtx | null>(null);
+  const [previewErrorCount, setPreviewErrorCount] = useState(0);
+  useEffect(() => {
+    if (!previewError) setPreviewErrorCount(0);
+  }, [previewError]);
+  /** Full, exact error context for the agent: message, stack, line, code around it and what the page showed. */
+  function buildErrorReport(fallback: string | null) {
+    const ctx = previewErrorCtxRef.current;
+    const lines: string[] = [`Current preview page: ${previewPath}`];
+    if (!ctx) return `${lines.join("\n")}\nError:\n${fallback ?? ""}`;
+    lines.push(`Error type: ${ctx.kind ?? "error"}`, `Message: ${ctx.message ?? fallback ?? ""}`);
+    if ((ctx.count ?? 1) > 1) lines.push(`Occurrences: this same error repeated ${ctx.count} times (likely inside a loop, timer or re-render).`);
+    if (ctx.line) {
+      const where = /srcdoc|about:/i.test(ctx.file ?? "") || !ctx.file ? `inline code of ${previewPath}` : ctx.file;
+      lines.push(`Location: ${where}, line ${ctx.line}, column ${ctx.col ?? 0} (line numbers of the rendered preview document)`);
+      const doc = injectConsoleBridge(previewDoc).split("\n");
+      const from = Math.max(0, ctx.line - 5);
+      const excerpt = doc.slice(from, ctx.line + 4).map((l, i) => `${from + i + 1 === ctx.line ? ">" : " "} ${from + i + 1}| ${l.slice(0, 240)}`);
+      if (excerpt.length) lines.push("Code around the failing line (exact code the preview ran):", ...excerpt);
+    }
+    if (ctx.stack) lines.push("Stack trace:", ctx.stack.slice(0, 2000));
+    if (fallback && ctx.message && !fallback.includes(ctx.message)) lines.push("Console error:", fallback);
+    const snap = ctx.snapshot;
+    if (snap) {
+      lines.push(
+        `Rendered preview state: title "${snap.title ?? ""}", ${snap.elements ?? 0} elements${snap.empty ? ", PAGE IS BLANK (no visible text)" : ""}.`,
+        `Visible text: ${snap.text ? snap.text : "(none)"}`,
+      );
+    }
+    return lines.join("\n");
+  }
+  const [latestJob, setLatestJob] = useState<LatestJob | null>(null);
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
+  const [lastProgress, setLastProgress] = useState<{ status?: string; lastRequest?: string; error?: string | null } | null>(null);
+  // Only clear the error when the page itself really changed. Re-fetching the
+  // same files used to wipe the error while the iframe (unchanged) never
+  // re-reported it, so crashes went undetected.
+  const lastDocRef = useRef(previewDoc);
+  useEffect(() => {
+    if (lastDocRef.current === previewDoc) return;
+    lastDocRef.current = previewDoc;
+    setPreviewError((cur) => (cur === null ? cur : null));
+    previewErrorCtxRef.current = null;
+    autoFixAttemptsRef.current.clear();
+  }, [previewDoc]);
+
   useEffect(() => {
     function onPreviewMessage(event: MessageEvent) {
-      const data = event.data as { type?: string; path?: string } | undefined;
+      const data = event.data as { type?: string; path?: string; level?: string; text?: string } | undefined;
+      if ((data as { type?: string } | undefined)?.type === "forge-preview-error") {
+        previewErrorCtxRef.current = data as unknown as PreviewErrorCtx;
+        const msg = String((data as unknown as PreviewErrorCtx).message ?? "").slice(0, 3000);
+        if (msg) {
+          const n = Number((data as unknown as PreviewErrorCtx).count ?? 1);
+          setPreviewErrorCount((c) => Math.max(c + 1, n));
+          setPreviewError((cur) => cur ?? msg);
+        }
+        return;
+      }
+      if (data?.type === "forge-preview-log" && data.level === "error" && data.text) {
+        const nextError = String(data.text).slice(0, 3000);
+        setPreviewError((cur) => (cur === nextError ? cur : nextError));
+        return;
+      }
       if (data?.type !== "forge-preview-navigate" || !data.path || isExternalNavigationTarget(data.path)) return;
       const targetPath = resolveProjectPath(data.path, previewPath);
       const available = new Set(files.map((file) => normalizeAssetPath(file.path)));
@@ -465,6 +876,32 @@ function ProjectEditor() {
     return () => window.removeEventListener("message", onPreviewMessage);
   }, [files, previewPath]);
 
+  // Row id of the question currently waiting for an answer. If the turn dies,
+  // the row is removed so the chat never fills up with unanswered messages.
+  const pendingUserRowRef = useRef<string | null>(null);
+  const scrolltideDraftRef = useRef<string | null>(null);
+  const [scrolltideQuery, setScrolltideQuery] = useState("");
+  const [scrolltideOpen, setScrolltideOpen] = useState(0);
+  // Arriving from the Scrolltide library page with ?scrolltide=1 opens the
+  // template panel so the saved draft's approval card is right there.
+  useEffect(() => {
+    if (!scrolltideParam) return;
+    setScrolltideOpen((v) => v + 1);
+    navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+  }, [scrolltideParam, projectId, navigate]);
+  async function discardUnansweredMessage() {
+    const rowId = pendingUserRowRef.current;
+    pendingUserRowRef.current = null;
+    if (!rowId) return;
+    try {
+      await supabase.from("chat_messages").delete().eq("id", rowId);
+    } catch {
+      // removing history noise must never break the editor
+    }
+    setMessagesRef.current?.((current) => current.filter((message) => message.id !== rowId));
+  }
+  const setMessagesRef = useRef<((updater: (messages: UIMessage[]) => UIMessage[]) => void) | null>(null);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -476,18 +913,65 @@ function ProjectEditor() {
           const headers: Record<string, string> = { "x-project-id": projectId };
           if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
           if (ref) headers["x-forge-model"] = modelKey(ref);
+          const visionRef = window.localStorage.getItem(VISION_MODEL_STORAGE_KEY);
+          if (visionRef) headers["x-forge-vision-model"] = visionRef;
+          const choice = editorRequestChoice(requestModeRef.current ?? modeRef.current, requestImagesRef.current);
+          headers["x-forge-mode"] = choice.mode;
+          headers["x-forge-engine"] = choice.engine;
+          if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
+          const zipAutoApproved = zipAutoApproveRef.current && choice.engine === "openrouter" && !choice.imageBuild;
+          zipAutoApproveRef.current = false;
+          if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
+          else if (zipAutoApproved) { /* Owner asked ZIP errors to be fixed immediately with the OpenRouter build model. */ }
+          else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
+          headers["x-forge-approved"] = "yes";
+          headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
+          if (poolFromRef.current) {
+            headers["x-forge-pool-from"] = String(poolFromRef.current);
+            poolFromRef.current = null;
+          }
+          if (window.localStorage.getItem(CLONE_MODE_STORAGE_KEY) === "1") headers["x-forge-clone"] = "1";
+          if (requestKeyRef.current) headers["x-forge-request-key"] = requestKeyRef.current;
           return headers;
         },
       }),
     [projectId],
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status, stop } = useChat({
     id: token ? projectId : `${projectId}:pending`,
     messages: initialMessages,
     transport,
-    onError: (err) => toast.error(getChatErrorMessage(err)),
-    onFinish: () => {
+    // Batch streamed chunks: re-rendering on every token (plus effects that
+    // react to messages) could exceed React's nested-update limit (#185).
+    experimental_throttle: 100,
+    onError: (err) => {
+      const m = /Key #(\d+)/i.exec(err?.message ?? "");
+      if (m) failedKeyRef.current = Number(m[1]);
+      // A build is already running on the server: never resend on top of it.
+      if (/pool_busy|already going/i.test(err?.message ?? "")) {
+        void discardUnansweredMessage();
+        toast.message("A build is still running on the server. It will show here when it finishes.", { id: "forge-chat-error" });
+        return;
+      }
+      // A question that never got an answer must not stay in the chat: it would
+      // be resent forever and squeeze out the real work.
+      if (!userStoppedRef.current && editorRequestChoice(requestModeRef.current ?? modeRef.current, requestImagesRef.current).engine === "cloudflare" && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
+        switchTriesRef.current += 1;
+        setSwitchCountdown(0);
+        return;
+      }
+      void discardUnansweredMessage();
+      toast.error(getChatErrorMessage(err), { id: "forge-chat-error" });
+    },
+    onFinish: ({ isError, isAbort }: { isError?: boolean; isAbort?: boolean }) => {
+      // Server watchdog aborted a hung model (35s silence): hand over to the
+      // next key with the same countdown used for errors.
+      if (isAbort && !userStoppedRef.current && editorRequestChoice(requestModeRef.current ?? modeRef.current, requestImagesRef.current).engine === "cloudflare" && autoSwitchRef.current && navigator.onLine && switchTriesRef.current < 3) {
+        switchTriesRef.current += 1;
+        setSwitchCountdown(0);
+      } else if (!isError && !isAbort) switchTriesRef.current = 0;
+      pendingUserRowRef.current = null;
       // AI may have written files via tools
       refreshFiles();
       setPreviewKey((k) => k + 1);
@@ -495,7 +979,468 @@ function ProjectEditor() {
     },
   });
 
+  setMessagesRef.current = setMessages as unknown as (
+    updater: (messages: UIMessage[]) => UIMessage[],
+  ) => void;
+
   const isStreaming = status === "submitted" || status === "streaming";
+  // Busy = this device is streaming, or another device/earlier run is working.
+  const isBusy = isStreaming || !!remoteWorking;
+
+  // "Test it like a real visitor": opens the preview/published site in Cloudflare's real browser.
+  const [browserCheck, setBrowserCheck] = useState<BrowserCheck | null>(null);
+  const [checkOpen, setCheckOpen] = useState(false);
+  const [fixRounds, setFixRounds] = useState(0);
+  const pendingAutoTest = useRef(false);
+  const fixingFromTest = useRef(false);
+  const wasBusyRef = useRef(false);
+  const runTest = useCallback(async (target: "preview" | "published" = "preview", show = true) => {
+    if (browserCheck?.status === "running") return;
+    setBrowserCheck({ status: "running", target });
+    if (show) setCheckOpen(true);
+    try {
+      const res = await runBrowserCheck({ data: { projectId, target, html: target === "preview" ? previewDoc : undefined } });
+      if (res.ok) {
+        setBrowserCheck({ status: "done", target, findings: res.findings, shots: res.shots, durationMs: res.durationMs });
+        const n = issueCount(res.findings);
+        if (!n) setFixRounds(0);
+        if (!show) n ? toast.warning(`Browser test found ${n} problem${n === 1 ? "" : "s"}`, { action: { label: "View", onClick: () => setCheckOpen(true) } }) : toast.success("Browser test passed");
+      } else {
+        setBrowserCheck({ status: "failed", target, error: res.error, missingPermission: res.missingPermission });
+        if (!show) toast.error("Browser test couldn't run", { action: { label: "Why", onClick: () => setCheckOpen(true) } });
+      }
+    } catch (e) {
+      setBrowserCheck({ status: "failed", target, error: e instanceof Error ? e.message : "Browser test failed", missingPermission: [] });
+    }
+  }, [browserCheck?.status, projectId, previewDoc]);
+  const fixGate = nextFixRound(fixRounds);
+  const fixFromTest = useCallback((findings: string) => {
+    const gate = nextFixRound(fixRounds);
+    if (!gate.allowed) { toast.error(gate.reason); return; }
+    setFixRounds((r) => r + 1);
+    setCheckOpen(false);
+    fixingFromTest.current = true;
+    void sendMessage({ text: `A real-browser test of the preview found these problems. Fix the root cause of each one without changing unrelated code:\n\n${findings}` });
+  }, [fixRounds, sendMessage]);
+  // After a build finishes, test it automatically once the preview has rebuilt.
+  useEffect(() => {
+    if (wasBusyRef.current && !isBusy) {
+      const last = [...messages].reverse().find((m) => m.role === "assistant");
+      const text = last ? last.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("") : "";
+      if (/<!-- worklog -->[\s\S]*Files changed:/.test(text)) pendingAutoTest.current = true;
+      else fixingFromTest.current = false;
+    }
+    wasBusyRef.current = isBusy;
+  }, [isBusy, messages]);
+  useEffect(() => {
+    if (!pendingAutoTest.current || isBusy || autoBuild.status === "building") return;
+    if (previewDoc.includes("Building your site…")) return;
+    pendingAutoTest.current = false;
+    fixingFromTest.current = false;
+    const t = setTimeout(() => void runTest("preview", false), 1500);
+    return () => clearTimeout(t);
+  }, [isBusy, autoBuild.status, previewDoc, runTest]);
+
+  // Job timer: starts when work begins, ticks every second while busy.
+  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    if (!isBusy) { setJobStartedAt(null); return; }
+    setJobStartedAt((cur) => cur ?? Date.now());
+    setNowTick(Date.now());
+    const t = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [isBusy]);
+  const liveNeurons = useMemo(() => {
+    if (!isStreaming) return null;
+    const last = messages[messages.length - 1] as { role: string; metadata?: { neurons?: { start: number; used: number; cap: number } } } | undefined;
+    return last?.role === "assistant" ? last.metadata?.neurons ?? null : null;
+  }, [messages, isStreaming]);
+
+  // Safe fixes: a copy of every file is saved before a fix runs.
+  const [fixBackup, setFixBackup] = useState<{ files: { path: string; content: string }[]; at: number } | null>(null);
+  async function takeFixSnapshot() {
+    const { data } = await supabase.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const snap = (data ?? []) as { path: string; content: string }[];
+    setFixBackup({ files: snap, at: Date.now() });
+    const { data: u } = await supabase.auth.getUser();
+    if (u.user) await supabase.from("project_snapshots").insert({ project_id: projectId, user_id: u.user.id, label: "Before fix", files: snap as any });
+  }
+  async function undoFix() {
+    if (!fixBackup) return;
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const t = toast.loading("Restoring your files from before the fix…");
+    await supabase.from("files").delete().eq("project_id", projectId).or("kind.is.null,kind.neq.build");
+    const rows = fixBackup.files.map((f) => ({ project_id: projectId, user_id: u.user!.id, path: f.path, content: f.content }));
+    for (let i = 0; i < rows.length; i += 50) await supabase.from("files").insert(rows.slice(i, i + 50));
+    setFixBackup(null);
+    setPreviewError(null);
+    await refreshFiles();
+    setPreviewKey((k) => k + 1);
+    toast.success("Fix undone — your files are back", { id: t });
+  }
+
+  // Live typing across devices: the message box mirrors through the database.
+  const deviceIdRef = useRef<string>("");
+  const remoteDraftRef = useRef(false);
+  useEffect(() => {
+    let id = sessionStorage.getItem("forge:device-id");
+    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem("forge:device-id", id); }
+    deviceIdRef.current = id;
+    const ch = supabase
+      .channel(`draft-${projectId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_drafts", filter: `project_id=eq.${projectId}` }, (payload: any) => {
+        const row = payload.new;
+        if (!row || row.device_id === deviceIdRef.current) return;
+        remoteDraftRef.current = true;
+        setInput(row.text ?? "");
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [projectId]);
+  useEffect(() => {
+    if (remoteDraftRef.current) { remoteDraftRef.current = false; return; }
+    if (!deviceIdRef.current) return;
+    const t = window.setTimeout(async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      await supabase.from("project_drafts").upsert({ project_id: projectId, user_id: u.user.id, text: input, device_id: deviceIdRef.current, updated_at: new Date().toISOString() });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [input, projectId]);
+  // Live badge: the model named on the newest assistant reply. Each fallback
+  // hand-off starts a new reply, so the badge follows whichever model took over.
+  const activeModel = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const meta = (messages[i] as { role: string; metadata?: { model?: string } }).metadata;
+      if (messages[i]!.role === "assistant" && meta?.model) return meta.model;
+    }
+    return null;
+  }, [messages]);
+
+  // Preview errors are fixed automatically only right after a ZIP import (owner request); otherwise the user taps "Fix this error".
+  const autoFixAttemptsRef = useRef<Map<string, number>>(new Map());
+  const [fixSending, setFixSending] = useState(false);
+  useEffect(() => {
+    if (!isBusy) setFixSending(false);
+  }, [isBusy]);
+
+  // ---- ZIP check: after an import, watch the preview; fix errors with the build model (max 3 rounds). ----
+  const zipCheckRef = useRef<{ rounds: number; settleUntil: number } | null>(null);
+  const [zipCheckSeq, setZipCheckSeq] = useState(0);
+  const zipLatestRef = useRef({ autoBuild, previewError, isBusy, previewDoc, needsBuild });
+  zipLatestRef.current = { autoBuild, previewError, isBusy, previewDoc, needsBuild };
+  const zipWasBusyRef = useRef(false);
+  // Kept in this tab's session storage so the check survives the page re-mounting after an import.
+  const zipKey = `codehaven:zipcheck:${projectId}`;
+  function saveZipCheck(rounds: number | null) {
+    try { if (rounds == null) sessionStorage.removeItem(zipKey); else sessionStorage.setItem(zipKey, String(rounds)); } catch { /* private mode */ }
+  }
+  function startZipCheck(rounds = 0) {
+    zipCheckRef.current = { rounds, settleUntil: Date.now() + 1500 };
+    saveZipCheck(rounds);
+    setTab("preview");
+    setZipCheckSeq((n) => n + 1);
+  }
+  useEffect(() => {
+    if (zipcheckParam) {
+      startZipCheck();
+      navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+      return;
+    }
+    let saved: string | null = null;
+    try { saved = sessionStorage.getItem(zipKey); } catch { /* private mode */ }
+    if (saved != null && !zipCheckRef.current) startZipCheck(Number(saved) || 0);
+  }, [zipcheckParam, navigate, projectId]);
+  useEffect(() => {
+    const check = zipCheckRef.current;
+    if (!check) return;
+    if (zipWasBusyRef.current && !isBusy) {
+      check.settleUntil = Date.now() + ZIP_SETTLE_MS;
+      setTab("preview");
+    }
+    zipWasBusyRef.current = isBusy;
+    if (isBusy || autoBuild.status === "building" || files.length === 0) return;
+    const hasError = autoBuild.status === "error" || !!previewError;
+    const delay = Math.max(check.settleUntil - Date.now(), hasError ? 1500 : ZIP_QUIET_MS);
+    const timer = window.setTimeout(() => {
+      const now = zipLatestRef.current;
+      const current = zipCheckRef.current;
+      if (!current || now.isBusy || now.autoBuild.status === "building") return;
+      if (now.needsBuild && now.previewDoc.includes("Building your site…")) return;
+      const decision = zipCheckDecision({
+        buildError: now.autoBuild.status === "error" ? String(now.autoBuild.error || "Unknown build error") : null,
+        previewError: now.previewError ? buildErrorReport(now.previewError) : null,
+        roundsUsed: current.rounds,
+      });
+      if (decision.action === "pass") {
+        zipCheckRef.current = null;
+        saveZipCheck(null);
+        toast.success(current.rounds ? `ZIP fixed — no errors left after ${current.rounds} fix${current.rounds === 1 ? "" : "es"}` : "ZIP checked — no errors found", { id: "zip-check" });
+        return;
+      }
+      if (decision.action === "stop") {
+        zipCheckRef.current = null;
+        saveZipCheck(null);
+        toast.error(decision.reason, { id: "zip-check", duration: 15000 });
+        return;
+      }
+      current.rounds = decision.round;
+      saveZipCheck(decision.round);
+      setPreviewError(null);
+      toast.loading(`Error found — fixing it now with your build model (${decision.round}/3)`, { id: "zip-check" });
+      void (async () => {
+        await takeFixSnapshot();
+        setMode("build");
+        modeRef.current = "build";
+        requestModeRef.current = "build";
+        requestImagesRef.current = false;
+        requestKeyRef.current = crypto.randomUUID();
+        zipAutoApproveRef.current = true;
+        setTab("chat");
+        await sendMessage({ text: zipFixPrompt(decision.report, decision.round) });
+      })();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [zipCheckSeq, isBusy, autoBuild.status, autoBuild.error, previewError, files.length, previewDoc]);
+  const stopJobs = useStopServerFn(stopChatJobs);
+  // Count 0 → 5, then continue the unfinished job on the next working model.
+  useEffect(() => {
+    if (switchCountdown === null) return;
+    if (!autoSwitch) {
+      setSwitchCountdown(null);
+      return;
+    }
+    if (switchCountdown >= 5) {
+      setSwitchCountdown(null);
+      requestKeyRef.current = crypto.randomUUID();
+      // Resume on the key after the one that stopped, never back at key #1.
+      let lastPos = failedKeyRef.current ?? 0;
+      failedKeyRef.current = null;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const pos = (messages[i] as { role: string; metadata?: { keyPos?: number | null } }).metadata?.keyPos;
+        if (messages[i]!.role === "assistant" && typeof pos === "number") { lastPos = Math.max(lastPos, pos); break; }
+        if (messages[i]!.role === "user") continue;
+      }
+      if (lastPos > 0) poolFromRef.current = lastPos + 1;
+      void sendMessage({
+        text: "The previous model stopped mid-work (limit reached). Read \"Where the last session stopped\" and continue exactly where it stopped. Do not repeat finished work, and finish the remaining steps.",
+      });
+      return;
+    }
+    const t = setTimeout(() => setSwitchCountdown((c) => (c === null ? null : c + 1)), 1000);
+    return () => clearTimeout(t);
+  }, [switchCountdown, autoSwitch, sendMessage, messages]);
+
+  const handleStop = useCallback(() => {
+    userStoppedRef.current = true;
+    setSwitchCountdown(null);
+    setTimeout(() => {
+      userStoppedRef.current = false;
+    }, 3000);
+    // Instant on screen: cut the stream and clear the spinner right away.
+    try {
+      void stop();
+    } catch {
+      /* already stopped */
+    }
+    setRemoteWorking(null);
+    toast.success("Stopped");
+    // Then tell the server so the agent stops writing files too.
+    void stopJobs({ data: { projectId } }).catch(() => {});
+  }, [stop, stopJobs, projectId]);
+
+  // The queue survives a reload or a switch to another phone.
+  const queueStorageKey = `forge:chat-queue:${projectId}`;
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(queueStorageKey);
+      const savedQueue = raw ? (JSON.parse(raw) as QueuedMessage[]) : [];
+      setQueue(savedQueue);
+      // Pausing only applies to messages that are actually waiting. Persisting
+      // an empty paused queue made every future message appear to send while it
+      // was silently held forever.
+      setQueuePaused(savedQueue.length > 0 && window.localStorage.getItem(`${queueStorageKey}:paused`) === "1");
+    } catch {}
+    queueLoadedRef.current = true;
+  }, [queueStorageKey]);
+  useEffect(() => {
+    if (!queueLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(queueStorageKey, JSON.stringify(queue));
+      window.localStorage.setItem(`${queueStorageKey}:paused`, queuePaused ? "1" : "0");
+    } catch {}
+  }, [queue, queuePaused, queueStorageKey]);
+
+  // Send the next queued message as soon as Forge is free — unless paused.
+  useEffect(() => {
+    if (!chatReady || !token || queuePaused || isBusy || queue.length === 0) return;
+    if (drainingRef.current || !isOnline) return;
+    const next = queue[0];
+    if (!next) return;
+    drainingRef.current = true;
+    setQueue((cur) => cur.filter((item) => item.id !== next.id));
+    void (async () => {
+      try {
+        await deliverMessage(next.text, next.attachments, next.mode);
+      } catch {
+        // put it back so nothing typed is ever lost
+        setQueue((cur) => [next, ...cur]);
+      } finally {
+        drainingRef.current = false;
+      }
+    })();
+  }, [queue, queuePaused, isBusy, chatReady, token, isOnline]);
+
+
+  // Keeps this screen truthful on every device: it watches the durable job
+  // list and the saved chat, so a second phone shows "still working" and the
+  // finished reply/preview arrive even if this device never held the stream.
+  useEffect(() => {
+    if (!token || !chatReady) return;
+    let disposed = false;
+    let sawActiveJob = false;
+    let knownMessageCount = -1;
+    const reloadSavedChat = async () => {
+      const { data: saved } = await supabase
+        .from("chat_messages")
+        .select("id,role,content,created_at")
+        .eq("project_id", projectId)
+        .order("created_at");
+      if (disposed) return 0;
+      const seen = new Set<string>();
+      const rows = cleanChatRows((saved ?? []) as any[]).filter((row) => {
+        if (seen.has(row.id) || !String(row.content ?? "").trim()) return false;
+        seen.add(row.id);
+        return true;
+      });
+      const next = rows.map((message) => ({
+        id: message.id,
+        role: message.role as "user" | "assistant",
+        parts: [{ type: "text" as const, text: message.content }],
+      })) as UIMessage[];
+      const signature = next.map((m) => `${m.id}:${(m.parts[0] as any).text.length}`).join("|");
+      // Only touch chat state when the saved chat really changed.
+      if (signature !== lastSavedSignatureRef.current) {
+        lastSavedSignatureRef.current = signature;
+        // Keep prompts the user just sent visible even if the saved copy has
+        // not landed yet — never let a reload wipe an in-flight message.
+        setMessages((prev) => {
+          const savedTexts = new Set(
+            next.filter((m) => m.role === "user").map((m) => ((m.parts[0] as any).text as string).trim()),
+          );
+          const lastSavedIdx = next.length;
+          const pending: UIMessage[] = [];
+          for (let i = prev.length - 1; i >= 0 && i >= prev.length - 4; i--) {
+            const m = prev[i];
+            if (m.role !== "user") continue;
+            const text = (m.parts ?? []).map((p: any) => (p.type === "text" ? p.text : "")).join("").trim();
+            if (text && !savedTexts.has(text) && !next.some((n) => n.id === m.id)) pending.unshift(m);
+          }
+          return lastSavedIdx >= 0 && pending.length ? [...next, ...pending] : next;
+        });
+      }
+      return (saved ?? []).length;
+    };
+    const recover = async () => {
+      if (disposed || !navigator.onLine) return;
+      const { data: jobs } = await supabase
+        .from("chat_jobs")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes,pool_ledger,paused_at_key,prompt,request_key,created_at")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (disposed) return;
+      setLatestJob(((jobs ?? [])[0] as LatestJob | undefined) ?? null);
+      // A crashed request cannot update its final state. The server heartbeats
+      // healthy work, so an old timestamp is safe evidence that this job died.
+      const activeJob = (jobs ?? []).find((job) => isActiveChatJob(job));
+      if (activeJob) sawActiveJob = true;
+      // Only announce remote work when this device is not the one streaming.
+      setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
+      if (!activeJob && sawActiveJob) {
+        sawActiveJob = false;
+        knownMessageCount = await reloadSavedChat();
+        if (disposed) return;
+        await refreshFiles();
+        setPreviewKey((key) => key + 1);
+        // Only the newest job decides the outcome; older failures are history.
+        const latest = (jobs ?? [])[0];
+        const outcome = (latest as any)?.outcome as string | null | undefined;
+        const counts = latest ? `${(latest as any).steps_done ?? 0} steps, ${(latest as any).files_changed ?? 0} files changed` : "";
+        if (outcome === "finished" || (!outcome && latest?.status === "completed")) toast.success(`Build finished · ${counts}`);
+        else if (outcome === "stopped_early") toast.warning(`Stopped early · ${counts}. Tap Continue to finish.`, { id: "forge-chat-error" });
+        else if (outcome === "out_of_keys") toast.error(`Out of saved AI keys · ${counts}`, { id: "forge-chat-error" });
+        else if (latest?.status === "failed" && !/stopped by you/i.test(latest.error ?? "") && latest.error)
+          toast.error(getChatErrorMessage(new Error(latest.error)), { id: "forge-chat-error" });
+        return;
+      }
+
+      // Nothing running here: if another device added messages, show them.
+      if (isStreaming || activeJob) return;
+      const { count } = await supabase
+        .from("chat_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId);
+      if (disposed || count == null) return;
+      if (knownMessageCount === -1) {
+        knownMessageCount = count;
+        return;
+      }
+      if (count !== knownMessageCount) {
+        knownMessageCount = await reloadSavedChat();
+        await refreshFiles();
+        setPreviewKey((key) => key + 1);
+      }
+    };
+    void recover();
+    const timer = window.setInterval(() => void recover(), 1500);
+    const onBack = () => void recover();
+    const onVisible = () => { if (document.visibilityState === "visible") void recover(); };
+    window.addEventListener("online", onBack);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener("online", onBack);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [token, chatReady, projectId, setMessages, isStreaming]);
+
+  useEffect(() => {
+    if (isStreaming) return;
+    let cancelled = false;
+    void supabase
+      .from("projects")
+      .select("agent_progress")
+      .eq("id", projectId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setLastProgress(((data as any)?.agent_progress as any) ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, isStreaming]);
+
+  // A reply that hit the model's length cap carries a marker. Ask it to carry
+  // on by itself instead of stopping mid-conversation waiting for "continue".
+  useEffect(() => {
+    if (isStreaming || !chatReady || !token) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const text = last.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+    if (!text.includes("[[FORGE_CONTINUE]]")) return;
+    if (continuedMessagesRef.current.has(last.id)) return;
+    continuedMessagesRef.current.add(last.id);
+    if (autoContinueRef.current >= 3) return;
+    autoContinueRef.current += 1;
+    requestKeyRef.current = crypto.randomUUID();
+    void sendMessage({
+      text: "Continue exactly where you stopped. Do not repeat finished work, and finish the remaining steps.",
+    });
+  }, [messages, isStreaming, chatReady, token, sendMessage]);
 
   // After EVERY completed assistant turn, offer one contextual next step based
   // on that exact request and any files that changed. Never a static prompt.
@@ -515,34 +1460,11 @@ function ProjectEditor() {
     const user = messages.slice(0, assistantIndex).reverse().find((message) => message.role === "user");
     const prompt = user?.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ") ?? "";
     suggestedMessagesRef.current.add(assistant.id);
-    setNextBuildPrompt(buildFollowUpSuggestion(prompt, changedPaths));
+    setNextBuildPrompts(buildFollowUpSuggestions(prompt, changedPaths));
   }, [messages, isStreaming, initialMessages]);
 
 
-  // Track how long the AI spent "thinking" per assistant message, so we can
-  // show "Thought for Xs" once it finishes.
-  useEffect(() => {
-    for (const m of messages) {
-      if (m.role !== "assistant") continue;
-      const hasReasoning = m.parts.some((p) => p.type === "reasoning");
-      if (!hasReasoning) continue;
-      if (!thinkingStartRef.current[m.id]) {
-        thinkingStartRef.current[m.id] = Date.now();
-      }
-      const isLast = m.id === messages[messages.length - 1]?.id;
-      const done =
-        !isStreaming ||
-        !isLast ||
-        m.parts.some((p) => p.type === "text" && (p as any).text?.trim());
-      if (done && thinkingDurations[m.id] === undefined) {
-        const seconds = Math.max(
-          1,
-          Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000),
-        );
-        setThinkingDurations((cur) => ({ ...cur, [m.id]: seconds }));
-      }
-    }
-  }, [messages, isStreaming, thinkingDurations]);
+
 
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);
@@ -555,12 +1477,17 @@ function ProjectEditor() {
       // (sendMessage only resolves once the assistant stream finishes).
       const { data: userRes } = await supabase.auth.getUser();
       if (userRes.user) {
-        await supabase.from("chat_messages").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          role: "user",
-          content: initialPrompt,
-        });
+        const { data: row } = await supabase
+          .from("chat_messages")
+          .insert({
+            project_id: projectId,
+            user_id: userRes.user.id,
+            role: "user",
+            content: initialPrompt,
+          })
+          .select("id")
+          .single();
+        pendingUserRowRef.current = row?.id ?? null;
       }
       await sendMessage({ text: initialPrompt });
       navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
@@ -596,7 +1523,13 @@ function ProjectEditor() {
 
   // auto-scroll chat
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const el = scrollRef.current;
+    if (!el) return;
+    // Only follow new output while the user is at the bottom; reading earlier
+    // messages pauses auto-scroll until they scroll back or tap the arrow.
+    if (!stickToBottomRef.current) return;
+    const frame = requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "auto" : "smooth" }));
+    return () => cancelAnimationFrame(frame);
   }, [messages, isStreaming]);
 
   // keep input focused
@@ -604,29 +1537,22 @@ function ProjectEditor() {
     if (chatReady) inputRef.current?.focus();
   }, [chatReady, tab]);
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if ((!text && attachments.length === 0) || isStreaming || !token) return;
-    setInput("");
-    setNextBuildPrompt(null);
-    const pasted = detectPastedApiKey(text);
-    const secretIntent = pasted ?? detectSecretIntent(text);
-    if (secretIntent && attachments.length === 0) {
-      setPendingSecret(secretIntent);
-      const { data: userRes } = await supabase.auth.getUser();
-      // Never store or send the raw key itself.
-      const safeText = pasted ? stripApiKey(text, pasted.value!) || `Save my ${pasted.key}` : text;
-      if (userRes.user) {
-        await supabase.from("chat_messages").insert({
-          project_id: projectId,
-          user_id: userRes.user.id,
-          role: "user",
-          content: safeText,
-        });
-      }
+  // Actually hands one message to the agent. Used both for an immediate send
+  // and for a message that waited in the queue while Code Haven was busy.
+  async function deliverMessage(text: string, atts: Attachment[], requestedMode = modeRef.current) {
+    if (isScrolltideLookup(text)) {
+      setScrolltideQuery(text.replace(/scrolltide/ig, "").replace(/\b(find|search|show|templates?)\b/ig, "").trim() || "templates");
+      setScrolltideOpen(n => n + 1);
       return;
     }
+    if (requestedMode === "image" && !atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0)) {
+      toast.error("Attach an image for Image build.");
+      return;
+    }
+    requestModeRef.current = requestedMode;
+    requestImagesRef.current = atts.some((a) => a.mediaType.startsWith("image/") || (a.frames?.length ?? 0) > 0);
+    requestKeyRef.current = crypto.randomUUID();
+    autoContinueRef.current = 0;
 
     // Snapshot current files BEFORE the AI changes them, so users can roll back
     // any AI turn from the History panel.
@@ -646,29 +1572,107 @@ function ProjectEditor() {
         } catch {}
       })();
     }
-    const videoNotes = attachments
+    const videoNotes = atts
       .filter((a) => a.mediaType.startsWith("video/"))
       .map((a) => `Attached video: ${a.name}. I extracted ${a.frames?.length ?? 0} visual frames for you to inspect.`);
     const messageText = [text, ...videoNotes].filter(Boolean).join("\n\n");
-    const attachmentFiles = attachments.flatMap((a) => {
+    const attachmentFiles = atts.flatMap((a) => {
       const visualParts = a.mediaType.startsWith("video/") ? (a.frames ?? []) : [a];
       return visualParts.map((part) => ({ type: "file" as const, mediaType: part.mediaType, url: part.url, filename: part.name }));
     });
-    setAttachments([]);
     // persist user message BEFORE streaming, otherwise the assistant reply is
     // stored first and reloaded history shows answers above their questions.
     const { data: userRes } = await supabase.auth.getUser();
     if (userRes.user) {
-      await supabase.from("chat_messages").insert({
-        project_id: projectId,
-        user_id: userRes.user.id,
-        role: "user",
-        content: messageText,
-      });
+      const { data: row } = await supabase
+        .from("chat_messages")
+        .insert({
+          project_id: projectId,
+          user_id: userRes.user.id,
+          role: "user",
+          content: messageText,
+        })
+        .select("id")
+        .single();
+      pendingUserRowRef.current = row?.id ?? null;
     }
-    await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
-
+    try {
+      await sendMessage({ text: messageText || "(see attached image)", files: attachmentFiles });
+    } catch (error) {
+      await discardUnansweredMessage();
+      throw error;
+    }
   }
+
+  // "/" skill menu: picking a skill sends it straight away.
+  const [skillAutoSend, setSkillAutoSend] = useState(false);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!skillAutoSend) return;
+    setSkillAutoSend(false);
+    void handleSend({ preventDefault() {} } as React.FormEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillAutoSend, input]);
+  function pickSkill(command: string) {
+    const rest = input.replace(/^\s*\/\S*\s*/, "");
+    setInput(`/${command}${rest ? ` ${rest}` : ""}`);
+    setSkillMenuOpen(false);
+    setSkillAutoSend(true);
+  }
+  const slashMatch = /^\s*\/([\w-]*)$/.exec(input);
+  const showSkillMenu = skillMenuOpen || !!slashMatch;
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if ((!text && attachments.length === 0) || !token) return;
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      toast.error("You’re offline. Reconnect before sending so your instruction is not lost.");
+      return;
+    }
+    if (/^\s*(please\s+)?(test|check)\s+(my\s+|the\s+)?(site|preview|app|website)(\s+like\s+a\s+(real\s+)?visitor)?\W*$/i.test(text) && attachments.length === 0) {
+      setInput("");
+      void runTest(/published|live/i.test(text) ? "published" : "preview");
+      return;
+    }
+    if (/^\s*i\s+have\s+(it|the\s+key)(\s+(now|ready))?\W*$/i.test(text) && hasWaitingSecretCard()) {
+      openWaitingSecretCards();
+      setInput("");
+      return;
+    }
+    const pasted = detectPastedApiKey(text);
+    // Only intercept when a raw key was pasted, or the key they mention is not
+    // saved yet. Otherwise "build with my saved key" must reach the agent.
+    const mentioned = detectSecretIntent(text);
+    if (pasted && attachments.length === 0) {
+      // A raw key must never reach the model: show the secure box only.
+      setPendingSecret(pasted);
+      setInput("");
+      return;
+    }
+    // Mentioning a missing key opens the secure box, but the instruction still
+    // reaches the agent so no message of yours is ever left unanswered.
+    if (mentioned && !savedSecretKeys.includes(mentioned.key.toUpperCase())) {
+      setPendingSecret(mentioned);
+    }
+    const atts = attachments;
+    setInput("");
+    setAttachments([]);
+    setNextBuildPrompts([]);
+
+    // Busy or paused: never drop the message and never interrupt the current
+    // build — line it up and send it the moment Forge is free again.
+    // A pause can only hold an existing queue. An empty, stale pause flag must
+    // never swallow the next instruction.
+    if (isBusy || (queuePaused && queue.length > 0)) {
+      setQueue((cur) => [...cur, { id: crypto.randomUUID(), text, attachments: atts, mode: modeRef.current }]);
+      return;
+    }
+    if (queuePaused) setQueuePaused(false);
+    await deliverMessage(text, atts);
+  }
+
 
   async function onPickFiles(list: FileList | null) {
     if (!list) return;
@@ -713,37 +1717,49 @@ function ProjectEditor() {
         return;
       }
     }
-    // Open build dialog; it runs the build (or skips if not buildable) and calls back.
+    // Static sites need no build step — publish straight away.
+    const buildCheck = isBuildable(files.map((f) => ({ path: f.path, content: f.content })));
+    if (!buildCheck.buildable) {
+      setPendingPublishSlug(cleanSlug);
+      setPublishing(false);
+      await finalizePublish(null, cleanSlug);
+      return;
+    }
+    // Otherwise open the build dialog; it builds then calls back.
     setPendingPublishSlug(cleanSlug);
+    setPublishOpen(false);
     setBuildDialogOpen(true);
     setPublishing(false);
+
   }
 
-  async function finalizePublish(builtFiles: BuildFile[] | null) {
-    const cleanSlug = pendingPublishSlug;
+  async function finalizePublish(builtFiles: BuildFile[] | null, slugOverride?: string) {
+    const cleanSlug = slugOverride ?? pendingPublishSlug;
     setBuildDialogOpen(false);
     setPendingPublishSlug(null);
     if (!cleanSlug) return;
     setPublishing(true);
     try {
       // Wipe old built artifacts.
-      await supabase.from("files").delete().eq("project_id", projectId).eq("kind" as any, "build");
+      const { error: cleanupError } = await supabase.from("files").delete().eq("project_id", projectId).eq("kind" as any, "build");
+      if (cleanupError) throw cleanupError;
       // Insert new built artifacts (if any).
       if (builtFiles && builtFiles.length) {
         const { data: userRes } = await supabase.auth.getUser();
         const uid = userRes.user?.id;
         if (!uid) throw new Error("Not signed in");
-        const rows = builtFiles.map((f) => ({
+        const uniqueFiles = [...new Map(builtFiles.map((f) => [buildStoragePath(f.path), f])).values()];
+        const rows = uniqueFiles.map((f) => ({
           project_id: projectId,
           user_id: uid,
-          path: f.path,
+          path: buildStoragePath(f.path),
           content: f.content,
           kind: "build",
         }));
         // Insert in chunks to stay under payload limits.
         for (let i = 0; i < rows.length; i += 50) {
           const chunk = rows.slice(i, i + 50);
-          const { error } = await supabase.from("files").insert(chunk as any);
+          const { error } = await supabase.from("files").upsert(chunk as any, { onConflict: "project_id,path" });
           if (error) throw error;
         }
       }
@@ -754,11 +1770,25 @@ function ProjectEditor() {
       if (error) throw error;
       setSlug(cleanSlug);
       setPublished(true);
+      setPublishOpen(false);
       toast.success(builtFiles && builtFiles.length ? "Built & published" : "Site published");
     } catch (e: any) {
       toast.error(e?.message || "Publish failed");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleCfDeploy() {
+    setCfDeploying(true);
+    try {
+      const r = await cfDeployFn({ data: { projectId } });
+      setCfPagesUrl(r.url);
+      toast.success(`Live on Cloudflare: ${r.url}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Cloudflare deploy failed");
+    } finally {
+      setCfDeploying(false);
     }
   }
 
@@ -785,46 +1815,42 @@ function ProjectEditor() {
   }
 
   const [reverting, setReverting] = useState(false);
+  const [snapshotLabels, setSnapshotLabels] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void supabase.from("project_snapshots").select("label").eq("project_id", projectId).order("created_at", { ascending: false }).limit(200)
+      .then(({ data }) => setSnapshotLabels(new Set((data ?? []).map((r: any) => String(r.label)))));
+  }, [projectId, messages.length, reverting]);
   async function revertToLastStable() {
+    return revertToSnapshot(null);
+  }
+  /** Restores the copy saved before a build. label=null → most recent build. Saves the current files first so a revert can be undone. */
+  async function revertToSnapshot(label: string | null) {
     if (reverting) return;
-    if (!confirm("Revert this project to the version saved before your most recent build? This cannot be undone.")) return;
+    const ok = await requestApproval("revert", label ? "Revert this project to the version saved before this build?" : "Revert this project to the version saved before your most recent build?");
+    if (!ok) return;
     setReverting(true);
     try {
-      const { data: snap, error: snapErr } = await supabase
-        .from("project_snapshots")
-        .select("id,files,created_at")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      let q = supabase.from("project_snapshots").select("id,files,created_at,label").eq("project_id", projectId).neq("label", "Before revert");
+      if (label) q = q.eq("label", label);
+      const { data: snap, error: snapErr } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (snapErr) throw snapErr;
-      if (!snap) {
-        toast.error("No previous version saved yet");
-        return;
-      }
+      if (!snap) { toast.error("No saved version found for that build"); return; }
       const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) {
-        toast.error("Please sign in again");
-        return;
-      }
+      if (!userRes.user) { toast.error("Please sign in again"); return; }
+      const { data: current } = await supabase.from("files").select("path,content").eq("project_id", projectId);
+      const { error: saveErr } = await supabase.from("project_snapshots").insert({ project_id: projectId, user_id: userRes.user.id, label: "Before revert", files: (current ?? []) as any });
+      if (saveErr) throw saveErr;
       const snapFiles = (snap.files as Array<{ path: string; content: string }>) ?? [];
       const { error: delErr } = await supabase.from("files").delete().eq("project_id", projectId);
       if (delErr) throw delErr;
       if (snapFiles.length > 0) {
-        const rows = snapFiles.map((f) => ({
-          project_id: projectId,
-          user_id: userRes.user!.id,
-          path: f.path,
-          content: f.content,
-        }));
-        const { error: insErr } = await supabase.from("files").insert(rows);
+        const { error: insErr } = await supabase.from("files").insert(snapFiles.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content })));
         if (insErr) throw insErr;
       }
-      // consume the snapshot so repeated clicks don't keep restoring the same one
-      await supabase.from("project_snapshots").delete().eq("id", snap.id);
+      await supabase.from("chat_messages").insert({ project_id: projectId, user_id: userRes.user.id, role: "assistant", content: `Reverted to the version saved before: "${String(snap.label).slice(0, 80)}". A copy of the previous files is in History as "Before revert".` });
       await refreshFiles();
       setPreviewKey((k) => k + 1);
-      toast.success("Reverted to last stable version");
+      toast.success("Reverted. You can undo it from History.");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not revert");
     } finally {
@@ -832,51 +1858,11 @@ function ProjectEditor() {
     }
   }
 
-  // persist assistant messages when they complete, so leaving and coming back
-  // shows the exact same conversation (each answer once, under its question).
-  const lastPersistedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (isStreaming) return;
-    const pending = messages.filter(
-      (m) =>
-        m.role === "assistant" &&
-        !lastPersistedRef.current.has(m.id) &&
-        // Messages loaded from history are ALREADY stored — re-inserting them
-        // duplicates every reply on each reload and jam-packs the chat.
-        !initialMessages.some((h) => h.id === m.id),
-    );
-    if (pending.length === 0) return;
-    const rows: Array<{ id: string; text: string }> = [];
-    for (const m of pending) {
-      const text = m.parts
-        .map((p) => (p.type === "text" ? p.text : ""))
-        .filter((t) => t.trim())
-        .join("\n\n")
-        .trim();
-      if (!text) continue;
-      lastPersistedRef.current.add(m.id);
-      rows.push({ id: m.id, text });
-    }
-    if (rows.length === 0) return;
-    (async () => {
-      const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) return;
-      await supabase.from("chat_messages").insert(
-        rows.map((r) => ({
-          project_id: projectId,
-          user_id: userRes.user!.id,
-          role: "assistant",
-          content: r.text,
-        })),
-      );
-    })();
-  }, [messages, isStreaming, projectId, initialMessages]);
-
-
   return (
     <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
+      <BuildApprovalHost />
       {/* Header */}
-      <header className="h-14 hairline-bottom-gold flex items-center px-3 gap-2 shrink-0 bg-card/30 backdrop-blur-sm">
+      <header className="min-h-14 hairline-bottom-gold grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-3 py-2 shrink-0 bg-card/30 backdrop-blur-sm sm:flex sm:flex-wrap sm:py-2">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>
             <button
@@ -889,7 +1875,7 @@ function ProjectEditor() {
           <SheetContent side="left" className="w-72 p-0 flex flex-col">
             <SheetHeader className="p-4 hairline-bottom-gold">
               <SheetTitle className="flex items-center gap-2 font-display text-gold">
-                <ForgeMark className="h-6 w-6" /> Forge
+                 <ForgeMark className="h-6 w-6" /> Code Haven
               </SheetTitle>
             </SheetHeader>
             <div className="p-2">
@@ -925,10 +1911,10 @@ function ProjectEditor() {
             </div>
           </SheetContent>
         </Sheet>
-        <div className="flex items-center gap-2 min-w-0 flex-1 justify-center">
+        <div className="flex min-w-0 items-center justify-start sm:flex-1 sm:justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hairline-gold bg-card/60 hover:bg-accent/40 transition-colors max-w-[60vw]">
+              <button className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 hairline-gold bg-card/60 transition-colors hover:bg-accent/40 sm:max-w-[40vw]">
                 <ForgeMark className="h-5 w-5 shrink-0" />
                 <span className="font-display text-base truncate text-foreground/95">{projectName || "Untitled"}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -956,19 +1942,26 @@ function ProjectEditor() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <button
-          onClick={() => setTab("preview")}
-          className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${
-            tab === "preview"
-              ? "bg-primary/15 text-primary"
-              : "hairline-gold text-muted-foreground hover:text-primary hover:bg-accent/40"
-          }`}
-          title="Open preview"
-          aria-label="Open preview"
-        >
-          <Play className="h-4 w-4 fill-current" />
-        </button>
-        <Button
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept="*/*"
+          className="hidden"
+          onClick={(e) => { e.currentTarget.value = ""; }}
+          onChange={(e) => void importZip(e.target.files?.[0])}
+        />
+        <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-1 sm:col-span-1 sm:ml-auto sm:flex-nowrap">
+          <Button
+            size="icon"
+            variant={tab === "preview" ? "secondary" : "outline"}
+            onClick={() => setTab("preview")}
+            className="h-9 w-9 shrink-0 rounded-full"
+            title="Open preview"
+            aria-label="Open preview"
+          >
+            <Play className="h-4 w-4 fill-current" />
+          </Button>
+          <Button
           size="sm"
           variant="ghost"
           onClick={async () => {
@@ -982,8 +1975,8 @@ function ProjectEditor() {
         >
           <RefreshCw className="h-4 w-4" />
           <span className="hidden xs:inline text-xs">Rebuild</span>
-        </Button>
-        <Button
+          </Button>
+          <Button
           size="sm"
           variant="ghost"
           onClick={revertToLastStable}
@@ -993,8 +1986,8 @@ function ProjectEditor() {
         >
           {reverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
           <span className="hidden xs:inline text-xs">Revert</span>
-        </Button>
-        {githubLinked && (
+          </Button>
+          {githubLinked && (
           <div className="flex items-center gap-1.5">
             <Button
               size="sm"
@@ -1024,8 +2017,9 @@ function ProjectEditor() {
               </span>
             )}
           </div>
-        )}
-        <Button
+          )}
+          <BackendBadge projectId={projectId} compact />
+          <Button
           size="sm"
           variant={published ? "outline" : "default"}
           onClick={() => setPublishOpen(true)}
@@ -1038,16 +2032,17 @@ function ProjectEditor() {
         >
           <Globe className="h-4 w-4" />
           <span className="hidden xs:inline">{published ? "Published" : "Publish"}</span>
-        </Button>
-        <Link
+          </Button>
+          <Link
           to="/p/$projectId/settings"
           params={{ projectId }}
           className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40"
           title="Project settings, domains and publishing"
           aria-label="Project settings"
-        >
-          <Settings className="h-4 w-4" />
-        </Link>
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
+        </div>
       </header>
 
       {githubLinked && (
@@ -1067,7 +2062,9 @@ function ProjectEditor() {
           { k: "chat", label: "Chat", icon: MessageSquare },
           { k: "preview", label: "Preview", icon: Eye },
           { k: "code", label: "Code", icon: Code2 },
+          { k: "assets", label: "Assets", icon: ImageIcon },
           { k: "history", label: "History", icon: HistoryIcon },
+          { k: "brain", label: "Brain", icon: Brain },
         ] as const).map(({ k, label, icon: Icon }) => (
           <button
             key={k}
@@ -1088,11 +2085,38 @@ function ProjectEditor() {
       <div className="flex-1 min-h-0 flex flex-col">
         {tab === "chat" && (
           <div className="flex-1 min-h-0 flex flex-col">
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            <div className="relative flex-1 min-h-0 flex flex-col">
+            {showJumpDown && (
+              <button
+                type="button"
+                aria-label="Jump to latest message"
+                onClick={() => {
+                  stickToBottomRef.current = true;
+                  setShowJumpDown(false);
+                  scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+                }}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground shadow-lg hover:bg-muted"
+              >
+                ↓ {isBusy ? "Latest progress" : "Jump to latest"}
+              </button>
+            )}
+            <div
+              ref={scrollRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+                if (stickToBottomRef.current !== atBottom) {
+                  stickToBottomRef.current = atBottom;
+                  setShowJumpDown(!atBottom);
+                }
+              }}
+              data-work-chat-scroll
+              className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+            >
               {chatReady && messages.length === 0 && (
                 <div className="text-center py-12 space-y-3">
                   <ForgeMark className="h-14 w-14 mx-auto" glow />
-                  <h2 className="font-display text-2xl">What will we forge?</h2>
+                  <h2 className="font-display text-2xl">What will we build?</h2>
                   <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                     Describe what you want and I'll build it. You'll see it take shape live in <em className="text-primary not-italic">Preview</em>.
                   </p>
@@ -1113,168 +2137,33 @@ function ProjectEditor() {
                   </div>
                 </div>
               )}
-              {messages.map((m) => {
+              {messages.map((m, mi) => {
                 // Separate text parts with a blank line so multi-step replies
                 // render as distinct paragraphs instead of one jam-packed blob.
-                const text = m.parts
+                const rawText = m.parts
                   .map((p) => (p.type === "text" ? p.text : ""))
                   .filter((t) => t.trim())
-                  .join(m.role === "assistant" ? "\n\n" : "");
-                const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
-                const showTools = toolParts.length > 0;
-                const workOpen = openWorkLogs[m.id] ?? (isStreaming && m.id === messages[messages.length - 1]?.id);
-                const reasoningParts = m.parts.filter(
-                  (p): p is Extract<typeof p, { type: "reasoning" }> => p.type === "reasoning",
-                );
-                const reasoningText = reasoningParts
-                  .map((p) => (p as any).text ?? "")
-                  .join("\n")
+                  .join(m.role === "assistant" ? "\n\n" : "")
+                  .replace("[[FORGE_CONTINUE]]", "")
                   .trim();
-                const isLastStreaming = isStreaming && m.id === messages[messages.length - 1]?.id;
-                const thinkingActive =
-                  isLastStreaming &&
-                  reasoningParts.length > 0 &&
-                  !text &&
-                  !toolParts.some((t) => t.state === "output-available");
-                const thinkOpen = openThinking[m.id] ?? thinkingActive;
-                const workingActive =
-                  isLastStreaming &&
-                  (toolParts.some((t) => t.state !== "output-available") || text.length > 0);
-                const showStatusPill = isLastStreaming && m.role === "assistant";
+                const text = m.role === "assistant" ? stripLeakedToolJson(rawText) : rawText;
+                const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
                 return (
                   <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                     <div
                       className={
                         m.role === "user"
-                          ? "rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] bg-primary text-primary-foreground text-sm whitespace-pre-wrap"
-                          : "max-w-full text-sm space-y-2 w-full"
+                          ? "rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] bg-primary text-primary-foreground text-base whitespace-pre-wrap"
+                          : "max-w-full text-base flex flex-col gap-2 w-full"
                       }
                     >
-                      {showStatusPill && (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-                          {workingActive ? (
-                            <>
-                              <HammerIcon className="h-3 w-3 text-primary animate-pulse" />
-                              <span className="text-foreground">Working</span>
-                              <span className="text-muted-foreground/70">· editing files</span>
-                            </>
-                          ) : (
-                            <>
-                              <Loader2 className="h-3 w-3 text-primary animate-spin" />
-                              <span className="text-foreground">Thinking</span>
-                              <span className="text-muted-foreground/70">· planning</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-                      {m.role === "assistant" && reasoningText && (
-                        <div className="space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenThinking((cur) => ({ ...cur, [m.id]: !thinkOpen }))
-                            }
-                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                          >
-                            {thinkingActive ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            ) : (
-                              <Lightbulb className="h-3.5 w-3.5 text-primary" />
-                            )}
-                            <span>
-                              {thinkingActive
-                                ? "Thinking…"
-                                : `Thought${
-                                    thinkingDurations[m.id]
-                                      ? ` for ${thinkingDurations[m.id]}s`
-                                      : ""
-                                  }`}
-                            </span>
-                            {thinkOpen ? (
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          {thinkOpen && (
-                            <div className="rounded-lg border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground/90 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
-                              {reasoningText}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {showTools && (
-                        <div className="space-y-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setOpenWorkLogs((current) => ({ ...current, [m.id]: !workOpen }))}
-                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                          >
-                            {toolParts.some((t) => t.state !== "output-available") ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            ) : (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                            )}
-                            View work log
-                          </button>
-                          {workOpen && (
-                            <div className="space-y-1.5">
-                              {toolParts.map((t, i) => {
-                                const name = t.type.replace("tool-", "");
-                                const { icon: Icon, label } = toolLabel(name, t.input, t.state);
-                                const active = t.state !== "output-available";
-                                const detailKey = `${m.id}:${i}`;
-                                const detailOpen = !!openToolDetails[detailKey];
-                                const inputPreview = t.input ? JSON.stringify(t.input, null, 2) : "";
-                                const outputRaw = (t.output ?? (t as any).result) as any;
-                                const outputPreview = outputRaw !== undefined ? (typeof outputRaw === "string" ? outputRaw : JSON.stringify(outputRaw, null, 2)) : "";
-                                return (
-                                  <div key={i} className="rounded-lg border border-border bg-card/60 overflow-hidden">
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenToolDetails((cur) => ({ ...cur, [detailKey]: !detailOpen }))}
-                                      className="w-full flex items-center gap-2 text-xs px-3 py-2 hover:bg-accent/30 transition-colors text-left"
-                                    >
-                                      {active ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-                                      ) : (
-                                        <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
-                                      )}
-                                      <span className="truncate flex-1">{label}</span>
-                                      {detailOpen ? (
-                                        <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                      ) : (
-                                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                      )}
-                                    </button>
-                                    {detailOpen && (
-                                      <div className="px-3 py-2 border-t border-border/60 space-y-2 bg-background/40">
-                                        {inputPreview && (
-                                          <div className="space-y-1">
-                                            <div className="text-[10px] uppercase tracking-wider text-primary/70 font-mono">Input</div>
-                                            <pre className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono leading-relaxed">{inputPreview}</pre>
-                                          </div>
-                                        )}
-                                        {outputPreview && (
-                                          <div className="space-y-1">
-                                            <div className="text-[10px] uppercase tracking-wider text-primary/70 font-mono">Result</div>
-                                            <pre className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all max-h-64 overflow-y-auto font-mono leading-relaxed">{outputPreview}</pre>
-                                          </div>
-                                        )}
-                                        {!inputPreview && !outputPreview && (
-                                          <div className="text-[11px] text-muted-foreground/70">No details yet.</div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
                       {toolParts
-                        .filter((t: any) => t.type === "tool-request_secret" && (t.output ?? t.result)?.needsInput)
+                        .filter(
+                          (t: any) =>
+                            t.type === "tool-request_secret" &&
+                            (t.output ?? t.result)?.needsInput &&
+                            !savedSecretKeys.includes(String((t.output ?? t.result)?.key ?? "").toUpperCase()),
+                        )
                         .map((t: any, i: number) => {
                           const out = (t.output ?? t.result) as any;
                           return (
@@ -1284,6 +2173,15 @@ function ProjectEditor() {
                               secretKey={out.key}
                               reason={out.reason}
                               whereToGet={out.where_to_get}
+                              onSaved={(key) => {
+                                setSavedSecretKeys((prev) =>
+                                  prev.includes(key.toUpperCase()) ? prev : [...prev, key.toUpperCase()],
+                                );
+                                if (!isBusy) {
+                                  requestKeyRef.current = crypto.randomUUID();
+                                  void sendMessage({ text: `${key} is saved now. Continue the task from exactly where you stopped — do not restart finished work.` });
+                                }
+                              }}
                             />
                           );
                         })}
@@ -1310,16 +2208,46 @@ function ProjectEditor() {
                         );
                       })()}
                       {m.role === "assistant"
-                        ? text && (
-                            <div className="prose prose-invert prose-sm max-w-none break-words">
-                              <ReactMarkdown>{text}</ReactMarkdown>
-                            </div>
-                          )
+                        ? text && (() => {
+                            const [body, log] = text.split("\n\n<!-- worklog -->\n");
+                            return (
+                              <>
+                                <div className="prose prose-invert max-w-none break-words text-base">
+                                  <ReactMarkdown>{body}</ReactMarkdown>
+                                </div>
+                                {log && (
+                                  <WorkLogCard
+                                    projectId={projectId}
+                                    runId={messageRunId(text, m.id)}
+                                    checks={mi === messages.length - 1 || messages.slice(mi + 1).every((x) => x.role !== "assistant") ? <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} /> : undefined}
+                                    log={log}
+                                    title={(() => {
+                                      const prev = [...messages.slice(0, mi)].reverse().find((x) => x.role === "user");
+                                      return prev ? prev.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("").trim().slice(0, 60) : "Build";
+                                    })()}
+                                  />
+                                )}
+                              </>
+                            );
+                          })()
                         : <span>{text}</span>}
+                      {m.role === "assistant" && !isStreaming && (() => {
+                        const prev = [...messages.slice(0, mi)].reverse().find((x) => x.role === "user");
+                        const label = prev ? prev.parts.map((p: any) => (p.type === "text" ? p.text : "")).join("").trim().slice(0, 120) : "";
+                        if (!label || !snapshotLabels.has(label)) return null;
+                        return (
+                          <div className="mt-1 flex justify-end">
+                            <button onClick={() => void revertToSnapshot(label)} disabled={reverting} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:text-primary hover:bg-accent/40" title="Revert to before this build" aria-label="Revert to before this build">
+                              <Undo2 className="h-3.5 w-3.5" /> Revert
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
               })}
+              {isBusy && <WorkLogCard projectId={projectId} runId={latestJob && ["running", "queued"].includes(latestJob.status) ? `j-${latestJob.id}` : `k-${requestKeyRef.current ?? "pending"}`} title={latestJob?.prompt ?? "Current task"} running progress={remoteWorking ?? latestJob?.progress ?? "Working…"} stepCount={latestJob?.steps_done} fileCount={latestJob?.files_changed} />}
               {isStreaming && (() => {
                 const last = messages[messages.length - 1];
                 const lastTools = last?.parts.filter((p: any) => typeof p.type === "string" && p.type.startsWith("tool-")) ?? [];
@@ -1354,36 +2282,349 @@ function ProjectEditor() {
                   </div>
                 );
               })()}
-              {pendingSecret && !isStreaming ? (
+              {pendingSecret && !savedSecretKeys.includes(pendingSecret.key.toUpperCase()) && !isStreaming ? (
                 <SecretRequestCard
                   projectId={projectId}
                   secretKey={pendingSecret.key}
                   reason={pendingSecret.reason}
                   initialValue={pendingSecret.value}
                   onSaved={(key) => {
+                    setSavedSecretKeys((prev) =>
+                      prev.includes(key.toUpperCase()) ? prev : [...prev, key.toUpperCase()],
+                    );
+                    setPendingSecret(null);
+                    void refreshSavedSecrets();
                     setInput(`Use my saved ${key} to finish the integration and test one real request`);
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
                 />
 
               ) : null}
-              {nextBuildPrompt && !isStreaming ? (
+              {previewError && !isBusy ? (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2">
+                  <p className="text-xs font-medium text-destructive">
+                    Something is broken in the preview
+                    {previewErrorCount > 1 ? ` · repeated ${previewErrorCount > 99 ? "99+" : previewErrorCount}×` : ""}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground font-mono line-clamp-3 break-all">{previewError}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1 bg-gold-gradient text-primary-foreground"
+                      disabled={fixSending}
+                      onClick={async () => {
+                        if (fixSending) return;
+                        setFixSending(true);
+                        const err = buildErrorReport(previewError);
+                        setPreviewError(null);
+                        await takeFixSnapshot();
+                        setMode("build");
+                        modeRef.current = "build";
+                        requestKeyRef.current = crypto.randomUUID();
+                        await sendMessage({ text: `Fix this error in the preview. Use the exact message, line number, code excerpt and stack below instead of guessing, then fix the root cause. Change only what is needed — do not rewrite or remove unrelated code:\n\n${err}` });
+                      }}
+                    >
+                      {fixSending ? "Fixing…" : "🛠️ Fix this error"}
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setPreviewError(null)}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              {fixBackup && !isBusy ? (
+                <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${previewError ? "border-destructive/50 bg-destructive/10" : "border-border bg-card/60"}`}>
+                  <span className="flex-1 text-muted-foreground">
+                    {previewError ? "The fix didn't work. Your files from before the fix are saved." : "A copy of your files from before the fix is saved."}
+                  </span>
+                  <Button type="button" size="sm" variant={previewError ? "default" : "outline"} onClick={undoFix}>
+                    <Undo2 className="h-3.5 w-3.5 mr-1" /> Undo this fix
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setFixBackup(null)}>Keep</Button>
+                </div>
+              ) : null}
+              {(() => {
+                if (!latestJob || isBusy || dismissedJobId === latestJob.id) return null;
+                const active = latestJob.status === "queued" || latestJob.status === "running";
+                const interrupted = active && !isActiveChatJob(latestJob);
+                if (active && !interrupted) return null;
+                const kind = interrupted ? "interrupted" : (latestJob.outcome ?? (latestJob.status === "completed" ? "finished" : null));
+                if (kind === "paused") {
+                  const at = latestJob.paused_at_key ?? 1;
+                  const resume = async (from: number) => {
+                    setDismissedJobId(latestJob.id);
+                    setMode("build");
+                    modeRef.current = "build";
+                    poolFromRef.current = from;
+                    requestKeyRef.current = crypto.randomUUID();
+                    await sendMessage({ text: "Continue exactly where you stopped. Read the handoff note, do not repeat finished work, and finish the remaining steps." });
+                  };
+                  return (
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-sm space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="block text-[10px] uppercase text-muted-foreground">Last build · paused</span>
+                          <span className="block text-xs text-muted-foreground">{latestJob.error}</span>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button type="button" size="sm" variant="outline" onClick={() => resume(at)}>Retry key #{at}</Button>
+                          <Button type="button" size="sm" onClick={() => resume(at + 1)}>Approve key #{at + 1}</Button>
+                        </div>
+                      </div>
+                      <PoolLedger rows={latestJob.pool_ledger ?? []} />
+                    </div>
+                  );
+                }
+                if (!kind || kind === "stopped" || kind === "failed") return null;
+                const restarts = latestJob.auto_resumes ?? 0;
+                const counts = `${latestJob.steps_done} step${latestJob.steps_done === 1 ? "" : "s"}, ${latestJob.files_changed} file${latestJob.files_changed === 1 ? "" : "s"} changed${restarts ? ` · restarted ${restarts} time${restarts === 1 ? "" : "s"} by the server` : ""}`;
+                const title =
+                  kind === "finished" ? "Finished" : kind === "stopped_early" ? "Stopped early" : kind === "out_of_keys" ? "Out of AI keys" : "Interrupted";
+                const detail =
+                  kind === "finished"
+                    ? counts
+                    : kind === "stopped_early"
+                      ? `${counts} · ran ${latestJob.rounds} round(s) and hit the step limit`
+                      : kind === "out_of_keys"
+                        ? `${counts} · every saved key was used up before the work finished`
+                        : "The server stopped in the middle of this job";
+                const canContinue = kind !== "finished";
+                return (
+                  <div className={cn("rounded-lg border px-3 py-2.5 text-sm", kind === "finished" ? "border-primary/30 bg-primary/5" : "border-destructive/40 bg-destructive/5")}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="block text-[10px] uppercase text-muted-foreground">Last build</span>
+                        <span className="font-semibold">{title}</span>
+                        <span className="block text-xs text-muted-foreground">{detail}</span>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {canContinue ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={async () => {
+                              setDismissedJobId(latestJob.id);
+                              setLastProgress(null);
+                              setMode("build");
+                              modeRef.current = "build";
+                              requestKeyRef.current = crypto.randomUUID();
+                              await sendMessage({ text: "Continue exactly where you stopped. Do not repeat finished work, and finish the remaining steps." });
+                            }}
+                          >
+                            Continue
+                          </Button>
+                        ) : null}
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedJobId(latestJob.id)}>
+                          Hide
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {lastProgress && lastProgress.status !== "finished" && !isBusy && !latestJob?.outcome && messages.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setInput(nextBuildPrompt);
-                    setNextBuildPrompt(null);
-                    inputRef.current?.focus();
+                  onClick={async () => {
+                    setLastProgress(null);
+                    setMode("build");
+                    modeRef.current = "build";
+                    requestKeyRef.current = crypto.randomUUID();
+                    await sendMessage({
+                      text:
+                        lastProgress.status === "failed"
+                          ? `The last job failed${lastProgress.error ? ` with: ${lastProgress.error}` : ""}. Fix it and finish the work from where it stopped.`
+                          : "Continue where you left off and finish the unfinished work.",
+                    });
                   }}
-                  className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left text-sm text-primary hover:bg-primary/10 transition-colors"
+                  className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-left text-sm text-primary hover:bg-primary/10"
                 >
-                  <span className="block text-[10px] uppercase text-muted-foreground mb-1">Continue building</span>
-                  {nextBuildPrompt}
+                  <span className="block text-[10px] uppercase text-muted-foreground mb-1">
+                    {lastProgress.status === "failed" ? "Last job stopped with an error" : "Unfinished work"}
+                  </span>
+                  Continue where you left off{lastProgress.lastRequest ? ` — "${lastProgress.lastRequest.slice(0, 80)}"` : ""}
                 </button>
               ) : null}
+              {nextBuildPrompts.length > 0 && !isBusy ? (
+                <div className="flex flex-wrap gap-2">
+                  {nextBuildPrompts.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => {
+                        setInput(chip);
+                        setNextBuildPrompts([]);
+                        inputRef.current?.focus();
+                      }}
+                      className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {(() => {
+                const last = [...messages].reverse().find((message) => message.role === "assistant");
+                const lastText = last?.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") ?? "";
+                if (isStreaming || !/approve this plan/i.test(lastText)) return null;
+                return (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className="flex-1 bg-gold-gradient text-primary-foreground"
+                      onClick={async () => {
+                        setMode("build");
+                        modeRef.current = "build";
+                        autoContinueRef.current = 0;
+                        requestKeyRef.current = crypto.randomUUID();
+                        await sendMessage({
+                          text: "I approve the plan above. Build it now, exactly as planned.",
+                        });
+                      }}
+                    >
+                      <HammerIcon className="h-4 w-4" /> Approve &amp; build
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setInput("Change the plan: ");
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      Change the plan
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
             </div>
             <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
-              {!isStreaming && (
+              {switchCountdown !== null ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
+                  <span>
+                    The model stopped mid-work. Switching to the next approved key… <strong className="tabular-nums">{switchCountdown}</strong>/5
+                  </span>
+                  <button type="button" className="font-medium underline" onClick={() => setSwitchCountdown(null)}>
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {isBusy && jobStartedAt ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5 text-[11px] text-primary tabular-nums" title="Time this job has been running">
+                    <Timer className="h-3 w-3" />
+                    {fmtElapsed(nowTick - jobStartedAt)}
+                  </span>
+                ) : null}
+                {liveNeurons ? (
+                  <NeuronLog><span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+                    ⚡ start {(liveNeurons.start / 1000).toFixed(1)}k · used {(liveNeurons.used / 1000).toFixed(1)}k · left {(Math.max(0, liveNeurons.cap - liveNeurons.start - liveNeurons.used) / 1000).toFixed(1)}k of {liveNeurons.cap / 1000}k
+                  </span></NeuronLog>
+                ) : null}
+                <NeuronsBar />
+                <ChatModelControls />
+                {activeModel ? (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
+                    title={isBusy ? "Model writing this reply" : "Model that wrote the last reply"}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${isBusy ? "bg-primary animate-pulse" : "bg-muted-foreground"}`} />
+                    {activeModel}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={toggleAutoSwitch}
+                  className={`rounded-full border px-2.5 py-0.5 text-[11px] ${autoSwitch ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
+                  title="When on, Forge switches to another model if one stops mid-work"
+                >
+                  Auto-switch: {autoSwitch ? "On" : "Off"}
+                </button>
+              </div>
+              {!isOnline && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  Offline — Code Haven keeps working on the server. You'll see where it is when you reconnect.
+                </div>
+              )}
+              {(isBusy || queue.length > 0 || queuePaused) && (
+                <div className="rounded-md hairline-gold bg-card/60 px-3 py-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      {queuePaused
+                        ? `Paused${queue.length ? ` · ${queue.length} waiting` : ""}`
+                        : queue.length
+                          ? `${queue.length} message${queue.length > 1 ? "s" : ""} lined up — sent when Forge is free`
+                          : "Type now; anything you send lines up behind this build"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQueuePaused((p) => !p)}
+                      className="inline-flex items-center gap-1.5 rounded-full hairline-gold px-2.5 py-1 text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0"
+                    >
+                      {queuePaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+                      {queuePaused ? "Resume" : "Pause"}
+                    </button>
+                  </div>
+                  {queue.map((item, index) => (
+                    <div key={item.id} className="flex items-start gap-2 rounded-md bg-background/50 px-2 py-1.5">
+                      <span className="text-[10px] text-muted-foreground mt-0.5">{index + 1}</span>
+                      <span className="flex-1 text-xs text-foreground/90 line-clamp-2">
+                        {item.text || `${item.attachments.length} attachment(s)`}
+                      </span>
+                      <button
+                        type="button"
+                        title="Edit this message"
+                        onClick={() => {
+                          setQueue((cur) => cur.filter((q) => q.id !== item.id));
+                          setInput(item.text);
+                          setAttachments(item.attachments);
+                          inputRef.current?.focus();
+                        }}
+                        className="text-[11px] text-muted-foreground hover:text-primary"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove from the queue"
+                        onClick={() => setQueue((cur) => cur.filter((q) => q.id !== item.id))}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
+                {([
+                  { key: "plan" as const, label: "Plan", icon: Lightbulb, hint: "Think, ask questions, propose a plan first" },
+                  { key: "build" as const, label: "Build", icon: HammerIcon, hint: "Build it straight away" },
+                  { key: "image" as const, label: "Image build", icon: ImageIcon, hint: "Use the selected OpenRouter image model" },
+                ]).map((option) => (
+                  <Button
+                    key={option.key}
+                    type="button"
+                    variant="ghost"
+                    aria-pressed={mode === option.key}
+                    title={option.hint}
+                    onClick={() => { setMode(option.key); modeRef.current = option.key; requestModeRef.current = null; }}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
+                      mode === option.key
+                        ? "bg-primary/15 text-primary border border-primary/40"
+                        : "hairline-gold text-muted-foreground hover:text-primary"
+                    }`}
+                  >
+                    <option.icon className="h-3 w-3" />
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              {!isStreaming && !remoteWorking && (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                   {[
                     { icon: Wand2, label: "Refine the design" },
@@ -1423,6 +2664,9 @@ function ProjectEditor() {
                   ))}
                 </div>
               )}
+              {showSkillMenu && (
+                <SkillMenu filter={slashMatch?.[1] ?? ""} onPick={pickSkill} />
+              )}
               <div className="flex gap-2 items-end">
                 <input
                   ref={fileInputRef}
@@ -1440,55 +2684,100 @@ function ProjectEditor() {
                   className="hidden"
                   onChange={(e) => { onPickFiles(e.target.files); e.target.value = ""; }}
                 />
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Button type="button" size="icon" variant="ghost" className="h-11 w-11 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
-                  <Camera className="h-4 w-4" />
-                </Button>
-                <Textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  // Opening the secure box the moment a key appears means zero
-                  // extra clicks — and the key never reaches the model.
-                  const pasted = detectPastedApiKey(next);
-                  if (pasted) {
-                    setPendingSecret(pasted);
-                    setInput(stripApiKey(next, pasted.value!));
-                    setTab("chat");
-                    return;
-                  }
-                  setInput(next);
-                  const intent = detectSecretIntent(next);
-                  if (intent && !pendingSecret) setPendingSecret(intent);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e as any);
-                  }
-                }}
+                <div className="w-full min-w-0 rounded-xl border border-input bg-transparent shadow-sm focus-within:ring-1 focus-within:ring-ring">
+                  <Textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      // Opening the secure box the moment a key appears means zero
+                      // extra clicks — and the key never reaches the model.
+                      const pasted = detectPastedApiKey(next);
+                      if (pasted) {
+                        setPendingSecret(pasted);
+                        setInput(stripApiKey(next, pasted.value!));
+                        setTab("chat");
+                        return;
+                      }
+                      setInput(next);
+                      const intent = detectSecretIntent(next);
+                      if (intent && !pendingSecret && !savedSecretKeys.includes(intent.key.toUpperCase())) {
+                        setPendingSecret(intent);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e as any);
+                      }
+                    }}
+                    placeholder={isBusy || queuePaused ? "Add the next instruction to the queue…" : "Ask Code Haven to build…"}
+                    disabled={!token}
+                    rows={2}
+                    className="resize-none w-full min-h-[64px] max-h-[30vh] border-0 bg-transparent shadow-none px-3 py-2.5 text-base leading-relaxed focus-visible:ring-0"
+                  />
+                  <div className="flex items-center gap-1 px-2 pb-2">
+                    <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0" onClick={() => fileInputRef.current?.click()} title="Attach image or video">
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0" onClick={() => cameraInputRef.current?.click()} title="Take photo or video">
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-10 w-10 shrink-0 font-mono text-base" onClick={() => setSkillMenuOpen((o) => !o)} title="Brain skills">
+                      /
+                    </Button>
+                    <div className="flex-1" />
+                    <ScrolltideTemplates projectId={projectId} disabled={isBusy || !token} initialQuery={scrolltideQuery} openRequested={scrolltideOpen} onBuild={async (draftId, title) => {
+                      scrolltideDraftRef.current = draftId;
+                      try { await deliverMessage(`Build the approved Scrolltide template: ${title}`, [], "build"); }
+                      finally { scrolltideDraftRef.current = null; }
+                    }} />
+                    {isBusy ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-10 w-10 shrink-0 rounded-xl border-destructive/50 text-destructive"
+                        title="Stop"
+                        aria-label="Stop"
+                        onClick={handleStop}
+                      >
+                        <Square className="h-4 w-4 fill-current" />
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
+                      disabled={(!input.trim() && attachments.length === 0) || !token || !isOnline}
+                      title={isBusy || queuePaused ? "Add to the queue" : "Send"}
+                    >
+                      {isBusy || queuePaused ? <ListPlus className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
 
-                placeholder="Ask Forge to build…"
-                disabled={!token}
-                rows={1}
-                className="resize-none min-h-[44px] max-h-32 text-base"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="h-11 w-11 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95 shadow-gold-glow rounded-xl"
-                  disabled={(!input.trim() && attachments.length === 0) || !token || isStreaming}
-                >
-                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
               </div>
             </form>
           </div>
         )}
 
+        {tab === "preview" && (
+          <SetupMatrix projectId={projectId} files={files} />
+        )}
+        {checkOpen && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-background">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-3">
+              <span className="text-base font-medium">Browser test</span>
+              <button onClick={() => void runTest("preview")} disabled={browserCheck?.status === "running"} className="rounded-full border border-border px-3 py-1.5 text-sm disabled:opacity-60">Test preview</button>
+              {published && slug && <button onClick={() => void runTest("published")} disabled={browserCheck?.status === "running"} className="rounded-full border border-border px-3 py-1.5 text-sm disabled:opacity-60">Test published site</button>}
+              <button onClick={() => setCheckOpen(false)} className="ml-auto rounded-full border border-border px-3 py-1.5 text-sm">Close</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} />
+            </div>
+          </div>
+        )}
         {tab === "preview" && (
           <PreviewFrame
             srcDoc={previewDoc}
@@ -1497,6 +2786,8 @@ function ProjectEditor() {
               await refreshFiles();
               setPreviewKey((k) => k + 1);
             }}
+            onTest={() => void runTest("preview")}
+            testing={browserCheck?.status === "running"}
             openInNewTab={
               published && slug
                 ? () => window.open(`/s/${slug}`, "_blank")
@@ -1505,6 +2796,8 @@ function ProjectEditor() {
           />
         )}
 
+        {tab === "assets" && <AssetsPanel projectId={projectId} />}
+        {tab === "brain" && <BrainPanel projectId={projectId} />}
         {tab === "history" && (
           <HistoryPanel
             projectId={projectId}
@@ -1517,14 +2810,22 @@ function ProjectEditor() {
         )}
 
         {tab === "code" && (
-          <div className="flex-1 min-h-0 flex flex-col">
-            <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-card/40 shrink-0">
-              {loadingFiles ? (
-                <span className="px-3 py-2 text-xs text-muted-foreground">Loading…</span>
-              ) : files.length === 0 ? (
-                <span className="px-3 py-2 text-xs text-muted-foreground">No files yet — ask Forge to create one</span>
-              ) : (
-                files.map((f) => (
+          <div
+            className="flex-1 min-h-0 flex flex-col"
+            onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+            onDrop={(e) => {
+              const f = Array.from(e.dataTransfer.files).find((x) => /\.zip$/i.test(x.name) || /zip/i.test(x.type)) ?? e.dataTransfer.files[0];
+              if (f) { e.preventDefault(); void importZip(f); }
+            }}
+          >
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 border-b border-border bg-card/40 shrink-0">
+              <div className="flex min-w-0 items-center overflow-x-auto">
+                {loadingFiles ? (
+                  <span className="truncate px-3 py-2 text-xs text-muted-foreground">Loading…</span>
+                ) : files.length === 0 ? (
+                  <span className="truncate px-3 py-2 text-xs text-muted-foreground">No files yet — ask Code Haven to create one</span>
+                ) : (
+                  files.map((f) => (
                   <button
                     key={f.id}
                     onClick={() => setActivePath(f.path)}
@@ -1541,13 +2842,43 @@ function ProjectEditor() {
                       className="h-3 w-3 ml-1 opacity-40 hover:opacity-100 hover:text-destructive"
                     />
                   </button>
-                ))
-              )}
-              <button onClick={createFile} className="px-3 py-2 text-xs text-primary shrink-0">
-                <FilePlus className="h-3.5 w-3.5" />
-              </button>
+                  ))
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1 pr-1">
+                <Button variant="ghost" size="icon" onClick={createFile} className="h-8 w-8 text-primary" title="Create file" aria-label="Create file">
+                  <FilePlus className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => zipInputRef.current?.click()}
+                  disabled={zipImporting}
+                  className="h-8 shrink-0 gap-1.5 px-2 text-primary"
+                  title="Import a .zip (or drop one here)"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {zipImporting ? "Importing…" : "Import .zip"}
+                </Button>
+                <Button variant="ghost" size="icon" onClick={exportZip} disabled={files.length === 0} className="h-8 w-8 text-primary" title="Download all code as .zip" aria-label="Download all code as .zip">
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={clearAllCode} disabled={files.length === 0} className="h-8 w-8 text-destructive" title="Delete all code" aria-label="Delete all code">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
             {activeFile ? (
+              lightEditor || activeFile.content.length > 150_000 ? (
+                <LightCodeEditor
+                  path={activeFile.path}
+                  value={activeFile.content}
+                  onSave={async (text) => {
+                    setFiles((fs) => fs.map((f) => (f.id === activeFile.id ? { ...f, content: text } : f)));
+                    await supabase.from("files").update({ content: text }).eq("id", activeFile.id);
+                  }}
+                />
+              ) : (
               <Editor
                 height="100%"
                 theme="vs-dark"
@@ -1562,6 +2893,21 @@ function ProjectEditor() {
                   wordWrap: "on",
                 }}
               />
+              )
+            ) : files.length === 0 ? (
+              <div className="flex h-full items-center justify-center p-5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => zipInputRef.current?.click()}
+                  disabled={zipImporting}
+                  className="min-h-40 w-full max-w-md flex-col gap-3 whitespace-normal border-dashed border-primary/50 bg-card/30 px-6 text-center hover:border-primary hover:bg-accent/20"
+                >
+                  {zipImporting ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <Upload className="h-8 w-8 text-primary" />}
+                  <span className="font-medium text-foreground">{zipImporting ? "Unpacking your project…" : "Upload or drop .zip"}</span>
+                  <span className="text-xs text-muted-foreground">Choose a project export such as trust-wallet-clone.zip</span>
+                </Button>
+              </div>
             ) : (
               <div className="h-full grid place-items-center text-sm text-muted-foreground p-6 text-center">
                 Select a file above to view or edit its code
@@ -1627,6 +2973,19 @@ function ProjectEditor() {
                 </div>
               </div>
             )}
+
+            <div className="space-y-1.5 border-t border-border pt-4">
+              <Label>Cloudflare Pages link</Label>
+              {cfPagesUrl && (
+                <a href={cfPagesUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 truncate text-xs text-primary hover:underline">
+                  {cfPagesUrl} <ExternalLink className="h-3 w-3 shrink-0" />
+                </a>
+              )}
+              <Button type="button" size="sm" variant="outline" disabled={cfDeploying} onClick={handleCfDeploy}>
+                {cfDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : cfPagesUrl ? "Redeploy to Cloudflare" : "Deploy to Cloudflare Pages"}
+              </Button>
+              <p className="text-xs text-muted-foreground">Puts your site on its own free .pages.dev address. First time can take a minute to appear.</p>
+            </div>
 
             <div className="border-t border-border pt-4">
               <DomainsPanel projectId={projectId} />

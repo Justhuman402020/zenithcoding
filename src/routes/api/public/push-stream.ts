@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
+import { githubFetch } from "@/lib/github-shared";
+// Every GitHub request in this file carries the required User-Agent.
+const fetch = githubFetch;
 
 type Evt =
   | { type: "log"; level: "info" | "warn" | "error" | "success"; message: string; meta?: unknown }
@@ -58,6 +61,9 @@ export const Route = createFileRoute("/api/public/push-stream")({
         });
         const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
         if (userErr || !userRes.user) return new Response("Unauthorized", { status: 401 });
+        const { isOwner } = await import("@/lib/owner-policy");
+        const { data: allowed } = await supabase.rpc("workspace_session_allowed");
+        if (!isOwner(userRes.user) || !allowed) return new Response("Not available", { status: 403 });
         const userId = userRes.user.id;
 
         const encoder = new TextEncoder();
@@ -91,8 +97,15 @@ export const Route = createFileRoute("/api/public/push-stream")({
                 .select("access_token")
                 .eq("user_id", userId)
                 .maybeSingle();
-              if (!tok) throw new Error("Connect GitHub first");
-              const ghToken = (tok as any).access_token as string;
+              let ghToken = (tok as any)?.access_token as string | undefined;
+              if (!ghToken) {
+                const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
+                if (isAdmin) {
+                  const { getIntegrationKey } = await import("@/lib/integration-keys.server");
+                  ghToken = (await getIntegrationKey("github", "token")) ?? undefined;
+                }
+              }
+              if (!ghToken) throw new Error("Connect GitHub first");
 
               log("info", "Loading project files…");
               const { data: filesRows, error: filesErr } = await supabase

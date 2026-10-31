@@ -9,38 +9,51 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TemplatesRouteImport } from './routes/templates'
-import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ForgeSdkDotjsRouteImport } from './routes/forge-sdk[.]js'
+import { Route as McpRouteImport } from './routes/mcp'
+import { Route as NotAvailableRouteImport } from './routes/not-available'
+import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as DotwellKnownOauthClientRouteImport } from './routes/[.]well-known.oauth-client'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
-import { Route as ShareTokenRouteImport } from './routes/share.$token'
+import { Route as AuthenticatedScrolltideRouteImport } from './routes/_authenticated/scrolltide'
+import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
-import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
-import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
-import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
-import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
-import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
-import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
+import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
-import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
-import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
-import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
-import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
+import { Route as AuthenticatedAdminBrainRouteImport } from './routes/_authenticated/admin.brain'
+import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
+import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
+import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
+import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats.index'
+import { Route as AuthenticatedChatsChatIdRouteImport } from './routes/_authenticated/chats.$chatId'
+import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
+import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
+import { Route as ApiPublicPushStreamRouteImport } from './routes/api/public/push-stream'
 import { Route as AuthenticatedPProjectIdSettingsRouteImport } from './routes/_authenticated/p.$projectId.settings'
-import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
-import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
+import { Route as AuthenticatedWorkProjectIdRunIdRouteImport } from './routes/_authenticated/work.$projectId.$runId'
+import { Route as ApiPublicAssetIdRouteImport } from './routes/api/public/asset.$id'
+import { Route as ApiPublicGithubCallbackRouteImport } from './routes/api/public/github.callback'
+import { Route as ApiPublicJobsResumeRouteImport } from './routes/api/public/jobs.resume'
+import { Route as ApiPublicPreviewTokenRouteImport } from './routes/api/public/preview.$token'
+import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/sites.data'
+import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
+import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
+import { Route as ApiPublicMcpScrolltideCallbackRouteImport } from './routes/api/public/mcp/scrolltide/callback'
 import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/sites.auth.me'
+import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
+import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
 
-const TemplatesRoute = TemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
-  id: '/forge-sdk.js',
-  path: '/forge-sdk.js',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -48,23 +61,50 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const ForgeSdkDotjsRoute = ForgeSdkDotjsRouteImport.update({
+  id: '/forge-sdk.js',
+  path: '/forge-sdk.js',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotAvailableRoute = NotAvailableRouteImport.update({
+  id: '/not-available',
+  path: '/not-available',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownOauthClientRoute = DotwellKnownOauthClientRouteImport.update({
+  id: '/.well-known/oauth-client',
+  path: '/.well-known/oauth-client',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const TransfersTokenRoute = TransfersTokenRouteImport.update({
-  id: '/transfers/$token',
-  path: '/transfers/$token',
-  getParentRoute: () => rootRouteImport,
+const AuthenticatedScrolltideRoute = AuthenticatedScrolltideRouteImport.update({
+  id: '/scrolltide',
+  path: '/scrolltide',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ShareTokenRoute = ShareTokenRouteImport.update({
-  id: '/share/$token',
-  path: '/share/$token',
+const LiveProjectIdRoute = LiveProjectIdRouteImport.update({
+  id: '/live/$projectId',
+  path: '/live/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SSlugRoute = SSlugRouteImport.update({
@@ -72,61 +112,96 @@ const SSlugRoute = SSlugRouteImport.update({
   path: '/s/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
-  id: '/admin/',
-  path: '/admin/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
-  id: '/api/public/push-stream',
-  path: '/api/public/push-stream',
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
-  id: '/api/public/chat',
-  path: '/api/public/chat',
+const TransfersTokenRoute = TransfersTokenRouteImport.update({
+  id: '/transfers/$token',
+  path: '/transfers/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
-  id: '/p/$projectId',
-  path: '/p/$projectId',
-  getParentRoute: () => AuthenticatedRouteRoute,
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
-  id: '/admin/users',
-  path: '/admin/users',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAdminModelsRoute =
-  AuthenticatedAdminModelsRouteImport.update({
-    id: '/admin/models',
-    path: '/admin/models',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedAccountBillingRoute =
   AuthenticatedAccountBillingRouteImport.update({
     id: '/account/billing',
     path: '/account/billing',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
-  id: '/api/public/stripe/webhook',
-  path: '/api/public/stripe/webhook',
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminBackendRoute =
+  AuthenticatedAdminBackendRouteImport.update({
+    id: '/admin/backend',
+    path: '/admin/backend',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminBrainRoute = AuthenticatedAdminBrainRouteImport.update({
+  id: '/admin/brain',
+  path: '/admin/brain',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminDomainsRoute =
+  AuthenticatedAdminDomainsRouteImport.update({
+    id: '/admin/domains',
+    path: '/admin/domains',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminIntegrationsRoute =
+  AuthenticatedAdminIntegrationsRouteImport.update({
+    id: '/admin/integrations',
+    path: '/admin/integrations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminModelsRoute =
+  AuthenticatedAdminModelsRouteImport.update({
+    id: '/admin/models',
+    path: '/admin/models',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/admin/settings',
+    path: '/admin/settings',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedChatsIndexRoute = AuthenticatedChatsIndexRouteImport.update({
+  id: '/chats/',
+  path: '/chats/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedChatsChatIdRoute =
+  AuthenticatedChatsChatIdRouteImport.update({
+    id: '/chats/$chatId',
+    path: '/chats/$chatId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
+  id: '/p/$projectId',
+  path: '/p/$projectId',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
+  id: '/api/public/chat',
+  path: '/api/public/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicSitesEnvRoute = ApiPublicSitesEnvRouteImport.update({
-  id: '/api/public/sites/env',
-  path: '/api/public/sites/env',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
-  id: '/api/public/sites/data',
-  path: '/api/public/sites/data',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
-  id: '/api/public/github/callback',
-  path: '/api/public/github/callback',
+const ApiPublicPushStreamRoute = ApiPublicPushStreamRouteImport.update({
+  id: '/api/public/push-stream',
+  path: '/api/public/push-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedPProjectIdSettingsRoute =
@@ -135,16 +210,51 @@ const AuthenticatedPProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedPProjectIdRoute,
   } as any)
-const ApiPublicSitesAuthSignupRoute =
-  ApiPublicSitesAuthSignupRouteImport.update({
-    id: '/api/public/sites/auth/signup',
-    path: '/api/public/sites/auth/signup',
-    getParentRoute: () => rootRouteImport,
+const AuthenticatedWorkProjectIdRunIdRoute =
+  AuthenticatedWorkProjectIdRunIdRouteImport.update({
+    id: '/work/$projectId/$runId',
+    path: '/work/$projectId/$runId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const ApiPublicSitesAuthSigninRoute =
-  ApiPublicSitesAuthSigninRouteImport.update({
-    id: '/api/public/sites/auth/signin',
-    path: '/api/public/sites/auth/signin',
+const ApiPublicAssetIdRoute = ApiPublicAssetIdRouteImport.update({
+  id: '/api/public/asset/$id',
+  path: '/api/public/asset/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicGithubCallbackRoute = ApiPublicGithubCallbackRouteImport.update({
+  id: '/api/public/github/callback',
+  path: '/api/public/github/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicJobsResumeRoute = ApiPublicJobsResumeRouteImport.update({
+  id: '/api/public/jobs/resume',
+  path: '/api/public/jobs/resume',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicPreviewTokenRoute = ApiPublicPreviewTokenRouteImport.update({
+  id: '/api/public/preview/$token',
+  path: '/api/public/preview/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicSitesDataRoute = ApiPublicSitesDataRouteImport.update({
+  id: '/api/public/sites/data',
+  path: '/api/public/sites/data',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicSitesEnvRoute = ApiPublicSitesEnvRouteImport.update({
+  id: '/api/public/sites/env',
+  path: '/api/public/sites/env',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
+  id: '/api/public/stripe/webhook',
+  path: '/api/public/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicMcpScrolltideCallbackRoute =
+  ApiPublicMcpScrolltideCallbackRouteImport.update({
+    id: '/api/public/mcp/scrolltide/callback',
+    path: '/api/public/mcp/scrolltide/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
@@ -152,27 +262,58 @@ const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
   path: '/api/public/sites/auth/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSitesAuthSigninRoute =
+  ApiPublicSitesAuthSigninRouteImport.update({
+    id: '/api/public/sites/auth/signin',
+    path: '/api/public/sites/auth/signin',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicSitesAuthSignupRoute =
+  ApiPublicSitesAuthSignupRouteImport.update({
+    id: '/api/public/sites/auth/signup',
+    path: '/api/public/sites/auth/signup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
+  '/mcp': typeof McpRoute
+  '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/scrolltide': typeof AuthenticatedScrolltideRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/backend': typeof AuthenticatedAdminBackendRoute
+  '/admin/brain': typeof AuthenticatedAdminBrainRoute
+  '/admin/domains': typeof AuthenticatedAdminDomainsRoute
+  '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/chats/': typeof AuthenticatedChatsIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/work/$projectId/$runId': typeof AuthenticatedWorkProjectIdRunIdRoute
+  '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
+  '/api/public/preview/$token': typeof ApiPublicPreviewTokenRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -180,23 +321,42 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
+  '/mcp': typeof McpRoute
+  '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/scrolltide': typeof AuthenticatedScrolltideRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/': typeof AuthenticatedIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/admin/backend': typeof AuthenticatedAdminBackendRoute
+  '/admin/brain': typeof AuthenticatedAdminBrainRoute
+  '/admin/domains': typeof AuthenticatedAdminDomainsRoute
+  '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
+  '/chats': typeof AuthenticatedChatsIndexRoute
   '/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/work/$projectId/$runId': typeof AuthenticatedWorkProjectIdRunIdRoute
+  '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
+  '/api/public/preview/$token': typeof ApiPublicPreviewTokenRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -206,23 +366,42 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/forge-sdk.js': typeof ForgeSdkDotjsRoute
+  '/mcp': typeof McpRoute
+  '/not-available': typeof NotAvailableRoute
   '/templates': typeof TemplatesRoute
+  '/.well-known/oauth-client': typeof DotwellKnownOauthClientRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/_authenticated/scrolltide': typeof AuthenticatedScrolltideRoute
+  '/live/$projectId': typeof LiveProjectIdRoute
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
+  '/_authenticated/admin/backend': typeof AuthenticatedAdminBackendRoute
+  '/_authenticated/admin/brain': typeof AuthenticatedAdminBrainRoute
+  '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
+  '/_authenticated/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/chats/$chatId': typeof AuthenticatedChatsChatIdRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRouteWithChildren
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/push-stream': typeof ApiPublicPushStreamRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/p/$projectId/settings': typeof AuthenticatedPProjectIdSettingsRoute
+  '/_authenticated/work/$projectId/$runId': typeof AuthenticatedWorkProjectIdRunIdRoute
+  '/api/public/asset/$id': typeof ApiPublicAssetIdRoute
   '/api/public/github/callback': typeof ApiPublicGithubCallbackRoute
+  '/api/public/jobs/resume': typeof ApiPublicJobsResumeRoute
+  '/api/public/preview/$token': typeof ApiPublicPreviewTokenRoute
   '/api/public/sites/data': typeof ApiPublicSitesDataRoute
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -233,22 +412,41 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/forge-sdk.js'
+    | '/mcp'
+    | '/not-available'
     | '/templates'
+    | '/.well-known/oauth-client'
+    | '/.well-known/oauth-protected-resource'
+    | '/scrolltide'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
+    | '/.lovable/oauth/consent'
     | '/account/billing'
+    | '/admin/backend'
+    | '/admin/brain'
+    | '/admin/domains'
+    | '/admin/integrations'
     | '/admin/models'
+    | '/admin/settings'
     | '/admin/users'
+    | '/chats/$chatId'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
     | '/admin/'
+    | '/chats/'
     | '/p/$projectId/settings'
+    | '/work/$projectId/$runId'
+    | '/api/public/asset/$id'
     | '/api/public/github/callback'
+    | '/api/public/jobs/resume'
+    | '/api/public/preview/$token'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
+    | '/api/public/mcp/scrolltide/callback'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -256,23 +454,42 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/forge-sdk.js'
+    | '/mcp'
+    | '/not-available'
     | '/templates'
+    | '/.well-known/oauth-client'
+    | '/.well-known/oauth-protected-resource'
+    | '/scrolltide'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/'
+    | '/.lovable/oauth/consent'
     | '/account/billing'
+    | '/admin/backend'
+    | '/admin/brain'
+    | '/admin/domains'
+    | '/admin/integrations'
     | '/admin/models'
+    | '/admin/settings'
     | '/admin/users'
+    | '/chats/$chatId'
     | '/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
     | '/admin'
+    | '/chats'
     | '/p/$projectId/settings'
+    | '/work/$projectId/$runId'
+    | '/api/public/asset/$id'
     | '/api/public/github/callback'
+    | '/api/public/jobs/resume'
+    | '/api/public/preview/$token'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
+    | '/api/public/mcp/scrolltide/callback'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -281,23 +498,42 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/forge-sdk.js'
+    | '/mcp'
+    | '/not-available'
     | '/templates'
+    | '/.well-known/oauth-client'
+    | '/.well-known/oauth-protected-resource'
+    | '/_authenticated/scrolltide'
+    | '/live/$projectId'
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
     | '/_authenticated/'
+    | '/.lovable/oauth/consent'
     | '/_authenticated/account/billing'
+    | '/_authenticated/admin/backend'
+    | '/_authenticated/admin/brain'
+    | '/_authenticated/admin/domains'
+    | '/_authenticated/admin/integrations'
     | '/_authenticated/admin/models'
+    | '/_authenticated/admin/settings'
     | '/_authenticated/admin/users'
+    | '/_authenticated/chats/$chatId'
     | '/_authenticated/p/$projectId'
     | '/api/public/chat'
     | '/api/public/push-stream'
     | '/_authenticated/admin/'
+    | '/_authenticated/chats/'
     | '/_authenticated/p/$projectId/settings'
+    | '/_authenticated/work/$projectId/$runId'
+    | '/api/public/asset/$id'
     | '/api/public/github/callback'
+    | '/api/public/jobs/resume'
+    | '/api/public/preview/$token'
     | '/api/public/sites/data'
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
+    | '/api/public/mcp/scrolltide/callback'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -307,16 +543,26 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ForgeSdkDotjsRoute: typeof ForgeSdkDotjsRoute
+  McpRoute: typeof McpRoute
+  NotAvailableRoute: typeof NotAvailableRoute
   TemplatesRoute: typeof TemplatesRoute
+  DotwellKnownOauthClientRoute: typeof DotwellKnownOauthClientRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  LiveProjectIdRoute: typeof LiveProjectIdRoute
   SSlugRoute: typeof SSlugRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
+  ApiPublicAssetIdRoute: typeof ApiPublicAssetIdRoute
   ApiPublicGithubCallbackRoute: typeof ApiPublicGithubCallbackRoute
+  ApiPublicJobsResumeRoute: typeof ApiPublicJobsResumeRoute
+  ApiPublicPreviewTokenRoute: typeof ApiPublicPreviewTokenRoute
   ApiPublicSitesDataRoute: typeof ApiPublicSitesDataRoute
   ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
+  ApiPublicMcpScrolltideCallbackRoute: typeof ApiPublicMcpScrolltideCallbackRoute
   ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
   ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
   ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
@@ -324,18 +570,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/templates': {
-      id: '/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof TemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forge-sdk.js': {
-      id: '/forge-sdk.js'
-      path: '/forge-sdk.js'
-      fullPath: '/forge-sdk.js'
-      preLoaderRoute: typeof ForgeSdkDotjsRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -345,11 +584,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+    '/forge-sdk.js': {
+      id: '/forge-sdk.js'
+      path: '/forge-sdk.js'
+      fullPath: '/forge-sdk.js'
+      preLoaderRoute: typeof ForgeSdkDotjsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/not-available': {
+      id: '/not-available'
+      path: '/not-available'
+      fullPath: '/not-available'
+      preLoaderRoute: typeof NotAvailableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-client': {
+      id: '/.well-known/oauth-client'
+      path: '/.well-known/oauth-client'
+      fullPath: '/.well-known/oauth-client'
+      preLoaderRoute: typeof DotwellKnownOauthClientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -359,18 +633,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/transfers/$token': {
-      id: '/transfers/$token'
-      path: '/transfers/$token'
-      fullPath: '/transfers/$token'
-      preLoaderRoute: typeof TransfersTokenRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/scrolltide': {
+      id: '/_authenticated/scrolltide'
+      path: '/scrolltide'
+      fullPath: '/scrolltide'
+      preLoaderRoute: typeof AuthenticatedScrolltideRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/share/$token': {
-      id: '/share/$token'
-      path: '/share/$token'
-      fullPath: '/share/$token'
-      preLoaderRoute: typeof ShareTokenRouteImport
+    '/live/$projectId': {
+      id: '/live/$projectId'
+      path: '/live/$projectId'
+      fullPath: '/live/$projectId'
+      preLoaderRoute: typeof LiveProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$slug': {
@@ -380,6 +654,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transfers/$token': {
+      id: '/transfers/$token'
+      path: '/transfers/$token'
+      fullPath: '/transfers/$token'
+      preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/account/billing': {
+      id: '/_authenticated/account/billing'
+      path: '/account/billing'
+      fullPath: '/account/billing'
+      preLoaderRoute: typeof AuthenticatedAccountBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/': {
       id: '/_authenticated/admin/'
       path: '/admin'
@@ -387,32 +689,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/push-stream': {
-      id: '/api/public/push-stream'
-      path: '/api/public/push-stream'
-      fullPath: '/api/public/push-stream'
-      preLoaderRoute: typeof ApiPublicPushStreamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/chat': {
-      id: '/api/public/chat'
-      path: '/api/public/chat'
-      fullPath: '/api/public/chat'
-      preLoaderRoute: typeof ApiPublicChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/p/$projectId': {
-      id: '/_authenticated/p/$projectId'
-      path: '/p/$projectId'
-      fullPath: '/p/$projectId'
-      preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
+    '/_authenticated/admin/backend': {
+      id: '/_authenticated/admin/backend'
+      path: '/admin/backend'
+      fullPath: '/admin/backend'
+      preLoaderRoute: typeof AuthenticatedAdminBackendRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/users': {
-      id: '/_authenticated/admin/users'
-      path: '/admin/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+    '/_authenticated/admin/brain': {
+      id: '/_authenticated/admin/brain'
+      path: '/admin/brain'
+      fullPath: '/admin/brain'
+      preLoaderRoute: typeof AuthenticatedAdminBrainRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/domains': {
+      id: '/_authenticated/admin/domains'
+      path: '/admin/domains'
+      fullPath: '/admin/domains'
+      preLoaderRoute: typeof AuthenticatedAdminDomainsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/integrations': {
+      id: '/_authenticated/admin/integrations'
+      path: '/admin/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AuthenticatedAdminIntegrationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/models': {
@@ -422,39 +724,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminModelsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/account/billing': {
-      id: '/_authenticated/account/billing'
-      path: '/account/billing'
-      fullPath: '/account/billing'
-      preLoaderRoute: typeof AuthenticatedAccountBillingRouteImport
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/stripe/webhook': {
-      id: '/api/public/stripe/webhook'
-      path: '/api/public/stripe/webhook'
-      fullPath: '/api/public/stripe/webhook'
-      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chats/': {
+      id: '/_authenticated/chats/'
+      path: '/chats'
+      fullPath: '/chats/'
+      preLoaderRoute: typeof AuthenticatedChatsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chats/$chatId': {
+      id: '/_authenticated/chats/$chatId'
+      path: '/chats/$chatId'
+      fullPath: '/chats/$chatId'
+      preLoaderRoute: typeof AuthenticatedChatsChatIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/p/$projectId': {
+      id: '/_authenticated/p/$projectId'
+      path: '/p/$projectId'
+      fullPath: '/p/$projectId'
+      preLoaderRoute: typeof AuthenticatedPProjectIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/chat': {
+      id: '/api/public/chat'
+      path: '/api/public/chat'
+      fullPath: '/api/public/chat'
+      preLoaderRoute: typeof ApiPublicChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/sites/env': {
-      id: '/api/public/sites/env'
-      path: '/api/public/sites/env'
-      fullPath: '/api/public/sites/env'
-      preLoaderRoute: typeof ApiPublicSitesEnvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/sites/data': {
-      id: '/api/public/sites/data'
-      path: '/api/public/sites/data'
-      fullPath: '/api/public/sites/data'
-      preLoaderRoute: typeof ApiPublicSitesDataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/github/callback': {
-      id: '/api/public/github/callback'
-      path: '/api/public/github/callback'
-      fullPath: '/api/public/github/callback'
-      preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
+    '/api/public/push-stream': {
+      id: '/api/public/push-stream'
+      path: '/api/public/push-stream'
+      fullPath: '/api/public/push-stream'
+      preLoaderRoute: typeof ApiPublicPushStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/p/$projectId/settings': {
@@ -464,11 +780,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPProjectIdSettingsRouteImport
       parentRoute: typeof AuthenticatedPProjectIdRoute
     }
-    '/api/public/sites/auth/signup': {
-      id: '/api/public/sites/auth/signup'
-      path: '/api/public/sites/auth/signup'
-      fullPath: '/api/public/sites/auth/signup'
-      preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
+    '/_authenticated/work/$projectId/$runId': {
+      id: '/_authenticated/work/$projectId/$runId'
+      path: '/work/$projectId/$runId'
+      fullPath: '/work/$projectId/$runId'
+      preLoaderRoute: typeof AuthenticatedWorkProjectIdRunIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/asset/$id': {
+      id: '/api/public/asset/$id'
+      path: '/api/public/asset/$id'
+      fullPath: '/api/public/asset/$id'
+      preLoaderRoute: typeof ApiPublicAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/github/callback': {
+      id: '/api/public/github/callback'
+      path: '/api/public/github/callback'
+      fullPath: '/api/public/github/callback'
+      preLoaderRoute: typeof ApiPublicGithubCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/jobs/resume': {
+      id: '/api/public/jobs/resume'
+      path: '/api/public/jobs/resume'
+      fullPath: '/api/public/jobs/resume'
+      preLoaderRoute: typeof ApiPublicJobsResumeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/preview/$token': {
+      id: '/api/public/preview/$token'
+      path: '/api/public/preview/$token'
+      fullPath: '/api/public/preview/$token'
+      preLoaderRoute: typeof ApiPublicPreviewTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/data': {
+      id: '/api/public/sites/data'
+      path: '/api/public/sites/data'
+      fullPath: '/api/public/sites/data'
+      preLoaderRoute: typeof ApiPublicSitesDataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/env': {
+      id: '/api/public/sites/env'
+      path: '/api/public/sites/env'
+      fullPath: '/api/public/sites/env'
+      preLoaderRoute: typeof ApiPublicSitesEnvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/stripe/webhook': {
+      id: '/api/public/stripe/webhook'
+      path: '/api/public/stripe/webhook'
+      fullPath: '/api/public/stripe/webhook'
+      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/mcp/scrolltide/callback': {
+      id: '/api/public/mcp/scrolltide/callback'
+      path: '/api/public/mcp/scrolltide/callback'
+      fullPath: '/api/public/mcp/scrolltide/callback'
+      preLoaderRoute: typeof ApiPublicMcpScrolltideCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/sites/auth/me': {
+      id: '/api/public/sites/auth/me'
+      path: '/api/public/sites/auth/me'
+      fullPath: '/api/public/sites/auth/me'
+      preLoaderRoute: typeof ApiPublicSitesAuthMeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/sites/auth/signin': {
@@ -478,11 +857,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSitesAuthSigninRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/sites/auth/me': {
-      id: '/api/public/sites/auth/me'
-      path: '/api/public/sites/auth/me'
-      fullPath: '/api/public/sites/auth/me'
-      preLoaderRoute: typeof ApiPublicSitesAuthMeRouteImport
+    '/api/public/sites/auth/signup': {
+      id: '/api/public/sites/auth/signup'
+      path: '/api/public/sites/auth/signup'
+      fullPath: '/api/public/sites/auth/signup'
+      preLoaderRoute: typeof ApiPublicSitesAuthSignupRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -503,21 +882,39 @@ const AuthenticatedPProjectIdRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedScrolltideRoute: typeof AuthenticatedScrolltideRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
+  AuthenticatedAdminBackendRoute: typeof AuthenticatedAdminBackendRoute
+  AuthenticatedAdminBrainRoute: typeof AuthenticatedAdminBrainRoute
+  AuthenticatedAdminDomainsRoute: typeof AuthenticatedAdminDomainsRoute
+  AuthenticatedAdminIntegrationsRoute: typeof AuthenticatedAdminIntegrationsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
+  AuthenticatedChatsChatIdRoute: typeof AuthenticatedChatsChatIdRoute
   AuthenticatedPProjectIdRoute: typeof AuthenticatedPProjectIdRouteWithChildren
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+  AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
+  AuthenticatedWorkProjectIdRunIdRoute: typeof AuthenticatedWorkProjectIdRunIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedScrolltideRoute: AuthenticatedScrolltideRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
+  AuthenticatedAdminBackendRoute: AuthenticatedAdminBackendRoute,
+  AuthenticatedAdminBrainRoute: AuthenticatedAdminBrainRoute,
+  AuthenticatedAdminDomainsRoute: AuthenticatedAdminDomainsRoute,
+  AuthenticatedAdminIntegrationsRoute: AuthenticatedAdminIntegrationsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
+  AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
+  AuthenticatedChatsChatIdRoute: AuthenticatedChatsChatIdRoute,
   AuthenticatedPProjectIdRoute: AuthenticatedPProjectIdRouteWithChildren,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+  AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
+  AuthenticatedWorkProjectIdRunIdRoute: AuthenticatedWorkProjectIdRunIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -527,16 +924,27 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ForgeSdkDotjsRoute: ForgeSdkDotjsRoute,
+  McpRoute: McpRoute,
+  NotAvailableRoute: NotAvailableRoute,
   TemplatesRoute: TemplatesRoute,
+  DotwellKnownOauthClientRoute: DotwellKnownOauthClientRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  LiveProjectIdRoute: LiveProjectIdRoute,
   SSlugRoute: SSlugRoute,
   ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
+  ApiPublicAssetIdRoute: ApiPublicAssetIdRoute,
   ApiPublicGithubCallbackRoute: ApiPublicGithubCallbackRoute,
+  ApiPublicJobsResumeRoute: ApiPublicJobsResumeRoute,
+  ApiPublicPreviewTokenRoute: ApiPublicPreviewTokenRoute,
   ApiPublicSitesDataRoute: ApiPublicSitesDataRoute,
   ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
+  ApiPublicMcpScrolltideCallbackRoute: ApiPublicMcpScrolltideCallbackRoute,
   ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
   ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
   ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,

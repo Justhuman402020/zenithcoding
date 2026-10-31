@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { uploadRows } from "@/lib/zip-upload";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -9,11 +10,14 @@ import {
   importGithubRepoAsProject,
   mirrorAllGithubRepos,
   disconnectGithub,
+  connectGithubWithToken,
   startGithubImport,
   fetchGithubBlobBatch,
 } from "@/lib/github.functions";
 import { getLovableImportedProjects, importLovableProject, deleteLovableImport } from "@/lib/lovable-import.functions";
 import { getMyRole } from "@/lib/admin-users.functions";
+import { applyPlatformBackend } from "@/lib/admin-supabase.functions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -22,11 +26,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Home, FolderKanban, ArrowUp, Github, Loader2, Check, Lock, Hammer, RefreshCw, CloudDownload, Heart, Unlink, ShieldCheck, Cpu, Database, ListChecks, PackageOpen, Library } from "lucide-react";
 
-import { X } from "lucide-react";
+import { X, MessageSquare } from "lucide-react";
+import { ThemePicker } from "@/components/ThemePicker";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
+import { StatusBadge } from "@/components/StatusBadge";
+import { BackendBadge } from "@/components/BackendBadge";
 
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
@@ -70,7 +77,7 @@ function ImportStatusPill({ active, label }: { active: boolean; label: string })
   );
 }
 
-function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
+function AdminNavItem({ onNavigate }: { onNavigate: (to?: string) => void }) {
   const fetchRole = useServerFn(getMyRole);
   const [isAdmin, setIsAdmin] = useState(false);
   const [ready, setReady] = useState(false);
@@ -83,7 +90,13 @@ function AdminNavItem({ onNavigate }: { onNavigate: () => void }) {
   }, []);
 
   if (!ready || !isAdmin) return null;
-  return <SidebarItem icon={ShieldCheck} label="Admin" onClick={onNavigate} />;
+  return (
+    <>
+      <SidebarItem icon={ShieldCheck} label="Admin" onClick={() => onNavigate()} />
+      <SidebarItem icon={Cpu} label="AI models" onClick={() => onNavigate("/admin/models")} />
+      <SidebarItem icon={Database} label="Backend" onClick={() => onNavigate("/admin/backend")} />
+    </>
+  );
 }
 
 function AdminBadge() {
@@ -108,6 +121,14 @@ function AdminBadge() {
     </Link>
   );
 }
+
+const STARTERS = [
+  "SaaS landing page", "Online store", "Creator portfolio", "Restaurant booking",
+  "Analytics dashboard", "Real-estate listings", "Event ticket page", "AI chat tool",
+  "Fitness coach site", "Travel planner", "News magazine", "Course platform",
+  "Crypto tracker", "Music artist page", "Beauty salon booking", "Law firm site",
+  "Job board", "Community directory", "Invoice generator", "Link-in-bio page",
+];
 
 function parseGithubRepoInput(raw: string) {
   let value = raw.trim();
@@ -147,7 +168,7 @@ type Project = {
 
 export const Route = createFileRoute("/_authenticated/")({
 
-  head: () => ({ meta: [{ title: "Forge — your projects" }] }),
+  head: () => ({ meta: [{ title: "Your projects — Code Haven" }, { name: "description", content: "Create, import, plan, and manage your Code Haven projects." }, { property: "og:title", content: "Your projects — Code Haven" }, { property: "og:description", content: "Create, import, plan, and manage your Code Haven projects." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
   component: Dashboard,
 });
 
@@ -175,6 +196,7 @@ function Dashboard() {
   const [ghConnecting, setGhConnecting] = useState(false);
   const [ghRepoError, setGhRepoError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const homeZipRef = useRef<HTMLInputElement>(null);
 
   const startGhAuth = useServerFn(getGithubAuthUrl);
   const fetchGhStatus = useServerFn(getGithubStatus);
@@ -184,10 +206,15 @@ function Dashboard() {
   const fetchGhBlobs = useServerFn(fetchGithubBlobBatch);
   const mirrorRepos = useServerFn(mirrorAllGithubRepos);
   const disconnectGh = useServerFn(disconnectGithub);
+  const connectGhPat = useServerFn(connectGithubWithToken);
+  const [ghPat, setGhPat] = useState("");
+  const [ghPatSaving, setGhPatSaving] = useState(false);
 
   const fetchLovableImports = useServerFn(getLovableImportedProjects);
   const doImportLovable = useServerFn(importLovableProject);
   const doDeleteLovableImport = useServerFn(deleteLovableImport);
+  const applyBackend = useServerFn(applyPlatformBackend);
+
 
   const [lovableImports, setLovableImports] = useState<Project[]>([]);
   const [lovableImportOpen, setLovableImportOpen] = useState(false);
@@ -413,7 +440,27 @@ function Dashboard() {
       window.location.assign(url);
     } catch (e: any) {
       setGhConnecting(false);
-      toast.error(e?.message || "Could not start GitHub auth");
+      setGhOpen(true);
+      toast.error(
+        (e?.message || "Could not start GitHub sign-in") +
+          " — you can paste a GitHub access token in the Import window instead.",
+      );
+    }
+  }
+
+  async function connectGithubPat(e: React.FormEvent) {
+    e.preventDefault();
+    if (ghPat.trim().length < 10) return;
+    setGhPatSaving(true);
+    try {
+      const res = await connectGhPat({ data: { token: ghPat.trim() } });
+      setGhPat("");
+      setGhConnected({ connected: true, login: res.login });
+      toast.success(`GitHub connected${res.login ? ` as ${res.login}` : ""}`);
+    } catch (err: any) {
+      toast.error(err?.message || "That token didn't work");
+    } finally {
+      setGhPatSaving(false);
     }
   }
 
@@ -461,13 +508,16 @@ function Dashboard() {
 </html>`,
     });
 
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
+
     setOpen(false);
     setNewName("");
     setNewDesc("");
     navigate({ to: "/p/$projectId", params: { projectId: data.id } });
+
   }
 
-  async function createFromPrompt(e: React.FormEvent) {
+  async function createFromPrompt(e: React.FormEvent, mode: "plan" | "build" = "build") {
     e.preventDefault();
     const text = prompt.trim();
     if (!text || creating) return;
@@ -487,8 +537,45 @@ function Dashboard() {
       path: "index.html",
       content: `<!doctype html><html><head><meta charset="utf-8"/><title>${name}</title></head><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0f0c1a;color:#e8e3f5"><p>Building…</p></body></html>`,
     });
+    await applyBackend({ data: { projectId: data.id } }).catch(() => {});
     setPrompt("");
-    navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: text } as any });
+
+    const openingPrompt = mode === "plan"
+      ? `PLAN ONLY. Create a complete build plan for this request with a checklist and estimated Neuron cost. Wait for my approval before changing files.\n\n${text}`
+      : text;
+    navigate({ to: "/p/$projectId", params: { projectId: data.id }, search: { prompt: openingPrompt } as any });
+  }
+
+  async function importHomeZip(file: File | undefined) {
+    if (!file) return;
+    setCreating(true);
+    const notice = toast.loading(`Opening ${file.name}…`);
+    try {
+      const { unpackZip } = await import("@/lib/zip-import");
+      const unpacked = await unpackZip(file);
+      if (!unpacked.files.length) throw new Error("No usable project files were found");
+      const { data: userRes } = await supabase.auth.getUser();
+      if (!userRes.user) throw new Error("Please sign in again");
+      const name = file.name.replace(/\.zip$/i, "").replace(/[-_]+/g, " ").slice(0, 60) || "Imported project";
+      const explanation = `Imported from ${file.name}. ${unpacked.files.length} files including ${unpacked.files.slice(0, 8).map((item) => item.path).join(", ")}.`;
+      const { data: project, error } = await supabase.from("projects").insert({ name, description: explanation, user_id: userRes.user.id }).select().single();
+      if (error) throw error;
+      const rows = unpacked.files.map((item) => ({ project_id: project.id, user_id: userRes.user!.id, path: item.path, content: item.content }));
+      await uploadRows(
+        rows,
+        (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),
+        (done, total) => toast.loading(`Uploading ${file.name} · ${done}/${total} files (${total ? Math.round((done / total) * 100) : 0}%)`, { id: notice }),
+      );
+      void supabase.from("project_brain_notes").upsert({ project_id: project.id, user_id: userRes.user.id, content: `Site explanation: ${explanation}`, updated_at: new Date().toISOString() });
+      void applyBackend({ data: { projectId: project.id } }).catch(() => {});
+      toast.success(`Imported ${unpacked.files.length} files · checking the preview for errors`, { id: notice });
+      navigate({ to: "/p/$projectId", params: { projectId: project.id }, search: { zipcheck: "1" } as any });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import that ZIP", { id: notice });
+    } finally {
+      setCreating(false);
+      if (homeZipRef.current) homeZipRef.current.value = "";
+    }
   }
 
   async function deleteProject(id: string) {
@@ -638,15 +725,21 @@ function Dashboard() {
             <SheetHeader className="px-4 pt-4 pb-2">
               <SheetTitle className="flex items-center gap-2.5 text-base font-display">
                 <ForgeMark className="h-7 w-7" glow />
-                <span className="text-gold text-xl">Forge</span>
+                <span className="text-gold text-xl">Code Haven</span>
               </SheetTitle>
             </SheetHeader>
             <nav className="px-2 py-2 space-y-0.5">
               <SidebarItem icon={Home} label="Home" active onClick={() => setSidebarOpen(false)} />
               <SidebarItem icon={FolderKanban} label="Projects" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
-              <AdminNavItem onNavigate={() => { setSidebarOpen(false); void navigate({ to: "/admin/users" }); }} />
+              <Link to="/chats" onClick={() => setSidebarOpen(false)} className="block w-full">
+                <SidebarItem icon={MessageSquare} label="Chat" />
+              </Link>
+              <AdminNavItem onNavigate={(to = "/admin/users") => { setSidebarOpen(false); void navigate({ to }); }} />
               <Link to="/templates" onClick={() => setSidebarOpen(false)} className="block w-full">
                 <SidebarItem icon={FolderKanban} label="Templates" />
+              </Link>
+              <Link to="/scrolltide" onClick={() => setSidebarOpen(false)} className="block w-full">
+                <SidebarItem icon={Library} label="Scrolltide" />
               </Link>
               <SidebarItem icon={Globe} label="Domains & publish" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
             </nav>
@@ -671,9 +764,10 @@ function Dashboard() {
         </Sheet>
         <div className="flex items-center gap-2 md:hidden">
           <ForgeMark className="h-6 w-6" />
-          <span className="font-display text-lg text-gold">Forge</span>
+          <span className="font-display text-lg text-gold">Code Haven</span>
         </div>
         <div className="flex items-center gap-1">
+          <ThemePicker />
           <AdminBadge />
           <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground hover:text-primary">
             <LogOut className="h-4 w-4" />
@@ -707,15 +801,16 @@ function Dashboard() {
       )}
 
       <section className="flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12 relative">
+        <input ref={homeZipRef} type="file" accept="*/*" className="hidden" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => void importHomeZip(event.target.files?.[0])} />
         <div className="hidden md:flex items-center gap-3 mb-8">
           <ForgeMark className="h-12 w-12" glow />
-          <span className="font-display text-3xl text-gold">Forge</span>
+          <span className="font-display text-3xl text-gold">Code Haven</span>
         </div>
         <p className="text-[10px] font-mono uppercase tracking-[0.32em] text-primary/60 mb-3">
-          Pure Gold · Private Atelier
+          Plan · Build · Publish
         </p>
         <h1 className="font-display text-4xl sm:text-6xl leading-[1.02] text-center mb-8 max-w-3xl">
-          What will you <em className="text-gold not-italic">forge</em> today?
+          What will you <em className="text-gold not-italic">build</em> today?
         </h1>
         <form onSubmit={createFromPrompt} className="w-full max-w-2xl">
           <div className="rounded-2xl hairline-gold bg-card/70 backdrop-blur-sm p-3 shadow-candlelight">
@@ -728,14 +823,23 @@ function Dashboard() {
               rows={2}
               className="resize-none border-0 bg-transparent focus-visible:ring-0 text-base min-h-[64px] p-2 placeholder:text-muted-foreground/70"
             />
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="grid w-full grid-cols-3 items-center gap-1 sm:flex sm:w-auto sm:flex-wrap">
+                <Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" disabled={!prompt.trim() || creating} onClick={(event) => void createFromPrompt(event as any, "plan")} title="Plan the work and estimate Neurons before building">
+                  <ListChecks className="h-4 w-4" /> Plan
+                </Button>
+                <Button type="submit" size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" disabled={!prompt.trim() || creating} title="Start building immediately">
+                  <Hammer className="h-4 w-4" /> Build
+                </Button>
                 <button
                   type="button"
                   onClick={() => setOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40"
                 >
                   <Plus className="h-4 w-4" /> Blank
+                </button>
+                <button type="button" onClick={() => homeZipRef.current?.click()} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-accent/40" title="Upload a project ZIP">
+                  <PackageOpen className="h-4 w-4" /> ZIP
                 </button>
                 <button
                   type="button"
@@ -744,6 +848,9 @@ function Dashboard() {
                 >
                   {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />} Import
                 </button>
+                <Button asChild type="button" size="sm" variant="ghost" className="h-8 justify-start gap-1.5 px-2.5 text-xs text-muted-foreground" title="Browse Scrolltide templates for a new or existing project">
+                  <Link to="/scrolltide" aria-label="Scrolltide templates"><Library className="h-4 w-4 shrink-0" />Scrolltide</Link>
+                </Button>
                 {ghConnected.connected && (
                   <button
                     type="button"
@@ -772,12 +879,7 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 mt-5 justify-center">
-            {[
-              "An editorial portfolio in gold and noir",
-              "A landing page for a luxury watch brand",
-              "A reservation page for a private restaurant",
-              "A boutique law firm site",
-            ].map((s) => (
+            {STARTERS.map((s) => (
               <button
                 key={s}
                 type="button"
@@ -1123,11 +1225,8 @@ function Dashboard() {
                 <Link to="/p/$projectId" params={{ projectId: p.id }} className="block">
                   <div className="flex items-center gap-2">
                     <h3 className="font-display text-xl truncate group-hover:text-gold transition-colors">{p.name}</h3>
-                    {p.published && p.slug && (
-                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium border border-primary/30">
-                        <Globe className="h-2.5 w-2.5" /> Live
-                      </span>
-                    )}
+                    <StatusBadge status={p.published && p.slug ? "published" : p.slug ? "pending" : "not_live"} />
+
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1.5 min-h-[2.5rem]">{p.description || "No description"}</p>
                   <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 mt-3">
@@ -1135,6 +1234,7 @@ function Dashboard() {
                   </p>
                 </Link>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <BackendBadge projectId={p.id} />
                   {p.published && p.slug ? (
                     <>
                       <a
@@ -1209,6 +1309,25 @@ function Dashboard() {
                 {ghConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
                 {ghConnecting ? "Opening GitHub…" : "Connect GitHub"}
               </Button>
+              <form onSubmit={connectGithubPat} className="space-y-2 rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Or connect with a GitHub access token. Make one at{" "}
+                  <a href="https://github.com/settings/tokens/new?scopes=repo,read:org,read:user&description=Code%20Haven" target="_blank" rel="noreferrer" className="underline">github.com/settings/tokens</a>{" "}
+                  and tick <b>repo</b> and <b>read:org</b>.
+                </p>
+                <Input
+                  type="password"
+                  value={ghPat}
+                  onChange={(e) => setGhPat(e.target.value)}
+                  placeholder="Paste token (ghp_… or github_pat_…)"
+                  disabled={ghPatSaving}
+                  autoComplete="off"
+                />
+                <Button type="submit" variant="secondary" disabled={ghPatSaving || ghPat.trim().length < 10} className="w-full gap-2">
+                  {ghPatSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+                  {ghPatSaving ? "Checking token…" : "Connect with token"}
+                </Button>
+              </form>
               <div className="relative my-2">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
                 <div className="relative flex justify-center text-[10px] uppercase tracking-wide"><span className="bg-background px-2 text-muted-foreground">or paste a public URL</span></div>

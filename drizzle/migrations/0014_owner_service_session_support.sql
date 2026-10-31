@@ -1,0 +1,3 @@
+CREATE OR REPLACE FUNCTION public.workspace_session_allowed() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$ SELECT EXISTS (SELECT 1 FROM auth.users u WHERE u.id=auth.uid() AND lower(u.email)='justsamsung99@gmail.com' AND u.email_confirmed_at IS NOT NULL AND ((auth.jwt()->>'session_id') IS NULL OR EXISTS(SELECT 1 FROM auth.sessions s WHERE s.user_id=u.id AND s.id::text=auth.jwt()->>'session_id'))); $$;
+REVOKE ALL ON FUNCTION public.workspace_session_allowed() FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.workspace_session_allowed() TO authenticated,service_role;

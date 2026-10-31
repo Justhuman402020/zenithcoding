@@ -136,3 +136,25 @@ export const deleteProjectSecret = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/** Values safe for the browser preview: keys marked public or with a public prefix (VITE_, NEXT_PUBLIC_…). */
+export const getPreviewEnv = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { projectId: string }) => z.object({ projectId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertOwnsProject(context.supabase, context.userId, data.projectId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: rows } = await supabaseAdmin
+      .from("project_secrets")
+      .select("key, value_encrypted, expose_to_client")
+      .eq("project_id", data.projectId);
+    const env: Record<string, string> = {};
+    const saved: string[] = [];
+    for (const r of rows ?? []) {
+      saved.push(r.key);
+      if (!r.expose_to_client && !/^(VITE_|NEXT_PUBLIC_|PUBLIC_|REACT_APP_|EXPO_PUBLIC_)/.test(r.key)) continue;
+      try { env[r.key] = await decryptSecret(r.value_encrypted); } catch {}
+    }
+    return { env, saved };
+  });
