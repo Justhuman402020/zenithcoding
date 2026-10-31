@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { uploadRows } from "@/lib/zip-upload";
 import { buildStoragePath } from "@/lib/publish-files";
 import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
 import { isScrolltideLookup } from "@/lib/runtime-mcp/scrolltide-policy";
@@ -677,7 +678,6 @@ function ProjectEditor() {
         await supabase.from("files").delete().eq("project_id", projectId).in("path", paths.slice(i, i + 100));
       }
       const rows = unpacked.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content }));
-      const { uploadRows } = await import("@/lib/zip-upload");
       await uploadRows(
         rows,
         (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),

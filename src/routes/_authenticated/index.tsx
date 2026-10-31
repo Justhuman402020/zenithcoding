@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { uploadRows } from "@/lib/zip-upload";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -560,7 +561,6 @@ function Dashboard() {
       const { data: project, error } = await supabase.from("projects").insert({ name, description: explanation, user_id: userRes.user.id }).select().single();
       if (error) throw error;
       const rows = unpacked.files.map((item) => ({ project_id: project.id, user_id: userRes.user!.id, path: item.path, content: item.content }));
-      const { uploadRows } = await import("@/lib/zip-upload");
       await uploadRows(
         rows,
         (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),
