@@ -66,7 +66,8 @@ export function createTrace(params: {
   let inFlight: Promise<void> = Promise.resolve();
 
   async function flush(): Promise<void> {
-    if (!persist || pending.length === 0) return;
+    if (!persist) return;
+    if (pending.length === 0) { await inFlight; return; }
     const batch = pending;
     pending = [];
     inFlight = inFlight.then(async () => {
@@ -90,7 +91,7 @@ export function createTrace(params: {
       duration_ms: options.durationMs ?? null,
     };
     const line = `[trace ${traceId}] ${phase} ${status}${options.durationMs != null ? ` ${options.durationMs}ms` : ""}`;
-    if (status === "error") console.error(line, options.message ?? "", row.detail);
+    if (status === "error") console.error(line, row.message ?? "", row.detail);
     else console.log(line, row.detail);
     pending.push(row);
     if (pending.length >= 10) void flush();
