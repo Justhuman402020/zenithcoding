@@ -1133,23 +1133,29 @@ function ProjectEditor() {
   const zipLatestRef = useRef({ autoBuild, previewError, isBusy, previewDoc, needsBuild });
   zipLatestRef.current = { autoBuild, previewError, isBusy, previewDoc, needsBuild };
   const zipWasBusyRef = useRef(false);
-  function startZipCheck() {
-    console.info("[zipcheck] start");
-    zipCheckRef.current = { rounds: 0, settleUntil: Date.now() + 1500 };
+  // Kept in this tab's session storage so the check survives the page re-mounting after an import.
+  const zipKey = `codehaven:zipcheck:${projectId}`;
+  function saveZipCheck(rounds: number | null) {
+    try { if (rounds == null) sessionStorage.removeItem(zipKey); else sessionStorage.setItem(zipKey, String(rounds)); } catch { /* private mode */ }
+  }
+  function startZipCheck(rounds = 0) {
+    zipCheckRef.current = { rounds, settleUntil: Date.now() + 1500 };
+    saveZipCheck(rounds);
     setTab("preview");
     setZipCheckSeq((n) => n + 1);
   }
-  const zipParamHandled = useRef(false);
   useEffect(() => {
-    if (zipParamHandled.current || !zipcheckParam) return;
-    zipParamHandled.current = true;
-    startZipCheck();
-    navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+    if (zipcheckParam) {
+      startZipCheck();
+      navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+      return;
+    }
+    let saved: string | null = null;
+    try { saved = sessionStorage.getItem(zipKey); } catch { /* private mode */ }
+    if (saved != null && !zipCheckRef.current) startZipCheck(Number(saved) || 0);
   }, [zipcheckParam, navigate, projectId]);
-  useEffect(() => { console.info("[zipcheck] mount"); return () => console.info("[zipcheck] unmount"); }, []);
   useEffect(() => {
     const check = zipCheckRef.current;
-    console.info("[zipcheck] eval", !!check, isBusy, autoBuild.status, files.length);
     if (!check) return;
     if (zipWasBusyRef.current && !isBusy) {
       check.settleUntil = Date.now() + ZIP_SETTLE_MS;
@@ -1171,15 +1177,18 @@ function ProjectEditor() {
       });
       if (decision.action === "pass") {
         zipCheckRef.current = null;
+        saveZipCheck(null);
         toast.success(current.rounds ? `ZIP fixed — no errors left after ${current.rounds} fix${current.rounds === 1 ? "" : "es"}` : "ZIP checked — no errors found", { id: "zip-check" });
         return;
       }
       if (decision.action === "stop") {
         zipCheckRef.current = null;
+        saveZipCheck(null);
         toast.error(decision.reason, { id: "zip-check", duration: 15000 });
         return;
       }
       current.rounds = decision.round;
+      saveZipCheck(decision.round);
       setPreviewError(null);
       toast.loading(`Error found — fixing it now with your build model (${decision.round}/3)`, { id: "zip-check" });
       void (async () => {
