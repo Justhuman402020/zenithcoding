@@ -18,6 +18,14 @@ export async function loadBrainZip(client: any, projectId: string, id: string) {
   return inspectBrainZip(new Uint8Array(await data.arrayBuffer()), row.name);
 }
 
+export async function copyReferenceFile(files: Array<{ path: string; content: string }>, path: string, destination: string, store: ProjectFileStore) {
+  const file = files.find(f => f.path === path);
+  if (!file) return { error: "File not found" };
+  if (referenceFileContent(path, file.content) !== file.content) return { error: "Credential files cannot be copied by the agent." };
+  if ((await store.list()).includes(destination)) return { error: "Destination exists. Read and edit the current file to preserve navigation; choose a new path for reference assets." };
+  return store.write(destination, file.content);
+}
+
 export function createBrainZipTools(client: any, projectId: string, store: ProjectFileStore, trace?: TraceLogger) {
   const cache = new Map<string, Awaited<ReturnType<typeof loadBrainZip>>>();
   const load = async (id: string) => {
@@ -42,11 +50,8 @@ export function createBrainZipTools(client: any, projectId: string, store: Proje
     description: "Copy original reference media/source into a NEW project path. Never overwrites current files or copies credentials. Adapt existing pages with normal editing tools to preserve navigation.",
     inputSchema: z.object({ referenceId: z.string().uuid(), path: z.string(), destination: z.string().regex(/^(?!\/)(?!.*\.\.)(?!.*\\)[\w./@ -]+$/) }),
     execute: async ({ referenceId, path, destination }) => {
-      const file = (await load(referenceId)).find(f => f.path === path);
-      if (!file) return { error: "File not found" };
-      if (referenceFileContent(path, file.content) !== file.content) return { error: "Credential files cannot be copied by the agent." };
-      if ((await store.list()).includes(destination)) return { error: "Destination exists. Read and edit the current file to preserve navigation; choose a new path for reference assets." };
-      const result = await store.write(destination, file.content);
+      const result = await copyReferenceFile(await load(referenceId), path, destination, store);
+      if (!("ok" in result)) return result;
       trace?.log("tool.copy_brain_zip_file", { status: result.ok ? "ok" : "error", detail: { path: destination, referenceId } });
       return result;
     },

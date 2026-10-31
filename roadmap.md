@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Add private project Brain ZIP references, agent read/copy access and navigation-preserving redesign; verify upload and persistence without inference.
+- [x] Add private project Brain ZIP references and agent read/copy access; signed-in upload/reload and project isolation verified with original files unchanged, temporary ZIP removed. Actual model redesign remains unverified (no inference run).
 
 - [ ] Fix Publish source/build path collision and verify Selene publishes with original source and moon images preserved.
 
