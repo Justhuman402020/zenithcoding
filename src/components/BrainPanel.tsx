@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { BrainZipReferences } from "./BrainZipReferences";
 
 const BUILT_IN_RULES = [
   "Act first: start reading or writing files right away instead of long explanations.",
@@ -60,6 +61,7 @@ export function BrainPanel({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
+      <BrainZipReferences projectId={projectId} />
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-foreground">Your rules</h2>
         <p className="text-xs text-muted-foreground">Write anything Code Haven should always remember for this project, one per line.</p>

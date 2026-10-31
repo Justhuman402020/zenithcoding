@@ -64,3 +64,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Subdirectories have their own AGENTS.md (e.g. src/lib/runtime-mcp/ for Scrolltide); read it before changing files there.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
 - Browser tests run on pool Cloudflare accounts via hashed short-lived preview tokens; test-found fixes use normal chat approval.
+- Project Brain ZIPs stay in private owner/project-scoped storage; agents read references on demand and copy only new files so saving a design cannot overwrite the site.

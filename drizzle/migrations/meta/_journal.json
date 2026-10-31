@@ -148,6 +148,20 @@
       "when": 1793353566768,
       "tag": "0020_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793426781638,
+      "tag": "0021_project_brain_zip_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793427076211,
+      "tag": "0022_qualify_brain_zip_storage_paths",
+      "breakpoints": true
     }
   ]
 }
