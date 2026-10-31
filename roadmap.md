@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Plan compact live work-log cards and reopenable Timeline/Changes details; implementation waits for approval.
+
 - [x] Add private project Brain ZIP references and agent read/copy access; signed-in upload/reload and project isolation verified with original files unchanged, temporary ZIP removed. Actual model redesign remains unverified (no inference run).
 
 - [ ] Fix Publish source/build path collision and verify Selene publishes with original source and moon images preserved.
