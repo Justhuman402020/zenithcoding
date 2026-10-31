@@ -9,10 +9,30 @@ import {
   type WorkStep,
   type FileEvidence,
 } from "./work-log";
-type Job = Pick<Database["public"]["Tables"]["chat_jobs"]["Row"], "id" | "prompt" | "status" | "progress" | "error" | "outcome" | "steps_done" | "files_changed" | "created_at" | "completed_at" | "trace_id">;
+type Job = Pick<
+  Database["public"]["Tables"]["chat_jobs"]["Row"],
+  | "id"
+  | "prompt"
+  | "status"
+  | "progress"
+  | "error"
+  | "outcome"
+  | "steps_done"
+  | "files_changed"
+  | "created_at"
+  | "completed_at"
+  | "trace_id"
+>;
 type Edit = Database["public"]["Tables"]["assistant_edit_requests"]["Row"];
 type SavedMessage = { content: string; parts?: { editId?: string; log?: string[] } };
-type Event = { phase: string; status: string; message: string | null; detail: { path?: string; change?: FileEvidence }; duration_ms: number | null; created_at: string };
+type Event = {
+  phase: string;
+  status: string;
+  message: string | null;
+  detail: { path?: string; change?: FileEvidence };
+  duration_ms: number | null;
+  created_at: string;
+};
 
 export const getWorkDetails = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -61,9 +81,22 @@ export const getWorkDetails = createServerFn({ method: "POST" })
     }
     if (kind === "m" || kind === "a") {
       if (kind === "a" && !data.chatId) throw new Error("Chat not available.");
-      const { data: row, error } = kind === "a"
-        ? await db.from("assistant_messages").select("content,parts").eq("id", id).eq("user_id", context.userId).eq("chat_id", data.chatId ?? "").maybeSingle()
-        : await db.from("chat_messages").select("content").eq("id", id).eq("user_id", context.userId).eq("project_id", data.projectId).maybeSingle();
+      const { data: row, error } =
+        kind === "a"
+          ? await db
+              .from("assistant_messages")
+              .select("content,parts")
+              .eq("id", id)
+              .eq("user_id", context.userId)
+              .eq("chat_id", data.chatId ?? "")
+              .maybeSingle()
+          : await db
+              .from("chat_messages")
+              .select("content")
+              .eq("id", id)
+              .eq("user_id", context.userId)
+              .eq("project_id", data.projectId)
+              .maybeSingle();
       if (error || !row) throw new Error("Work log not available.");
       message = row as SavedMessage;
     }
