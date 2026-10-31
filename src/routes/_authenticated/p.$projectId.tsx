@@ -1114,12 +1114,79 @@ function ProjectEditor() {
     return null;
   }, [messages]);
 
-  // Preview errors are never fixed automatically; the user taps "Fix this error".
+  // Preview errors are fixed automatically only right after a ZIP import (owner request); otherwise the user taps "Fix this error".
   const autoFixAttemptsRef = useRef<Map<string, number>>(new Map());
   const [fixSending, setFixSending] = useState(false);
   useEffect(() => {
     if (!isBusy) setFixSending(false);
   }, [isBusy]);
+
+  // ---- ZIP check: after an import, watch the preview; fix errors with the build model (max 3 rounds). ----
+  const zipCheckRef = useRef<{ rounds: number; settleUntil: number } | null>(null);
+  const [zipCheckSeq, setZipCheckSeq] = useState(0);
+  const zipLatestRef = useRef({ autoBuild, previewError, isBusy, previewDoc, needsBuild });
+  zipLatestRef.current = { autoBuild, previewError, isBusy, previewDoc, needsBuild };
+  const zipWasBusyRef = useRef(false);
+  function startZipCheck() {
+    zipCheckRef.current = { rounds: 0, settleUntil: Date.now() + 1500 };
+    setTab("preview");
+    setZipCheckSeq((n) => n + 1);
+  }
+  const zipParamHandled = useRef(false);
+  useEffect(() => {
+    if (zipParamHandled.current || !zipcheckParam) return;
+    zipParamHandled.current = true;
+    startZipCheck();
+    navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+  }, [zipcheckParam, navigate, projectId]);
+  useEffect(() => {
+    const check = zipCheckRef.current;
+    if (!check) return;
+    if (zipWasBusyRef.current && !isBusy) {
+      check.settleUntil = Date.now() + ZIP_SETTLE_MS;
+      setTab("preview");
+    }
+    zipWasBusyRef.current = isBusy;
+    if (isBusy || autoBuild.status === "building" || files.length === 0) return;
+    const hasError = autoBuild.status === "error" || !!previewError;
+    const delay = Math.max(check.settleUntil - Date.now(), hasError ? 1500 : ZIP_QUIET_MS);
+    const timer = window.setTimeout(() => {
+      const now = zipLatestRef.current;
+      const current = zipCheckRef.current;
+      if (!current || now.isBusy || now.autoBuild.status === "building") return;
+      if (now.needsBuild && now.previewDoc.includes("Building your site…")) return;
+      const decision = zipCheckDecision({
+        buildError: now.autoBuild.status === "error" ? String(now.autoBuild.error || "Unknown build error") : null,
+        previewError: now.previewError ? buildErrorReport(now.previewError) : null,
+        roundsUsed: current.rounds,
+      });
+      if (decision.action === "pass") {
+        zipCheckRef.current = null;
+        toast.success(current.rounds ? `ZIP fixed — no errors left after ${current.rounds} fix${current.rounds === 1 ? "" : "es"}` : "ZIP checked — no errors found", { id: "zip-check" });
+        return;
+      }
+      if (decision.action === "stop") {
+        zipCheckRef.current = null;
+        toast.error(decision.reason, { id: "zip-check", duration: 15000 });
+        return;
+      }
+      current.rounds = decision.round;
+      setPreviewError(null);
+      toast.loading(`Error found — fixing it now with your build model (${decision.round}/3)`, { id: "zip-check" });
+      void (async () => {
+        await takeFixSnapshot();
+        setMode("build");
+        modeRef.current = "build";
+        requestModeRef.current = "build";
+        requestImagesRef.current = false;
+        requestKeyRef.current = crypto.randomUUID();
+        zipAutoApproveRef.current = true;
+        setTab("chat");
+        await sendMessage({ text: zipFixPrompt(decision.report, decision.round) });
+      })();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [zipCheckSeq, isBusy, autoBuild.status, autoBuild.error, previewError, files.length, previewDoc]);
   const stopJobs = useStopServerFn(stopChatJobs);
   // Count 0 → 5, then continue the unfinished job on the next working model.
   useEffect(() => {
