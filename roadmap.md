@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Add private project Brain ZIP references, agent read/copy access and navigation-preserving redesign; verify upload and persistence without inference.
+
 - [ ] Fix Publish source/build path collision and verify Selene publishes with original source and moon images preserved.
 
 - [x] Fix blank Scrolltide previews using the real public poster images; verified Selene search preview and all 287 library items on phone/desktop, 20 tests passed, no paid instructions or builds.
