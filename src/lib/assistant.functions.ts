@@ -99,6 +99,11 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
     const { data: proj } = await ctx.supabase.from("projects").select("name,description").eq("id", projectId).eq("user_id", ctx.userId).maybeSingle();
     if (proj) {
       parts.push(`Selected project: ${proj.name}${proj.description ? ` — ${proj.description}` : ""}`);
+      const { listBrainZips } = await import("./brain-zip.server");
+      const { brainZipContext } = await import("./brain-zip");
+      const references = await listBrainZips(ctx.supabase, projectId);
+      parts.push(brainZipContext(references));
+      if (references.length) parts.push("You cannot call reference tools yourself. Include the requested ZIP name and referenceId in the <edit> instruction so the approved coding agent reads it. Preserve existing navigation and functionality during a redesign.");
       const { data: files } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).order("path");
       const list = files ?? [];
       parts.push(`Files (${list.length}): ${list.map((f: any) => f.path).join(", ")}`);

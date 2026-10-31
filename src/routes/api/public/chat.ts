@@ -539,8 +539,14 @@ export const Route = createFileRoute("/api/public/chat")({
         const store = createSupabaseFileStore(supabase, projectId, userId);
         const { createIntegrationTools } = await import("@/lib/integration-tools.server");
         const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
+        const { createBrainZipTools, listBrainZips } = await import("@/lib/brain-zip.server");
+        const { brainZipContext } = await import("@/lib/brain-zip");
+        const brainZipTools = createBrainZipTools(supabase, projectId, store, trace);
+        const brainReferences = await listBrainZips(supabase, projectId);
         const allTools = {
           ...createProjectFileTools(store, trace),
+          ...brainZipTools.readTools,
+          copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
           ...((/models\.github\.ai/i.test(pick.baseURL) ? {} : integrationTools) as typeof integrationTools),
         };
@@ -550,6 +556,7 @@ export const Route = createFileRoute("/api/public/chat")({
               list_files: allTools.list_files,
               read_file: allTools.read_file,
               list_secrets: allTools.list_secrets,
+              ...brainZipTools.readTools,
               web_search: integrationTools.web_search,
               search_images: integrationTools.search_images,
             } as typeof allTools)
@@ -771,7 +778,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const skillContext = activeSkillSection(lastUserText, await loadBrainNotes());
         const systemPrompt =
           (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext + skillContext;
+          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext + skillContext + brainZipContext(brainReferences);
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];
