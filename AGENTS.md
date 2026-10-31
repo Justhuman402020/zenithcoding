@@ -64,6 +64,6 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Scrolltide OAuth uses exact project-owned return hosts and origin-bound client registrations; renew registration when the origin changes, preserve account tokens, and provide a sign-in link when popups are blocked.
 - Scrolltide browsing reads public shelf summaries when MCP has no pagination; authenticated MCP handles search/retrieval, keeping full-library scrolling separate from paid prompts and approved builds.
 - Lazy-load Scrolltide previews separately from paid instructions.
-- Retain ZIP data URLs and runtime assets for preview/publish.
+- Retain ZIP media; namespace builds under .code-haven-build/ and unwrap in publish readers to prevent source collisions.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
 - Browser tests run on pool Cloudflare accounts via hashed short-lived preview tokens; test-found fixes use normal chat approval.
