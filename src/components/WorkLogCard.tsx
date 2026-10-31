@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { CheckCircle2, Clock, ListChecks, Loader2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseWorkLog, workedFor, rememberChatScroll } from "@/lib/work-log";
-export { parseWorkLog, workedFor } from "@/lib/work-log";
 
 export function WorkLogCard({ log = "", title, checks, projectId, runId, chatId, running = false, progress, stepCount, fileCount }: {
   log?: string; title: string; checks?: ReactNode; projectId: string; runId: string; chatId?: string; running?: boolean; progress?: string; stepCount?: number; fileCount?: number;

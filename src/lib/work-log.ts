@@ -6,6 +6,8 @@ export type FileEvidence = { path: string; kind: "added" | "edited" | "deleted";
 export function safeLogText(text: string): string {
   return redactSecrets(text)
     .replace(/(Bearer\s+)[^\s"']+/gi, "$1[hidden]")
+    .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, "[hidden]")
+    .replace(/((?:[\w.-]*(?:password|secret|token|api[_-]?key)[\w.-]*)\s*=\s*)([^\s"'`;]+)/gi, "$1[hidden]")
     .replace(/((?:[\w.-]*(?:password|secret|token|api[_-]?key)[\w.-]*)["']?\s*[:=]\s*)(["'])(.*?)\2/gi, "$1$2[hidden]$2")
     .replace(/-----BEGIN [\w ]*PRIVATE KEY-----[\s\S]*?-----END [\w ]*PRIVATE KEY-----/g, "[hidden private key]");
 }

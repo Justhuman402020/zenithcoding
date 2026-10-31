@@ -30,6 +30,10 @@ export const getWorkDetails = createServerFn({ method: "POST" }).middleware([req
       if (error || !row) throw new Error("Work log not available.");
       message = row;
     }
+    if (kind === "a" && message?.parts?.editId) {
+      const { data: row } = await db.from("assistant_edit_requests").select("*").eq("id", message.parts.editId).eq("project_id", data.projectId).eq("chat_id", data.chatId).eq("user_id", context.userId).maybeSingle();
+      edit = row;
+    }
     const linkedId = message?.content?.match(/<!-- run:([\w-]+) -->/)?.[1];
     if (kind === "j" || kind === "k" || edit?.request_key || linkedId) {
       let q = db.from("chat_jobs").select("id,prompt,status,progress,error,outcome,steps_done,files_changed,created_at,completed_at,trace_id").eq("project_id", data.projectId).eq("user_id", context.userId);
@@ -51,5 +55,5 @@ export const getWorkDetails = createServerFn({ method: "POST" }).middleware([req
     }));
     const changes = events.filter(t => t.phase === "file.change" && t.detail?.change).map(t => sanitizeDetail(t.detail.change) as FileEvidence);
     const files = [...new Set<string>([...legacy.files, ...changes.map(c => c.path)])];
-    return { title: safeLogText(job?.prompt ?? edit?.prompt ?? "Work log"), status: job?.status ?? edit?.status ?? "completed", progress: safeLogText(job?.progress ?? ""), error: safeLogText(job?.error ?? ""), startedAt: job?.created_at ?? edit?.created_at ?? message?.created_at ?? null, completedAt: job?.completed_at ?? null, steps: steps.length ? steps : legacy.steps, changes, files, stepCount: job?.steps_done ?? steps.length, fileCount: job?.files_changed ?? files.length };
+    return { title: safeLogText(job?.prompt ?? edit?.prompt ?? "Work log"), status: String(job?.status ?? edit?.status ?? (kind === "k" ? "queued" : "completed")), progress: safeLogText(job?.progress ?? ""), error: safeLogText(job?.error ?? ""), startedAt: job?.created_at ?? edit?.created_at ?? null, completedAt: job?.completed_at ?? null, steps: steps.length ? steps : legacy.steps, changes, files, stepCount: Number(job?.steps_done ?? steps.length), fileCount: Number(job?.files_changed ?? files.length) };
   });

@@ -23,7 +23,7 @@ function WorkDetails() {
   const { data } = useSuspenseQuery(workQuery(projectId, runId, chatId));
   const [tab, setTab] = useState<"timeline" | "changes">("timeline");
   const running = ["running", "queued"].includes(data.status);
-  const elapsed = data.startedAt ? durationLabel((data.completedAt ? Date.parse(data.completedAt) : Date.now()) - Date.parse(data.startedAt)) : workedFor(data.steps);
+  const elapsed = data.startedAt && (data.completedAt || running) ? durationLabel((data.completedAt ? Date.parse(data.completedAt) : Date.now()) - Date.parse(data.startedAt)) : workedFor(data.steps);
   return <div className="flex h-[100dvh] flex-col bg-background text-foreground">
     <header className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-3">
       <Button asChild size="icon" variant="outline" title="Back to chat"><Link to={chatId ? "/chats/$chatId" : "/p/$projectId"} params={chatId ? { chatId } : { projectId }} resetScroll={false} aria-label="Back to chat"><ArrowLeft /></Link></Button>
