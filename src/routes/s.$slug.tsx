@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
+import { publishedFilePath } from "@/lib/publish-files";
 
 function normalizeAssetPath(path: string): string {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
@@ -55,7 +56,7 @@ export const Route = createFileRoute("/s/$slug")({
         const rows = ((files ?? []) as unknown) as Array<{ path: string; content: string; kind?: string }>;
         const built = rows.filter((r) => (r as any).kind === "build");
         const source = rows.filter((r) => (r as any).kind !== "build");
-        const serving = built.length > 0 ? built : source;
+        const serving = (built.length > 0 ? built : source).map((file) => ({ ...file, path: publishedFilePath(file) }));
         const map = new Map(serving.map((f) => [normalizeAssetPath(f.path), f.content]));
         const requestedPage = resolveProjectPath(new URL(request.url).searchParams.get("page") ?? "index.html");
         const currentPath = map.has(requestedPage) ? requestedPage : "index.html";

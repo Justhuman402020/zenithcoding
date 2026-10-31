@@ -1,4 +1,5 @@
 // Shared HTML rendering used by both /s/$slug (published) and /share/$token (preview).
+import { publishedFilePath } from "./publish-files";
 
 function normalizeAssetPath(path: string): string {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
@@ -59,7 +60,8 @@ export async function renderProjectHtml(opts: RenderOptions): Promise<Response> 
   const rows = ((files ?? []) as unknown) as Array<{ path: string; content: string; kind?: string }>;
   const built = rows.filter((r) => r.kind === "build");
   const source = rows.filter((r) => r.kind !== "build");
-  const serving = opts.preferBuilt !== false && built.length > 0 ? built : source;
+  const serving = (opts.preferBuilt !== false && built.length > 0 ? built : source)
+    .map((file) => ({ ...file, path: publishedFilePath(file) }));
   const map = new Map(serving.map((f) => [normalizeAssetPath(f.path), f.content]));
   const requestedPage = resolveProjectPath(new URL(opts.requestUrl).searchParams.get("page") ?? "index.html");
   const currentPath = map.has(requestedPage) ? requestedPage : "index.html";

@@ -3,6 +3,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { publishedFilePath } from "./publish-files";
 
 const CF = "https://api.cloudflare.com/client/v4";
 
@@ -66,7 +67,7 @@ export const deployToCloudflarePages = createServerFn({ method: "POST" })
       .eq("project_id", data.projectId);
     const all = (rows ?? []) as any[];
     const built = all.filter((f) => f.kind === "build");
-    const files = (built.length ? built : all.filter((f) => f.kind !== "build")).filter(
+    const files = (built.length ? built : all.filter((f) => f.kind !== "build")).map((file) => ({ ...file, path: publishedFilePath(file) })).filter(
       (f) => typeof f.content === "string" && f.path,
     );
     if (!files.some((f) => f.path.replace(/^\/+/, "") === "index.html"))
