@@ -4,6 +4,7 @@
 // can be diagnosed in production without reproducing it locally.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { safeLogText, sanitizeDetail } from "./work-log";
 
 export type TraceStatus = "ok" | "error" | "warn";
 
@@ -84,8 +85,8 @@ export function createTrace(params: {
       seq: seq++,
       phase,
       status,
-      message: options.message ?? null,
-      detail: trim(options.detail),
+      message: options.message ? safeLogText(options.message) : null,
+      detail: (phase === "file.change" ? sanitizeDetail(options.detail ?? {}) : sanitizeDetail(trim(options.detail))) as Record<string, unknown>,
       duration_ms: options.durationMs ?? null,
     };
     const line = `[trace ${traceId}] ${phase} ${status}${options.durationMs != null ? ` ${options.durationMs}ms` : ""}`;
