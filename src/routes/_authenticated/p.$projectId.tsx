@@ -82,7 +82,7 @@ import {
 import Editor from "@monaco-editor/react";
 import { LightCodeEditor } from "@/components/LightCodeEditor";
 import ReactMarkdown from "react-markdown";
-import { stripLeakedToolJson, summarizeToolInput } from "@/lib/chat-sanitize";
+import { stripLeakedToolJson } from "@/lib/chat-sanitize";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
@@ -413,7 +413,6 @@ function ProjectEditor() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
-  const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompts, setNextBuildPrompts] = useState<string[]>([]);
@@ -463,7 +462,6 @@ function ProjectEditor() {
   const failedKeyRef = useRef<number | null>(null);
   const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
-  const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1361,14 +1359,6 @@ function ProjectEditor() {
       if (activeJob) sawActiveJob = true;
       // Only announce remote work when this device is not the one streaming.
       setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
-      if (activeJob && !isStreaming) {
-        const { data: prog } = await supabase.from("projects").select("agent_progress").eq("id", projectId).maybeSingle();
-        const files = ((prog as any)?.agent_progress?.filesChanged as string[] | undefined) ?? [];
-
-      } else if (!activeJob) {
-
-      }
-
       if (!activeJob && sawActiveJob) {
         sawActiveJob = false;
         knownMessageCount = await reloadSavedChat();
@@ -1474,36 +1464,7 @@ function ProjectEditor() {
   }, [messages, isStreaming, initialMessages]);
 
 
-  // Track how long the AI spent "thinking" per assistant message, so we can
-  // show "Thought for Xs" once it finishes.
-  useEffect(() => {
-    const updates: Record<string, number> = {};
-    const lastId = messages[messages.length - 1]?.id;
-    for (const m of messages) {
-      if (m.role !== "assistant") continue;
-      const hasReasoning = m.parts.some((p) => p.type === "reasoning");
-      if (!hasReasoning) continue;
-      if (!thinkingStartRef.current[m.id]) {
-        thinkingStartRef.current[m.id] = Date.now();
-      }
-      const done =
-        !isStreaming ||
-        m.id !== lastId ||
-        m.parts.some((p) => p.type === "text" && (p as any).text?.trim());
-      if (done) {
-        updates[m.id] = Math.max(1, Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000));
-      }
-    }
-    if (Object.keys(updates).length === 0) return;
-    // One batched update, and only for ids not recorded yet — never a loop.
-    setThinkingDurations((cur) => {
-      const missing = Object.keys(updates).filter((id) => cur[id] === undefined);
-      if (missing.length === 0) return cur;
-      const next = { ...cur };
-      for (const id of missing) next[id] = updates[id];
-      return next;
-    });
-  }, [messages, isStreaming]);
+
 
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);

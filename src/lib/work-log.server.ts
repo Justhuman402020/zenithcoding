@@ -9,7 +9,8 @@ export function withWorkEvidence(store: ProjectFileStore, trace: TraceLogger): P
     await trace.flush();
   }
   return {
-    list: store.list, read: store.read,
+    list: store.list,
+    read: store.read,
     async write(path, content) {
       const old = await store.read(path);
       const before = old.content ?? (old.error === "not found" ? null : undefined);
