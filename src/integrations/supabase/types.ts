@@ -1118,6 +1118,47 @@ export type Database = {
           },
         ]
       }
+      project_brain_zips: {
+        Row: {
+          byte_size: number
+          created_at: string
+          id: string
+          manifest: Json
+          name: string
+          project_id: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          byte_size: number
+          created_at?: string
+          id?: string
+          manifest?: Json
+          name: string
+          project_id: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          byte_size?: number
+          created_at?: string
+          id?: string
+          manifest?: Json
+          name?: string
+          project_id?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_brain_zips_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_domains: {
         Row: {
           created_at: string
