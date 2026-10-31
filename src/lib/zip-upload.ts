@@ -44,7 +44,9 @@ export async function uploadRows(
     let lastError = "";
     for (let attempt = 1; attempt <= tries; attempt++) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      // Bigger pieces get more time on slow phone networks (about 10 KB/s minimum).
+      const bytes = batch.reduce((n, r) => n + r.content.length, 0);
+      const timer = setTimeout(() => controller.abort(), timeoutMs + Math.ceil(bytes / 10));
       try {
         const { error } = await insert(batch, controller.signal);
         if (!error) { lastError = ""; break; }
