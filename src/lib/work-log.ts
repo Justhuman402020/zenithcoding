@@ -1,7 +1,7 @@
 import { createTwoFilesPatch } from "diff";
 import { redactSecrets } from "./browser-check-policy";
 
-export type WorkStep = { time: string; text: string; status?: string; detail?: Record<string, unknown>; durationMs?: number | null };
+export type WorkStep = { time: string; text: string; status?: string; detail?: string; durationMs?: number | null };
 export type FileEvidence = { path: string; kind: "added" | "edited" | "deleted"; patch?: string; unavailable?: string };
 export function safeLogText(text: string): string {
   return redactSecrets(text)

@@ -47,7 +47,7 @@ export const getWorkDetails = createServerFn({ method: "POST" }).middleware([req
     const legacy = parseWorkLog(message?.content?.split("\n\n<!-- worklog -->\n")[1] ?? (message?.parts?.log ?? edit?.report?.log ?? []).join("\n"));
     const steps: WorkStep[] = events.filter(t => t.phase !== "file.change" && !/^(request\.|credits\.|project\.|snapshot\.)/.test(t.phase)).map(t => ({
       time: String(t.created_at).slice(11, 19), text: safeLogText(t.phase === "work.progress" ? t.message ?? "Working" : `${t.phase.replace(/^tool\./, "").replace(/[._]/g, " ")}${t.detail?.path ? ` · ${t.detail.path}` : ""}${t.message ? ` — ${t.message}` : ""}`),
-      status: t.status, durationMs: t.duration_ms, detail: sanitizeDetail(t.detail) as Record<string, unknown>,
+      status: String(t.status), durationMs: t.duration_ms == null ? null : Number(t.duration_ms), detail: JSON.stringify(sanitizeDetail(t.detail)),
     }));
     const changes = events.filter(t => t.phase === "file.change" && t.detail?.change).map(t => sanitizeDetail(t.detail.change) as FileEvidence);
     const files = [...new Set<string>([...legacy.files, ...changes.map(c => c.path)])];
