@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { buildStoragePath } from "@/lib/publish-files";
 import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
 import { isScrolltideLookup } from "@/lib/runtime-mcp/scrolltide-policy";
 import { editorRequestChoice, type EditorBuildMode } from "@/lib/image-delivery";
@@ -1690,23 +1691,25 @@ function ProjectEditor() {
     setPublishing(true);
     try {
       // Wipe old built artifacts.
-      await supabase.from("files").delete().eq("project_id", projectId).eq("kind" as any, "build");
+      const { error: cleanupError } = await supabase.from("files").delete().eq("project_id", projectId).eq("kind" as any, "build");
+      if (cleanupError) throw cleanupError;
       // Insert new built artifacts (if any).
       if (builtFiles && builtFiles.length) {
         const { data: userRes } = await supabase.auth.getUser();
         const uid = userRes.user?.id;
         if (!uid) throw new Error("Not signed in");
-        const rows = builtFiles.map((f) => ({
+        const uniqueFiles = [...new Map(builtFiles.map((f) => [buildStoragePath(f.path), f])).values()];
+        const rows = uniqueFiles.map((f) => ({
           project_id: projectId,
           user_id: uid,
-          path: f.path,
+          path: buildStoragePath(f.path),
           content: f.content,
           kind: "build",
         }));
         // Insert in chunks to stay under payload limits.
         for (let i = 0; i < rows.length; i += 50) {
           const chunk = rows.slice(i, i + 50);
-          const { error } = await supabase.from("files").insert(chunk as any);
+          const { error } = await supabase.from("files").upsert(chunk as any, { onConflict: "project_id,path" });
           if (error) throw error;
         }
       }
