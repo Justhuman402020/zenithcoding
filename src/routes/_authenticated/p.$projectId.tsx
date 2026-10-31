@@ -20,6 +20,7 @@ import { WorkLogCard } from "@/components/WorkLogCard";
 import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
 import { runBrowserCheck } from "@/lib/browser-check.functions";
 import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
+import { zipCheckDecision, zipFixPrompt, ZIP_QUIET_MS, ZIP_SETTLE_MS } from "@/lib/zip-check";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -366,7 +367,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam, zipcheck: zipcheckParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -443,6 +444,8 @@ function ProjectEditor() {
   const [mode, setMode] = useState<EditorBuildMode>("build");
   const modeRef = useRef<EditorBuildMode>("build");
   const requestModeRef = useRef<EditorBuildMode | null>(null);
+  // One-shot pre-approval for the automatic ZIP error fix (OpenRouter build model only).
+  const zipAutoApproveRef = useRef(false);
   const requestImagesRef = useRef(false);
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
