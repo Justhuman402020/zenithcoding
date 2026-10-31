@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { uploadRows } from "@/lib/zip-upload";
 import { buildStoragePath } from "@/lib/publish-files";
 import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
 import { isScrolltideLookup } from "@/lib/runtime-mcp/scrolltide-policy";
@@ -20,6 +21,7 @@ import { WorkLogCard } from "@/components/WorkLogCard";
 import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
 import { runBrowserCheck } from "@/lib/browser-check.functions";
 import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
+import { zipCheckDecision, zipFixPrompt, ZIP_QUIET_MS, ZIP_SETTLE_MS } from "@/lib/zip-check";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -129,10 +131,11 @@ type PreviewErrorCtx = {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview" } => ({
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview"; zipcheck?: string } => ({
     ...(search.tab === "preview" ? { tab: "preview" as const } : {}),
     ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
     ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
+    ...(search.zipcheck != null ? { zipcheck: String(search.zipcheck) } : {}),
   }),
 
   component: ProjectEditor,
@@ -365,7 +368,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam, zipcheck: zipcheckParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -442,6 +445,8 @@ function ProjectEditor() {
   const [mode, setMode] = useState<EditorBuildMode>("build");
   const modeRef = useRef<EditorBuildMode>("build");
   const requestModeRef = useRef<EditorBuildMode | null>(null);
+  // One-shot pre-approval for the automatic ZIP error fix (OpenRouter build model only).
+  const zipAutoApproveRef = useRef(false);
   const requestImagesRef = useRef(false);
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
@@ -673,14 +678,16 @@ function ProjectEditor() {
         await supabase.from("files").delete().eq("project_id", projectId).in("path", paths.slice(i, i + 100));
       }
       const rows = unpacked.map((f) => ({ project_id: projectId, user_id: userRes.user!.id, path: f.path, content: f.content }));
-      for (let i = 0; i < rows.length; i += 50) {
-        const { error } = await supabase.from("files").insert(rows.slice(i, i + 50));
-        if (error) throw new Error(error.message);
-      }
+      await uploadRows(
+        rows,
+        (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),
+        (done, total) => toast.loading(`Uploading ${file.name} · ${done}/${total} files (${total ? Math.round((done / total) * 100) : 0}%)`, { id: t }),
+      );
       await refreshFiles();
       setActivePath(paths.find((p) => /(^|\/)index\.html$/i.test(p)) ?? paths[0]);
       setPreviewKey((k) => k + 1);
-      toast.success(`Imported ${unpacked.length} files${skipped ? ` (${skipped} skipped)` : ""}`, { id: t });
+      startZipCheck();
+      toast.success(`Imported ${unpacked.length} files${skipped ? ` (${skipped} skipped)` : ""} · checking the preview for errors`, { id: t });
     } catch (e: any) {
       toast.error(e?.message || "Could not import that zip", { id: t });
     } finally {
@@ -913,7 +920,10 @@ function ProjectEditor() {
           headers["x-forge-mode"] = choice.mode;
           headers["x-forge-engine"] = choice.engine;
           if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
+          const zipAutoApproved = zipAutoApproveRef.current && choice.engine === "openrouter" && !choice.imageBuild;
+          zipAutoApproveRef.current = false;
           if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
+          else if (zipAutoApproved) { /* Owner asked ZIP errors to be fixed immediately with the OpenRouter build model. */ }
           else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
           headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
@@ -1110,12 +1120,91 @@ function ProjectEditor() {
     return null;
   }, [messages]);
 
-  // Preview errors are never fixed automatically; the user taps "Fix this error".
+  // Preview errors are fixed automatically only right after a ZIP import (owner request); otherwise the user taps "Fix this error".
   const autoFixAttemptsRef = useRef<Map<string, number>>(new Map());
   const [fixSending, setFixSending] = useState(false);
   useEffect(() => {
     if (!isBusy) setFixSending(false);
   }, [isBusy]);
+
+  // ---- ZIP check: after an import, watch the preview; fix errors with the build model (max 3 rounds). ----
+  const zipCheckRef = useRef<{ rounds: number; settleUntil: number } | null>(null);
+  const [zipCheckSeq, setZipCheckSeq] = useState(0);
+  const zipLatestRef = useRef({ autoBuild, previewError, isBusy, previewDoc, needsBuild });
+  zipLatestRef.current = { autoBuild, previewError, isBusy, previewDoc, needsBuild };
+  const zipWasBusyRef = useRef(false);
+  // Kept in this tab's session storage so the check survives the page re-mounting after an import.
+  const zipKey = `codehaven:zipcheck:${projectId}`;
+  function saveZipCheck(rounds: number | null) {
+    try { if (rounds == null) sessionStorage.removeItem(zipKey); else sessionStorage.setItem(zipKey, String(rounds)); } catch { /* private mode */ }
+  }
+  function startZipCheck(rounds = 0) {
+    zipCheckRef.current = { rounds, settleUntil: Date.now() + 1500 };
+    saveZipCheck(rounds);
+    setTab("preview");
+    setZipCheckSeq((n) => n + 1);
+  }
+  useEffect(() => {
+    if (zipcheckParam) {
+      startZipCheck();
+      navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+      return;
+    }
+    let saved: string | null = null;
+    try { saved = sessionStorage.getItem(zipKey); } catch { /* private mode */ }
+    if (saved != null && !zipCheckRef.current) startZipCheck(Number(saved) || 0);
+  }, [zipcheckParam, navigate, projectId]);
+  useEffect(() => {
+    const check = zipCheckRef.current;
+    if (!check) return;
+    if (zipWasBusyRef.current && !isBusy) {
+      check.settleUntil = Date.now() + ZIP_SETTLE_MS;
+      setTab("preview");
+    }
+    zipWasBusyRef.current = isBusy;
+    if (isBusy || autoBuild.status === "building" || files.length === 0) return;
+    const hasError = autoBuild.status === "error" || !!previewError;
+    const delay = Math.max(check.settleUntil - Date.now(), hasError ? 1500 : ZIP_QUIET_MS);
+    const timer = window.setTimeout(() => {
+      const now = zipLatestRef.current;
+      const current = zipCheckRef.current;
+      if (!current || now.isBusy || now.autoBuild.status === "building") return;
+      if (now.needsBuild && now.previewDoc.includes("Building your site…")) return;
+      const decision = zipCheckDecision({
+        buildError: now.autoBuild.status === "error" ? String(now.autoBuild.error || "Unknown build error") : null,
+        previewError: now.previewError ? buildErrorReport(now.previewError) : null,
+        roundsUsed: current.rounds,
+      });
+      if (decision.action === "pass") {
+        zipCheckRef.current = null;
+        saveZipCheck(null);
+        toast.success(current.rounds ? `ZIP fixed — no errors left after ${current.rounds} fix${current.rounds === 1 ? "" : "es"}` : "ZIP checked — no errors found", { id: "zip-check" });
+        return;
+      }
+      if (decision.action === "stop") {
+        zipCheckRef.current = null;
+        saveZipCheck(null);
+        toast.error(decision.reason, { id: "zip-check", duration: 15000 });
+        return;
+      }
+      current.rounds = decision.round;
+      saveZipCheck(decision.round);
+      setPreviewError(null);
+      toast.loading(`Error found — fixing it now with your build model (${decision.round}/3)`, { id: "zip-check" });
+      void (async () => {
+        await takeFixSnapshot();
+        setMode("build");
+        modeRef.current = "build";
+        requestModeRef.current = "build";
+        requestImagesRef.current = false;
+        requestKeyRef.current = crypto.randomUUID();
+        zipAutoApproveRef.current = true;
+        setTab("chat");
+        await sendMessage({ text: zipFixPrompt(decision.report, decision.round) });
+      })();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [zipCheckSeq, isBusy, autoBuild.status, autoBuild.error, previewError, files.length, previewDoc]);
   const stopJobs = useStopServerFn(stopChatJobs);
   // Count 0 → 5, then continue the unfinished job on the next working model.
   useEffect(() => {

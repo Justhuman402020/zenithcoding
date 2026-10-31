@@ -60,10 +60,7 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Before build inference, await durable recovery payload/timer registration and persist the actual model snapshot with all media; restart claims refresh the heartbeat and never reclaim finished or paused runs.
 - Editor builds dispatch persisted input through a service-role-only database starter before returning to the viewer; the independent connection and existing recovery timer survive a phone disconnect.
 - Auth event invalidation compares user identities so repeated same-user SIGNED_IN events on wake do not rerun the generated admission guard.
-- Runtime Scrolltide MCP connections use server-only encrypted owner-scoped OAuth storage and SDK clients, separate from the app-hosted MCP server and saved key vaults; approved project drafts are persisted into job recovery before dispatch so template use survives disconnects without exposing credentials.
-- Scrolltide OAuth uses exact project-owned return hosts and origin-bound client registrations; renew registration when the origin changes, preserve account tokens, and provide a sign-in link when popups are blocked.
-- Scrolltide browsing reads public shelf summaries when MCP has no pagination; authenticated MCP handles search/retrieval, keeping full-library scrolling separate from paid prompts and approved builds.
-- Lazy-load Scrolltide previews separately from paid instructions.
-- Retain ZIP media; namespace builds under .code-haven-build/ and unwrap in publish readers to prevent source collisions.
+- Retain ZIP media and upload it in size-capped, timed, retried upserts (src/lib/zip-upload.ts) so slow networks show progress, never hang; post-import ZIP errors auto-fix via OpenRouter build, max 3 rounds. Namespace builds under .code-haven-build/.
+- Subdirectories have their own AGENTS.md (e.g. src/lib/runtime-mcp/ for Scrolltide); read it before changing files there.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
 - Browser tests run on pool Cloudflare accounts via hashed short-lived preview tokens; test-found fixes use normal chat approval.

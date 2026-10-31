@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { uploadRows } from "@/lib/zip-upload";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -560,14 +561,15 @@ function Dashboard() {
       const { data: project, error } = await supabase.from("projects").insert({ name, description: explanation, user_id: userRes.user.id }).select().single();
       if (error) throw error;
       const rows = unpacked.files.map((item) => ({ project_id: project.id, user_id: userRes.user!.id, path: item.path, content: item.content }));
-      for (let index = 0; index < rows.length; index += 50) {
-        const { error: filesError } = await supabase.from("files").insert(rows.slice(index, index + 50));
-        if (filesError) throw filesError;
-      }
-      await supabase.from("project_brain_notes").upsert({ project_id: project.id, user_id: userRes.user.id, content: `Site explanation: ${explanation}`, updated_at: new Date().toISOString() });
-      await applyBackend({ data: { projectId: project.id } }).catch(() => {});
-      toast.success(`Imported ${unpacked.files.length} files`, { id: notice });
-      navigate({ to: "/p/$projectId", params: { projectId: project.id } });
+      await uploadRows(
+        rows,
+        (batch, signal) => supabase.from("files").upsert(batch, { onConflict: "project_id,path" }).abortSignal(signal),
+        (done, total) => toast.loading(`Uploading ${file.name} · ${done}/${total} files (${total ? Math.round((done / total) * 100) : 0}%)`, { id: notice }),
+      );
+      void supabase.from("project_brain_notes").upsert({ project_id: project.id, user_id: userRes.user.id, content: `Site explanation: ${explanation}`, updated_at: new Date().toISOString() });
+      void applyBackend({ data: { projectId: project.id } }).catch(() => {});
+      toast.success(`Imported ${unpacked.files.length} files · checking the preview for errors`, { id: notice });
+      navigate({ to: "/p/$projectId", params: { projectId: project.id }, search: { zipcheck: "1" } as any });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not import that ZIP", { id: notice });
     } finally {
