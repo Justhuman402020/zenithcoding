@@ -1134,6 +1134,7 @@ function ProjectEditor() {
   zipLatestRef.current = { autoBuild, previewError, isBusy, previewDoc, needsBuild };
   const zipWasBusyRef = useRef(false);
   function startZipCheck() {
+    console.info("[zipcheck] start");
     zipCheckRef.current = { rounds: 0, settleUntil: Date.now() + 1500 };
     setTab("preview");
     setZipCheckSeq((n) => n + 1);
@@ -1145,8 +1146,10 @@ function ProjectEditor() {
     startZipCheck();
     navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
   }, [zipcheckParam, navigate, projectId]);
+  useEffect(() => { console.info("[zipcheck] mount"); return () => console.info("[zipcheck] unmount"); }, []);
   useEffect(() => {
     const check = zipCheckRef.current;
+    console.info("[zipcheck] eval", !!check, isBusy, autoBuild.status, files.length);
     if (!check) return;
     if (zipWasBusyRef.current && !isBusy) {
       check.settleUntil = Date.now() + ZIP_SETTLE_MS;
