@@ -106,7 +106,8 @@ export const Route = createFileRoute("/api/public/chat")({
           userId = userRes.user.id;
         }
 
-        const trace = createTrace({ projectId, userId });
+        const previousTrace = isResume ? await supabase.from("chat_jobs").select("trace_id").eq("project_id", projectId).eq("user_id", userId).eq("request_key", request.headers.get("x-forge-request-key") ?? "").maybeSingle() : { data: null };
+        const trace = createTrace({ projectId, userId, traceId: previousTrace.data?.trace_id ?? undefined });
         const traceHeaders = { "x-forge-trace-id": trace.traceId };
         const fail = async (status: number, body: string, contentType = "text/plain") => {
           const key = request.headers.get("x-forge-request-key");
@@ -275,6 +276,7 @@ export const Route = createFileRoute("/api/public/chat")({
           });
         }
         // Save what's needed to restart this build on the server if the worker
+        if (jobId) await supabaseAdmin.from("chat_jobs").update({ trace_id: trace.traceId }).eq("id", jobId);
         // is cut off after the phone disconnects, then arm the restart check.
         if (jobId && !planMode) {
           const resumePayload = {
@@ -536,7 +538,8 @@ export const Route = createFileRoute("/api/public/chat")({
 
         const provider = createGroqProvider(pick.apiKey, pick.baseURL);
         const model = provider(pick.ref.model);
-        const store = createSupabaseFileStore(supabase, projectId, userId);
+        const { withWorkEvidence } = await import("@/lib/work-log.server");
+        const store = withWorkEvidence(createSupabaseFileStore(supabase, projectId, userId), trace);
         const { createIntegrationTools } = await import("@/lib/integration-tools.server");
         const integrationTools = createIntegrationTools({ projectId, userId, projectName: proj.name, trace });
         const { createBrainZipTools, listBrainZips } = await import("@/lib/brain-zip.server");
@@ -682,6 +685,8 @@ export const Route = createFileRoute("/api/public/chat")({
         if (scrolltideDraftId) timeline.push(`${new Date().toISOString().slice(11, 19)} UTC · Approved Scrolltide template restored from saved draft`);
         const setProgress = (text: string) => {
           progressText = text;
+          trace.log("work.progress", { message: text });
+          void trace.flush();
           if (timeline[timeline.length - 1]?.endsWith(text) !== true) timeline.push(`${new Date().toISOString().slice(11, 19)} UTC · ${text}`);
           if (jobId) {
             void supabaseAdmin
@@ -1220,7 +1225,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 completed_at: new Date().toISOString(),
               }).eq("id", jobId);
             }
-            if (!planMode) await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText + (timeline.length || progressModel.files.size ? `\n\n<!-- worklog -->\n${timeline.slice(-200).map((t) => `- ${t}`).join("\n")}${progressModel.files.size ? `\n\nFiles changed:\n${[...progressModel.files].map((f) => `- \`${f}\``).join("\n")}` : ""}` : "") });
+            if (!planMode) await supabaseAdmin.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: finalText + `\n\n<!-- worklog -->\n${jobId ? `<!-- run:${jobId} -->\n` : ""}${timeline.slice(-200).map((t) => `- ${t}`).join("\n")}${progressModel.files.size ? `\n\nFiles changed:\n${[...progressModel.files].map((f) => `- \`${f}\``).join("\n")}` : ""}` });
             await saveProgress({
               status: truncated ? "unfinished" : "finished",
               lastRequest: lastUserText.slice(0, 600),

@@ -304,7 +304,7 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
     if (job.status === "queued" || job.status === "running") {
       // Live work log: this build's trace lines so far.
       const { data: rows } = await (context.supabase as any).from("chat_traces").select("phase,status,message,detail,created_at")
-        .eq("project_id", req.project_id).gte("created_at", job.created_at).order("created_at", { ascending: false }).limit(40);
+        .eq("project_id", req.project_id).eq("trace_id", job.trace_id ?? "none").order("created_at", { ascending: false }).limit(40);
       const log = ((rows ?? []) as any[]).reverse().map((t) => liveLine(t)).filter(Boolean) as string[];
       return { status: "running" as EditStatus, progress: job.progress ?? "Working…", log };
     }

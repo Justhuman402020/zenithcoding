@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronLog } from "@/components/NeuronLog";
+import { WorkLogCard } from "@/components/WorkLogCard";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
@@ -51,6 +52,10 @@ function ChatPage() {
   const reload = useCallback(() => load({ data: { id: chatId } }).then(setData).catch((e) => toast.error(String(e?.message ?? e))), [chatId, load]);
   useEffect(() => { void reload(); inputRef.current?.focus(); }, [reload]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data?.messages.length]);
+  useEffect(() => {
+    const saved = sessionStorage.getItem(`work-scroll:${chatId}`);
+    if (saved != null && data) requestAnimationFrame(() => { const el = document.querySelector('[data-work-chat-scroll]'); if (el) el.scrollTop = Number(saved); });
+  }, [chatId, data?.chat.id]);
   useEffect(() => { if (data && !data.chat.initialized && ai?.chatEngine === "ollama") setSettingsOpen(true); }, [data?.chat.initialized, ai?.chatEngine]);
 
   // Watch running Cloudflare edits: live log + alert when finished.
@@ -111,14 +116,14 @@ function ChatPage() {
           <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
         {data.chat.projectId && <div className="flex gap-1">
-          <Button variant="outline" size="sm" title="Scrolltide templates" onClick={() => navigate({ to: "/p/$projectId", params: { projectId: data.chat.projectId! }, search: { scrolltide: "1" } })}><BookOpen className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" title="Preview, test and fix" onClick={() => navigate({ to: "/p/$projectId", params: { projectId: data.chat.projectId! }, search: { tab: "preview" } })}><Eye className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" title="Build and publish" onClick={() => navigate({ to: "/p/$projectId", params: { projectId: data.chat.projectId! } })}><Rocket className="h-4 w-4" /></Button>
+          <Button asChild variant="outline" size="sm" title="Scrolltide templates"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }} search={{ scrolltide: "1" }}><BookOpen className="h-4 w-4" /></Link></Button>
+          <Button asChild variant="outline" size="sm" title="Preview, test and fix"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }} search={{ tab: "preview" }}><Eye className="h-4 w-4" /></Link></Button>
+          <Button asChild variant="outline" size="sm" title="Build and publish"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }}><Rocket className="h-4 w-4" /></Link></Button>
         </div>}
         <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
         <NeuronsBar />
       </header>
-      <main className="flex-1 overflow-y-auto px-4 py-4">
+      <main data-work-chat-scroll className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-4">
           {items.length === 0 && <p className="text-center text-sm text-muted-foreground mt-10">Select a project to start.</p>}
           {items.map((it) => it.kind === "msg" ? (
@@ -128,7 +133,7 @@ function ChatPage() {
                   <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{it.m.content}</ReactMarkdown></div>
                   {it.m.parts?.planning && <div className="mt-3 border rounded-md p-3 text-xs"><NeuronLog><span className="ml-1">Planning · {it.m.parts.planning.used} Neurons</span></NeuronLog>{it.m.parts.planning.steps.map((step: any, i: number) => <div key={i} className="flex justify-between gap-2 border-b py-1"><span>Step {step.step} · Key #{step.key_number}</span><span>{step.neurons} Neurons</span></div>)}</div>}
                   {Array.isArray(it.m.parts?.log) && it.m.parts.log.length > 0 && (
-                    <details className="mt-2 rounded-lg border bg-muted/40 p-2 text-xs"><summary className="cursor-pointer">Work log ({it.m.parts.log.length})</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono">{it.m.parts.log.join("\n")}</pre></details>
+                    data.chat.projectId && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`a-${it.m.id}`} title="Saved work" log={it.m.parts.log.join("\n")} />
                   )}
                 </div>
           ) : (
@@ -148,16 +153,11 @@ function ChatPage() {
                   <span className="min-w-0 flex-1">{progress[it.e.id] ?? "Working…"}</span>
                   <Button size="sm" variant="destructive" onClick={() => stopRunning(it.e.id)}><Square className="h-3.5 w-3.5 mr-1" />Stop</Button>
                 </div>
-                {(liveLog[it.e.id]?.length ?? 0) > 0 && (
-                  <details open className="mt-2 rounded-lg border bg-muted/40 p-2 text-xs">
-                    <summary className="cursor-pointer">Live work log ({(liveLog[it.e.id] ?? []).length})</summary>
-                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono">{(liveLog[it.e.id] ?? []).join("\n")}</pre>
-                  </details>
-                )}
               </>}
               {it.e.status === "declined" && <div className="mt-2 text-sm text-muted-foreground">Not sent.</div>}
               {it.e.status === "done" && <div className="mt-2 text-sm text-primary">Finished — summary below.</div>}
               {it.e.status === "failed" && <div className="mt-2 text-sm text-destructive">Stopped — see summary below.</div>}
+              {data.chat.projectId && ["running", "done", "failed"].includes(it.e.status) && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`e-${it.e.id}`} title={it.e.prompt} running={it.e.status === "running"} progress={progress[it.e.id]} log={(liveLog[it.e.id] ?? it.e.report?.log ?? []).join("\n")} />}
             </div>
           ))}
           {busy && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Thinking…</div>}

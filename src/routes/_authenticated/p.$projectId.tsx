@@ -18,6 +18,7 @@ import { cleanChatRows } from "@/lib/chat-history";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { WorkLogCard } from "@/components/WorkLogCard";
+import { messageRunId } from "@/lib/work-log";
 import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
 import { runBrowserCheck } from "@/lib/browser-check.functions";
 import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
@@ -81,7 +82,7 @@ import {
 import Editor from "@monaco-editor/react";
 import { LightCodeEditor } from "@/components/LightCodeEditor";
 import ReactMarkdown from "react-markdown";
-import { stripLeakedToolJson, summarizeToolInput } from "@/lib/chat-sanitize";
+import { stripLeakedToolJson } from "@/lib/chat-sanitize";
 import { DomainsPanel } from "@/components/DomainsPanel";
 import { PreviewFrame, injectConsoleBridge } from "@/components/PreviewFrame";
 import { HistoryPanel } from "@/components/HistoryPanel";
@@ -169,6 +170,9 @@ type LatestJob = {
   auto_resumes?: number;
   pool_ledger?: any[] | null;
   paused_at_key?: number | null;
+  prompt?: string;
+  request_key?: string;
+  created_at?: string;
 };
 
 function PoolLedger({ rows }: { rows: any[] }) {
@@ -409,9 +413,6 @@ function ProjectEditor() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatReady, setChatReady] = useState(false);
-  const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({});
-  const [openThinking, setOpenThinking] = useState<Record<string, boolean>>({});
-  const [thinkingDurations, setThinkingDurations] = useState<Record<string, number>>({});
   const [pendingSecret, setPendingSecret] = useState<SecretIntent | null>(null);
   const [savedSecretKeys, setSavedSecretKeys] = useState<string[]>([]);
   const [nextBuildPrompts, setNextBuildPrompts] = useState<string[]>([]);
@@ -450,12 +451,6 @@ function ProjectEditor() {
   const requestImagesRef = useRef(false);
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
-  const [remoteLog, setRemoteLog] = useState<{ t: number; text: string }[]>([]);
-  const [remoteFiles, setRemoteFiles] = useState<string[]>([]);
-  useEffect(() => {
-    if (!remoteWorking) return;
-    setRemoteLog((log) => (log.length && log[log.length - 1].text === remoteWorking ? log : [...log, { t: Date.now(), text: remoteWorking }].slice(-60)));
-  }, [remoteWorking]);
   // Messages typed while Forge is working wait here instead of being lost.
   const [queue, setQueue] = useState<QueuedMessage[]>([]);
   const [queuePaused, setQueuePaused] = useState(false);
@@ -467,9 +462,13 @@ function ProjectEditor() {
   const failedKeyRef = useRef<number | null>(null);
   const continuedMessagesRef = useRef<Set<string>>(new Set());
   const requestKeyRef = useRef<string | null>(null);
-  const thinkingStartRef = useRef<Record<string, number>>({});
   const tokenRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!chatReady || tab !== "chat") return;
+    const saved = sessionStorage.getItem(`work-scroll:${projectId}`);
+    if (saved != null) requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = Number(saved); });
+  }, [chatReady, projectId, tab]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -1348,7 +1347,7 @@ function ProjectEditor() {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes,pool_ledger,paused_at_key")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes,pool_ledger,paused_at_key,prompt,request_key,created_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -1360,15 +1359,6 @@ function ProjectEditor() {
       if (activeJob) sawActiveJob = true;
       // Only announce remote work when this device is not the one streaming.
       setRemoteWorking(activeJob && !isStreaming ? (activeJob.progress ?? "AI is working") : null);
-      if (activeJob && !isStreaming) {
-        const { data: prog } = await supabase.from("projects").select("agent_progress").eq("id", projectId).maybeSingle();
-        const files = ((prog as any)?.agent_progress?.filesChanged as string[] | undefined) ?? [];
-        if (!disposed) setRemoteFiles(files);
-      } else if (!activeJob) {
-        setRemoteLog([]);
-        setRemoteFiles([]);
-      }
-
       if (!activeJob && sawActiveJob) {
         sawActiveJob = false;
         knownMessageCount = await reloadSavedChat();
@@ -1474,36 +1464,7 @@ function ProjectEditor() {
   }, [messages, isStreaming, initialMessages]);
 
 
-  // Track how long the AI spent "thinking" per assistant message, so we can
-  // show "Thought for Xs" once it finishes.
-  useEffect(() => {
-    const updates: Record<string, number> = {};
-    const lastId = messages[messages.length - 1]?.id;
-    for (const m of messages) {
-      if (m.role !== "assistant") continue;
-      const hasReasoning = m.parts.some((p) => p.type === "reasoning");
-      if (!hasReasoning) continue;
-      if (!thinkingStartRef.current[m.id]) {
-        thinkingStartRef.current[m.id] = Date.now();
-      }
-      const done =
-        !isStreaming ||
-        m.id !== lastId ||
-        m.parts.some((p) => p.type === "text" && (p as any).text?.trim());
-      if (done) {
-        updates[m.id] = Math.max(1, Math.round((Date.now() - thinkingStartRef.current[m.id]) / 1000));
-      }
-    }
-    if (Object.keys(updates).length === 0) return;
-    // One batched update, and only for ids not recorded yet — never a loop.
-    setThinkingDurations((cur) => {
-      const missing = Object.keys(updates).filter((id) => cur[id] === undefined);
-      if (missing.length === 0) return cur;
-      const next = { ...cur };
-      for (const id of missing) next[id] = updates[id];
-      return next;
-    });
-  }, [messages, isStreaming]);
+
 
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);
@@ -2149,6 +2110,7 @@ function ProjectEditor() {
                   setShowJumpDown(!atBottom);
                 }
               }}
+              data-work-chat-scroll
               className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
             >
               {chatReady && messages.length === 0 && (
@@ -2186,19 +2148,6 @@ function ProjectEditor() {
                   .trim();
                 const text = m.role === "assistant" ? stripLeakedToolJson(rawText) : rawText;
                 const toolParts = m.parts.filter((p): p is any => typeof p.type === "string" && p.type.startsWith("tool-"));
-                const showTools = toolParts.length > 0;
-                const reasoningParts = m.parts.filter(
-                  (p): p is Extract<typeof p, { type: "reasoning" }> => p.type === "reasoning",
-                );
-                const reasoningText = reasoningParts
-                  .map((p) => (p as any).text ?? "")
-                  .join("\n")
-                  .trim();
-                const isLastStreaming = isStreaming && m.id === messages[messages.length - 1]?.id;
-                const workingActive =
-                  isLastStreaming &&
-                  (toolParts.some((t) => t.state !== "output-available") || text.length > 0);
-                const showStatusPill = isLastStreaming && m.role === "assistant";
                 return (
                   <div key={m.id} className={m.role === "user" ? "flex justify-end" : ""}>
                     <div
@@ -2208,161 +2157,6 @@ function ProjectEditor() {
                           : "max-w-full text-base flex flex-col gap-2 w-full"
                       }
                     >
-                      {showStatusPill && (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-sm font-medium text-muted-foreground">
-                          {workingActive ? (
-                            <>
-                              <HammerIcon className="h-3 w-3 text-primary animate-pulse" />
-                              <span className="text-foreground">Working</span>
-                              <span className="text-muted-foreground/70">· editing files</span>
-                            </>
-                          ) : (
-                            <>
-                              <Loader2 className="h-3 w-3 text-primary animate-spin" />
-                              <span className="text-foreground">Thinking</span>
-                              <span className="text-muted-foreground/70">· planning</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-                      {m.role === "assistant" && (reasoningText || showTools) && (() => {
-                        // Lovable-style timeline: every thought and every file
-                        // action in the order they happened, always visible.
-                        type Entry =
-                          | { kind: "thought"; key: string; text: string; active: boolean }
-                          | { kind: "tool"; key: string; part: any; index: number };
-                        const entries: Entry[] = [];
-                        let toolIndex = 0;
-                        m.parts.forEach((p: any, i: number) => {
-                          if (p.type === "reasoning") {
-                            const t = String(p.text ?? "").trim();
-                            if (!t) return;
-                            entries.push({
-                              kind: "thought",
-                              key: `${m.id}:think:${i}`,
-                              text: t,
-                              active: isLastStreaming && i === m.parts.length - 1,
-                            });
-                            return;
-                          }
-                          if (typeof p.type === "string" && p.type.startsWith("tool-")) {
-                            entries.push({ kind: "tool", key: `${m.id}:tool:${i}`, part: p, index: toolIndex++ });
-                          }
-                        });
-                        if (entries.length === 0) return null;
-                        const actKey = `${m.id}:activity`;
-                        const actOpen = isLastStreaming || !!openThinking[actKey];
-                        return (
-                          <div className="order-last space-y-2">
-                          <button
-                            type="button"
-                            onClick={() => setOpenThinking((cur) => ({ ...cur, [actKey]: !actOpen }))}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2.5 py-1 text-sm text-muted-foreground hover:text-foreground"
-                          >
-                            <ListTree className="h-3 w-3 text-primary" />
-                            Activity ({entries.filter((e) => e.kind === "tool").length} steps)
-                            {actOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                          </button>
-                          {actOpen && (
-                          <div className="relative pl-5 space-y-2 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-border/70">
-                            {entries.map((entry) => {
-                              if (entry.kind === "thought") {
-                                const open = !!openThinking[entry.key];
-                                return (
-                                  <div key={entry.key} className="relative">
-                                    <span className="absolute -left-5 top-2 h-2 w-2 rounded-full bg-muted-foreground/50" />
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenThinking((cur) => ({ ...cur, [entry.key]: !open }))}
-                                      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                                    >
-                                      {entry.active ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                                      ) : (
-                                        <Lightbulb className="h-3.5 w-3.5 text-primary/70" />
-                                      )}
-                                      <span>
-                                        {entry.active
-                                          ? "Thinking…"
-                                          : `Thought${thinkingDurations[m.id] ? ` for ${thinkingDurations[m.id]}s` : ""}`}
-                                      </span>
-                                      {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                                    </button>
-                                    {open && (
-                                      <div className="mt-1.5 rounded-lg border border-border bg-card/40 px-3 py-2 text-sm text-muted-foreground/90 whitespace-pre-wrap leading-relaxed">
-                                        {entry.text}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-                              const t = entry.part;
-                              const name = String(t.type).replace("tool-", "");
-                              const { icon: Icon, label } = toolLabel(name, t.input, t.state);
-                              const active = t.state !== "output-available";
-                              const detailOpen = !!openToolDetails[entry.key];
-                              const path = t.input?.path as string | undefined;
-                              const verb = label.split(" ")[0];
-                              const inputPreview = t.state === "input-streaming" ? "" : summarizeToolInput(t.input);
-                              const outputRaw = (t.output ?? t.result) as any;
-                              const outputPreview =
-                                outputRaw !== undefined
-                                  ? typeof outputRaw === "string"
-                                    ? outputRaw
-                                    : JSON.stringify(outputRaw, null, 2)
-                                  : "";
-                              return (
-                                <div key={entry.key} className="relative">
-                                  <span className="absolute -left-[22px] top-1.5 text-primary">
-                                    {active ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      <Icon className="h-3.5 w-3.5" />
-                                    )}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setOpenToolDetails((cur) => ({ ...cur, [entry.key]: !detailOpen }))}
-                                    className="flex w-full items-center gap-2 text-left text-base hover:opacity-80 transition-opacity"
-                                  >
-                                    <span className="font-medium text-foreground">{verb}</span>
-                                    {path && (
-                                      <span className="truncate rounded bg-muted/50 px-1.5 py-0.5 font-mono text-sm text-muted-foreground">
-                                        {path.split("/").pop()}
-                                      </span>
-                                    )}
-                                    {!path && <span className="text-muted-foreground text-sm">{label}</span>}
-                                    <span className="ml-auto shrink-0 text-muted-foreground">
-                                      {detailOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                    </span>
-                                  </button>
-                                  {detailOpen && (
-                                    <div className="mt-1.5 space-y-2 rounded-lg border border-border bg-background/40 px-3 py-2">
-                                      {inputPreview && (
-                                        <div className="space-y-1">
-                                          <div className="font-mono text-sm uppercase tracking-wider text-primary/70">Input</div>
-                                          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-sm leading-relaxed text-muted-foreground/90">{inputPreview}</pre>
-                                        </div>
-                                      )}
-                                      {outputPreview && (
-                                        <div className="space-y-1">
-                                          <div className="font-mono text-sm uppercase tracking-wider text-primary/70">Result</div>
-                                          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all font-mono text-sm leading-relaxed text-muted-foreground/90">{outputPreview}</pre>
-                                        </div>
-                                      )}
-                                      {!inputPreview && !outputPreview && (
-                                        <div className="text-sm text-muted-foreground/70">No details yet.</div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                          )}
-                          </div>
-                        );
-                      })()}
                       {toolParts
                         .filter(
                           (t: any) =>
@@ -2423,6 +2217,8 @@ function ProjectEditor() {
                                 </div>
                                 {log && (
                                   <WorkLogCard
+                                    projectId={projectId}
+                                    runId={messageRunId(text, m.id)}
                                     checks={mi === messages.length - 1 || messages.slice(mi + 1).every((x) => x.role !== "assistant") ? <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} /> : undefined}
                                     log={log}
                                     title={(() => {
@@ -2451,6 +2247,7 @@ function ProjectEditor() {
                   </div>
                 );
               })}
+              {isBusy && <WorkLogCard projectId={projectId} runId={latestJob && ["running", "queued"].includes(latestJob.status) ? `j-${latestJob.id}` : `k-${requestKeyRef.current ?? "pending"}`} title={latestJob?.prompt ?? "Current task"} running progress={remoteWorking ?? latestJob?.progress ?? "Working…"} stepCount={latestJob?.steps_done} fileCount={latestJob?.files_changed} />}
               {isStreaming && (() => {
                 const last = messages[messages.length - 1];
                 const lastTools = last?.parts.filter((p: any) => typeof p.type === "string" && p.type.startsWith("tool-")) ?? [];
@@ -2751,29 +2548,6 @@ function ProjectEditor() {
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                   Offline — Code Haven keeps working on the server. You'll see where it is when you reconnect.
                 </div>
-              )}
-              {remoteWorking && !isStreaming && (
-                <details open className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-primary">
-                  <summary className="flex cursor-pointer items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                    <span className="truncate">Working · {remoteWorking}</span>
-                  </summary>
-                  <ol className="mt-2 max-h-40 space-y-1 overflow-y-auto text-foreground/90">
-                    {remoteLog.map((l, i) => (
-                      <li key={l.t + ":" + i} className="flex gap-2">
-                        <span className="shrink-0 text-muted-foreground tabular-nums">{new Date(l.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                        <span className="break-words">{l.text}</span>
-                      </li>
-                    ))}
-                  </ol>
-                  {remoteFiles.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {remoteFiles.map((f) => (
-                        <span key={f} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{f}</span>
-                      ))}
-                    </div>
-                  )}
-                </details>
               )}
               {(isBusy || queue.length > 0 || queuePaused) && (
                 <div className="rounded-md hairline-gold bg-card/60 px-3 py-2 space-y-2">

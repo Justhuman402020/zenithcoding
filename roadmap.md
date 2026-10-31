@@ -1,6 +1,7 @@
 # Roadmap
 
-- [ ] Plan compact live work-log cards and reopenable Timeline/Changes details; implementation waits for approval.
+- [x] Compact work-log cards and dedicated reopenable Timeline/Changes pages; signed-in saved logs, reload/Back and phone layout verified; sanitized new-run patch capture tested, 32 tests pass.
+- [ ] Verify a real running work-details page through completion with new captured differences; requires explicit permission for live model inference.
 
 - [x] Add private project Brain ZIP references and agent read/copy access; signed-in upload/reload and project isolation verified with original files unchanged, temporary ZIP removed. Actual model redesign remains unverified (no inference run).
 
