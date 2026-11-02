@@ -16,7 +16,7 @@ describe("model listing with Ollama tunnels (no live provider calls)", () => {
     const calls: string[] = [];
     globalThis.fetch = (async (input: any) => {
       calls.push(String(input));
-      if (String(input).endsWith("/models")) return jsonResponse(404, { error: "404 page not found" });
+      if (String(input) === "https://tunnel.example.com/models") return jsonResponse(404, { error: "404 page not found" });
       return jsonResponse(200, { data: [{ id: "llama3.2:latest" }, { id: "qwen3:8b" }] });
     }) as typeof fetch;
     const r = await listModelIds("https://tunnel.example.com", "k");
