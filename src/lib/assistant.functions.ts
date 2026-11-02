@@ -158,6 +158,9 @@ export const listOllamaModels = createServerFn({ method: "POST" }).middleware([r
     const { base, apiKey } = await keyFor(context as Ctx, data.keyId);
     const res = await fetch(`${base}/v1/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
     const text = await res.text();
+    if (res.status === 530 && /trycloudflare\.com$/i.test(new URL(base).hostname)) {
+      return { models: [] as string[], error: "Your Ollama tunnel is offline or has expired. Restart Ollama and the tunnel on your computer. If it gives you a new URL, save that URL in Admin → AI Models, then tap Activate again. Your saved key has not been changed." };
+    }
     if (!res.ok) return { models: [] as string[], error: `Ollama said ${res.status}: ${text.slice(0, 200)}` };
     const json = JSON.parse(text);
     return { models: ((json?.data ?? []) as any[]).map((m) => String(m.id)).sort(), error: null as string | null };

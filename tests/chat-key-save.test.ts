@@ -15,9 +15,9 @@ vi.mock("@tanstack/react-start", () => ({
   },
 }));
 vi.mock("@/integrations/supabase/auth-middleware", () => ({ requireSupabaseAuth: {} }));
-vi.mock("../src/lib/secrets-crypto.server", () => ({ encryptSecret: vi.fn(async () => "encrypted-test-payload") }));
+vi.mock("../src/lib/secrets-crypto.server", () => ({ encryptSecret: vi.fn(async () => "encrypted-test-payload"), decryptSecret: vi.fn(async () => "noncredential-test-input") }));
 
-import { addOllamaKey, listOllamaKeys } from "../src/lib/assistant.functions";
+import { addOllamaKey, listOllamaKeys, listOllamaModels } from "../src/lib/assistant.functions";
 
 describe("Admin chat-key saving", () => {
   const insert = vi.fn(async () => ({ error: null }));
@@ -50,6 +50,25 @@ describe("Admin chat-key saving", () => {
     rpc.mockResolvedValue({ data: false });
     await expect(save({ data, context })).rejects.toThrow("Only an admin can change chat keys");
     expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("reports an offline Ollama tunnel without exposing its HTML or changing saved keys", async () => {
+    const query = { select: vi.fn(() => query), eq: vi.fn(() => query), maybeSingle: vi.fn(async () => ({ data: { base_url: data.baseUrl, key_encrypted: "encrypted-test-payload" } })) };
+    const keyContext = { userId: "owner-id", supabase: { from: vi.fn(() => query) } };
+    const fetchMock = vi.fn(async () => new Response("<!doctype html><h1>Cloudflare Tunnel error 1033</h1>", { status: 530 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const models = listOllamaModels as unknown as (args: { data: { keyId: string }; context: typeof keyContext }) => Promise<{ models: string[]; error: string | null }>;
+      const result = await models({ data: { keyId: "feb59d85-9476-4bef-b7dc-727d69537aca" }, context: keyContext });
+      expect(result.models).toEqual([]);
+      expect(result.error).toContain("Your Ollama tunnel is offline or has expired.");
+      expect(result.error).not.toContain("<!doctype");
+      expect(keyContext.supabase.from).toHaveBeenCalledExactlyOnceWith("ollama_keys");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(insert).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("uses direct server-function declarations so chat-key middleware survives compilation", () => {
