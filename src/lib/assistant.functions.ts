@@ -18,15 +18,28 @@ async function keyFor(ctx: Ctx, keyId: string) {
 
 async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Array<{ role: string; content: string }>) {
   const { base, apiKey } = await keyFor(ctx, keyId);
-  const res = await fetch(`${base}/v1/chat/completions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, stream: false }),
-  });
+  // Self-hosted models are slow; keep the request small so it fits the tunnel's ~100s limit.
+  const trimmed = [
+    ...messages.filter((m) => m.role === "system").map((m) => ({ ...m, content: String(m.content).slice(0, 4000) })),
+    ...messages.filter((m) => m.role !== "system").slice(-10),
+  ];
+  let res: Response;
+  try {
+    res = await fetch(`${base}/v1/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, messages: trimmed, stream: false, reasoning_effort: "none", max_tokens: 600 }),
+      signal: AbortSignal.timeout(95_000),
+    });
+  } catch (e: any) {
+    if (e?.name === "TimeoutError") throw new Error("Your Ollama model took too long to answer (over 95 seconds). Try a shorter message or a smaller model on your computer");
+    throw e;
+  }
   const text = await res.text();
   if (res.status === 530 && /trycloudflare\.com$/i.test(new URL(base).hostname)) {
     throw new Error("Your Ollama tunnel has expired or is offline. On your computer, stop the tunnel and start it again, copy the new trycloudflare.com address, and save it as the Base URL in Admin → AI Models → Chat helper keys. Your key is unchanged.");
   }
+  if (res.status === 524) throw new Error("Your Ollama model took too long to answer and the tunnel gave up. Try a shorter message or a smaller model on your computer");
   if (!res.ok) throw new Error(`Ollama said ${res.status}: ${text.slice(0, 300)}`);
   const json = JSON.parse(text);
   return String(json?.choices?.[0]?.message?.content ?? "");
