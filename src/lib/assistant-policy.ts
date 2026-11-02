@@ -1,8 +1,16 @@
 // Pure rules for the Code Haven chat helper. No network calls here.
 
-/** The chat helper may never talk to Cloudflare. */
+/** Block Cloudflare inference, not Ollama servers hosted behind Cloudflare tunnels. */
 export function isCloudflareUrl(url: string): boolean {
-  return /cloudflare\.com|workers\.dev|\/ai\/v1\b/i.test(url);
+  try {
+    const { hostname, pathname } = new URL(url);
+    const host = hostname.toLowerCase();
+    return host === "cloudflare.com" || host.endsWith(".cloudflare.com")
+      || host === "workers.dev" || host.endsWith(".workers.dev")
+      || /\/ai\/v1\b/i.test(pathname);
+  } catch {
+    return /\/ai\/v1\b/i.test(url);
+  }
 }
 
 export function assertChatUrlAllowed(url: string): void {
