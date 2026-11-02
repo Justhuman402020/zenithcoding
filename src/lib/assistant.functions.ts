@@ -121,7 +121,6 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
   return parts.join("\n\n");
 }
 
-const auth = createServerFn;
 
 export const listOllamaKeys = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data } = await (context.supabase as any).from("ollama_keys").select("id,label,base_url,created_at,active,active_model").order("created_at");
@@ -166,33 +165,33 @@ export const listOllamaModels = createServerFn({ method: "POST" }).middleware([r
     return { models: ((json?.data ?? []) as any[]).map((m) => String(m.id)).sort(), error: null as string | null };
   });
 
-export const listChats = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+export const listChats = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,model,updated_at,projects(name)").order("updated_at", { ascending: false });
   type Row = { id: string; title: string; projectName: string | null; model: string | null; updatedAt: string };
   return ((data ?? []) as any[]).map((c: any): Row => ({ id: c.id as string, title: c.title as string, projectName: (c.projects?.name ?? null) as string | null, model: c.model as string | null, updatedAt: c.updated_at as string }));
 });
 
-export const createChat = auth({ method: "POST" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+export const createChat = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data, error } = await (context.supabase as any).from("assistant_chats").insert({ user_id: context.userId }).select("id").single();
   if (error) throw new Error(error.message);
   return { id: data.id as string };
 });
 
-export const deleteChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const deleteChat = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     await (context.supabase as any).from("assistant_chats").delete().eq("id", data.id);
     return { ok: true };
   });
 
-export const renameChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const renameChat = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), title: z.string().min(1).max(120) }).parse(d))
   .handler(async ({ data, context }) => {
     await (context.supabase as any).from("assistant_chats").update({ title: data.title }).eq("id", data.id);
     return { ok: true };
   });
 
-export const getChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const getChat = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,ollama_key_id,model,initialized_at,projects(name)").eq("id", data.id).maybeSingle();
@@ -206,7 +205,7 @@ export const getChat = auth({ method: "POST" }).middleware([requireSupabaseAuth]
     };
   });
 
-export const setupChat = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setupChat = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), projectId: z.string().uuid().nullable().optional(), keyId: z.string().uuid().optional(), model: z.string().min(1).max(200).optional(), initialize: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -228,7 +227,7 @@ export const setupChat = auth({ method: "POST" }).middleware([requireSupabaseAut
     return { ok: true };
   });
 
-export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const sendChatMessage = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), text: z.string().min(1).max(20000), attachments: z.array(z.object({ name: z.string().max(200), text: z.string().max(20000) })).max(5).optional(), images: z.array(z.object({ type: z.literal("file"), mediaType: z.string().regex(/^image\/(png|jpeg|webp|gif)$/), url: z.string().max(8000000) })).max(3).optional(), plan: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
@@ -259,7 +258,7 @@ export const sendChatMessage = auth({ method: "POST" }).middleware([requireSupab
     return { ok: true };
   });
 
-export const decideEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const decideEdit = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), answer: z.enum(["yes", "no"]) }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id,project_id,prompt,kind").eq("id", data.id).single();
@@ -284,7 +283,7 @@ export const decideEdit = auth({ method: "POST" }).middleware([requireSupabaseAu
   });
 
 /** Stops a running chat edit straight away. */
-export const stopEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const stopEdit = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,request_key,chat_id").eq("id", data.id).single();
@@ -297,7 +296,7 @@ export const stopEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth
   });
 
 /** Checks the Cloudflare build; when it ends, Ollama writes you the summary. */
-export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const checkEdit = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("*").eq("id", data.id).single();
@@ -341,12 +340,12 @@ export const checkEdit = auth({ method: "POST" }).middleware([requireSupabaseAut
     return { status: (ok ? "done" : "failed") as EditStatus, progress: null, log: [] as string[] };
   });
 
-export const listChatProjects = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+export const listChatProjects = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data } = await (context.supabase as any).from("projects").select("id,name,updated_at").eq("user_id", context.userId).order("updated_at", { ascending: false }).limit(100);
   return (data ?? []) as Array<{ id: string; name: string; updated_at: string }>;
 });
 
-export const listProjectFiles = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const listProjectFiles = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ projectId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const all: any[] = [];
