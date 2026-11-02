@@ -287,8 +287,8 @@ function OllamaSheet({ open, onOpenChange, chat, onDone }: { open: boolean; onOp
           <Button className="w-full" disabled={!pick || loading} onClick={async () => {
             const [keyId, ...rest] = pick.split("|"); if (!keyId) return; const m = rest.join("|");
             setLoading(true);
-            try { await setup({ data: { id: chat.id, keyId, model: m, initialize: true } }); toast.success("Ready — it read your site"); onOpenChange(false); onDone(); } catch (e: any) { toast.error(e.message); } finally { setLoading(false); }
-          }}>Use this model</Button>
+            try { await setup({ data: { id: chat.id, keyId, model: m, initialize: true } }); toast.success("Model saved"); onOpenChange(false); onDone(); } catch (e: any) { toast.error(e.message); } finally { setLoading(false); }
+          }}>{loading ? "Saving…" : "Use this model"}</Button>
         </div>
       </SheetContent>
     </Sheet>

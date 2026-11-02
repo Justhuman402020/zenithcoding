@@ -217,15 +217,12 @@ export const setupChat = createServerFn({ method: "POST" }).middleware([requireS
     if (data.model) patch.model = data.model;
     await (context.supabase as any).from("assistant_chats").update(patch).eq("id", data.id);
     if (data.initialize) {
-      const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model,projects(name)").eq("id", data.id).single();
-      
-      const ctxText = await buildContext(context as Ctx, chat.project_id);
-      const reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [
-        { role: "system", content: ctxText },
-        { role: "user", content: "Read everything above and reply in 2-3 short sentences that you are ready, naming the project and what it is." },
-      ]);
-      await (context.supabase as any).from("assistant_chats").update({ initialized_at: new Date().toISOString(), title: chat.projects?.name ? `${chat.projects.name} chat` : "General chat" }).eq("id", data.id);
-      await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: reply || "Ready — I know this project." });
+      // Save instantly: no model call here. Slow self-hosted models (e.g. Ollama on a laptop
+      // behind a tunnel) can take minutes to read the whole site, which froze this button.
+      const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,model,initialized_at,projects(name)").eq("id", data.id).single();
+      await (context.supabase as any).from("assistant_chats").update({ initialized_at: new Date().toISOString(), ...(chat?.initialized_at ? {} : { title: chat?.projects?.name ? `${chat.projects.name} chat` : "General chat" }) }).eq("id", data.id);
+      const name = chat?.projects?.name ? ` for ${chat.projects.name}` : "";
+      await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: `Now using ${chat?.model ?? "your model"}${name}. Ask me anything.` });
     }
     return { ok: true };
   });
