@@ -11,6 +11,23 @@ describe("chat helper rules", () => {
     expect(canStartBuild("pending")).toBe(false);
     expect(canStartBuild(decide("pending", "yes"))).toBe(true);
   });
+  it("allows the saved Ollama tunnel rather than treating its hostname as Cloudflare AI", () => {
+    const tunnel = "https://bars-add-scanner-part.trycloudflare.com";
+    expect(isCloudflareUrl(tunnel)).toBe(false);
+    expect(() => assertChatUrlAllowed(tunnel)).not.toThrow();
+    expect(isCloudflareUrl(`${tunnel}/v1/models`)).toBe(false);
+  });
+  it("continues blocking actual Cloudflare inference and worker endpoints", () => {
+    for (const endpoint of [
+      "https://api.cloudflare.com/client/v4/accounts/x/ai/v1",
+      "https://gateway.ai.cloudflare.com/v1/account/gateway",
+      "https://pool.example.workers.dev/v1",
+      "https://relay.example.org/ai/v1",
+    ]) {
+      expect(isCloudflareUrl(endpoint)).toBe(true);
+      expect(() => assertChatUrlAllowed(endpoint)).toThrow();
+    }
+  });
   it("declined edits never start a build", () => {
     expect(canStartBuild(decide("pending", "no"))).toBe(false);
     expect(decide("declined", "yes")).toBe("declined");
