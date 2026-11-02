@@ -124,7 +124,13 @@ export async function listModelIds(
     const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
     if (isGitHub) headers["X-GitHub-Api-Version"] = "2022-11-28";
     if (isGitHub) headers.Accept = "application/vnd.github+json";
-    const res = await fetch(url, { headers });
+    let res = await fetch(url, { headers });
+    // Ollama tunnels (and other relays) answer 404 at /models but list models at /v1/models
+    // — the same path Chat helper keys already uses. Retry once at /v1/models before failing.
+    if (!res.ok && res.status === 404 && !isGitHub) {
+      const retry = await fetch(`${baseURL}/v1/models`, { headers });
+      if (retry.ok) res = retry;
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       return { ok: false, error: `${res.status}: ${text.slice(0, 200) || "request rejected"}`, models: [] };
