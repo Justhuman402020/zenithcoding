@@ -123,12 +123,12 @@ async function buildContext(ctx: Ctx, projectId: string | null) {
 
 const auth = createServerFn;
 
-export const listOllamaKeys = auth({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+export const listOllamaKeys = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data } = await (context.supabase as any).from("ollama_keys").select("id,label,base_url,created_at,active,active_model").order("created_at");
   return ((data ?? []) as any[]).map((k) => ({ ...k, cloudflare: isCloudflareUrl(k.base_url) })) as Array<{ id: string; label: string; base_url: string; created_at: string; active: boolean; active_model: string | null; cloudflare: boolean }>;
 });
 
-export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const addOllamaKey = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ label: z.string().min(1).max(80), apiKey: z.string().min(1).max(2000), baseUrl: z.string().url().max(300).optional().or(z.literal("")) }).parse(d))
   .handler(async ({ data, context }) => {
     if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can change chat keys (Admin → AI Models).");
@@ -140,7 +140,7 @@ export const addOllamaKey = auth({ method: "POST" }).middleware([requireSupabase
   });
 
 /** Activate a model on a saved key so it shows in the chat picker. Cloudflare keys can't be activated. */
-export const setKeyActive = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const setKeyActive = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), model: z.string().max(200).nullable() }).parse(d))
   .handler(async ({ data, context }) => {
     if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can change chat keys (Admin → AI Models).");
@@ -152,7 +152,7 @@ export const setKeyActive = auth({ method: "POST" }).middleware([requireSupabase
     return { ok: true };
   });
 
-export const listOllamaModels = auth({ method: "POST" }).middleware([requireSupabaseAuth])
+export const listOllamaModels = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ keyId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { base, apiKey } = await keyFor(context as Ctx, data.keyId);
