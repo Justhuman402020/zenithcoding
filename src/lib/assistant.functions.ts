@@ -24,6 +24,9 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
     body: JSON.stringify({ model, messages, stream: false }),
   });
   const text = await res.text();
+  if (res.status === 530 && /trycloudflare\.com$/i.test(new URL(base).hostname)) {
+    throw new Error("Your Ollama tunnel has expired or is offline. On your computer, stop the tunnel and start it again, copy the new trycloudflare.com address, and save it as the Base URL in Admin → AI Models → Chat helper keys. Your key is unchanged.");
+  }
   if (!res.ok) throw new Error(`Ollama said ${res.status}: ${text.slice(0, 300)}`);
   const json = JSON.parse(text);
   return String(json?.choices?.[0]?.message?.content ?? "");
