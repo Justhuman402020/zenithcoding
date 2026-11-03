@@ -1162,11 +1162,15 @@ export type Database = {
       project_domains: {
         Row: {
           created_at: string
+          dns_records: Json
           hostname: string
           id: string
+          is_primary: boolean
           last_check_at: string | null
           last_check_error: string | null
           project_id: string
+          ssl_status: string | null
+          status: string
           updated_at: string
           user_id: string
           verification_token: string
@@ -1175,11 +1179,15 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dns_records?: Json
           hostname: string
           id?: string
+          is_primary?: boolean
           last_check_at?: string | null
           last_check_error?: string | null
           project_id: string
+          ssl_status?: string | null
+          status?: string
           updated_at?: string
           user_id: string
           verification_token?: string
@@ -1188,11 +1196,15 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dns_records?: Json
           hostname?: string
           id?: string
+          is_primary?: boolean
           last_check_at?: string | null
           last_check_error?: string | null
           project_id?: string
+          ssl_status?: string | null
+          status?: string
           updated_at?: string
           user_id?: string
           verification_token?: string
