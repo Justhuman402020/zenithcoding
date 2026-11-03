@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
+import { cloudflareDomainError } from "./cloudflare-domain-permissions";
 
 const hostnameRe = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+$/i;
 
@@ -194,7 +195,7 @@ export const autoSetupDns = createServerFn({ method: "POST" })
         headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
       });
       const j: any = await res.json().catch(() => ({}));
-      if (!res.ok || !j.success) throw new Error(`Cloudflare said: ${j?.errors?.[0]?.message ?? res.status}`);
+      if (!res.ok || !j.success) throw new Error(cloudflareDomainError(path, res.status, j?.errors?.[0]?.message ?? res.statusText));
       return j.result;
     };
     const { registerCustomHostname } = await import("./cloudflare-saas.server");
@@ -206,7 +207,7 @@ export const autoSetupDns = createServerFn({ method: "POST" })
       zone = (await cf(`/zones?name=${encodeURIComponent(name)}`))?.[0];
       if (zone) break;
     }
-    if (!zone) throw new Error(`Your Cloudflare key can't see ${row.hostname}. Add the records at your domain provider instead.`);
+    if (!zone) throw new Error(`Your Cloudflare key can't see ${row.hostname}. Required permission: Zone Read (zone). Include this project's domain under Zone Resources for automatic DNS setup, or add the records at your domain provider instead.`);
     const wanted = [
       { type: "CNAME", name: row.hostname, content: saas.cnameTarget, proxied: false },
       { type: "TXT", name: `_forge-verify.${row.hostname}`, content: row.verification_token, proxied: false },

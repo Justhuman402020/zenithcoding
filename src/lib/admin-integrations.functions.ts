@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdminRole } from "./admin-auth.server";
 import { INTEGRATIONS } from "./integrations-catalog";
+import { cloudflareDomainError } from "./cloudflare-domain-permissions";
 
 const serviceIds = INTEGRATIONS.map((s) => s.id) as [string, ...string[]];
 const valuesSchema = z.object({
@@ -60,12 +61,12 @@ async function probe(service: string, v: Record<string, string>): Promise<{ ok: 
         const json: any = await res.json().catch(() => ({}));
         if (!res.ok || !json.success) {
           const msg = json?.errors?.[0]?.message || res.statusText || "rejected";
-          return { ok: false, message: `${res.status}: ${msg} — the token needs Zone: Read and DNS: Edit permission` };
+          return { ok: false, message: cloudflareDomainError("/zones", res.status, msg) };
         }
         const zones = (json.result ?? []) as any[];
-        if (domain && zones.length === 0) return { ok: false, message: `Key works, but it can't see ${domain}. Give the token access to that domain.` };
+        if (domain && zones.length === 0) return { ok: false, message: `Your token can't see ${domain}. Required permission: Zone Read (zone). Select this main domain under Zone Resources.` };
         const z = zones[0];
-        return { ok: true, message: z ? `Connected to ${z.name} (${z.status}) · nameservers: ${(z.name_servers ?? []).join(", ")}` : "Key works" };
+        return { ok: true, message: z ? `Zone Read verified for ${z.name} (${z.status}). Account Resources: Include → Specific account → ${z.account?.name || "the account that owns this zone"}. Zone Resources: Include → Specific zone → ${z.name}. The other four permissions are checked when connecting a domain; this test does not verify edit access.` : "Zone Read verified. Enter your main domain to identify its account and zone. The other four permissions are checked when connecting a domain." };
       }
       case "miromiro": {
         const { testMiroMiroKey } = await import("./miromiro.server");

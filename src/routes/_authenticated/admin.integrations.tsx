@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { VaultKeyList } from "@/components/VaultKeyList";
 import { ScrolltideConnection } from "@/components/ScrolltideConnection";
 import { INTEGRATIONS, type IntegrationDef } from "@/lib/integrations-catalog";
+import { CLOUDFLARE_DOMAIN_PERMISSIONS } from "@/lib/cloudflare-domain-permissions";
 import {
   listAllSavedKeys,
   listIntegrationKeys,
@@ -160,6 +161,19 @@ function ServiceCard({
           Get key <ExternalLink className="h-3 w-3" />
         </a>
       </div>
+      {def.id === "cloudflare_dns" && (
+        <section className="space-y-2 text-sm" aria-label="Cloudflare domain token setup">
+          <h3 className="font-medium">Required token permissions</h3>
+          <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+            {CLOUDFLARE_DOMAIN_PERMISSIONS.map((permission) => (
+              <li key={permission.name}>{permission.name} ({permission.scope.toLowerCase()})</li>
+            ))}
+          </ul>
+          <p><strong>Account Resources:</strong> Include → Specific account → choose the account that owns your main domain entered below.</p>
+          <p><strong>Zone Resources:</strong> Include → Specific zone → choose that main domain, where Cloudflare for SaaS is enabled. For automatic DNS setup, also include each project domain’s zone managed in your Cloudflare account; otherwise add its DNS records at its domain provider.</p>
+          <p className="text-muted-foreground">The Test button checks Zone Read and identifies the account and zone. The other four permissions are checked when connecting a domain.</p>
+        </section>
+      )}
       {def.fields.map((field) => (
         <div key={field.key} className="space-y-1">
           <label className="text-xs text-muted-foreground">
@@ -182,7 +196,7 @@ function ServiceCard({
       {result && (
         <div className={`text-xs flex items-start gap-1.5 ${result.ok ? "text-primary" : "text-destructive"}`}>
           {result.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
-          <span className="break-all">{result.ok ? "Working — this key is valid." : result.message}</span>
+          <span className="break-all">{result.ok && def.id !== "cloudflare_dns" ? "Working — this key is valid." : result.message}</span>
         </div>
       )}
       <div className="flex gap-2">
