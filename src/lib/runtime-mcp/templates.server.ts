@@ -51,6 +51,10 @@ function argsFor(tool: Descriptor, kind: "search" | "detail" | "browse", input: 
   if (required.some(n => typeof n === "string" && !(n in args))) throw new Error("Scrolltide requires additional search options. Its tool format needs review.");
   return { args, supportsCursor: Boolean(cursorField), pageField, offsetField };
 }
+// Loose call avoids the SDK's circular zod result type.
+function callLoose(client: unknown, name: string, args: Record<string, unknown>): Promise<unknown> {
+  return (client as { callTool: (p: { name: string; arguments: Record<string, unknown> }) => Promise<unknown> }).callTool({ name, arguments: args });
+}
 type ToolResult = { isError?: boolean; structuredContent?: unknown; content?: unknown };
 function decoded(input: unknown) {
   const result = input as ToolResult;
@@ -74,7 +78,7 @@ export async function searchTemplates(userId: string, query: string, cursor?: st
     const properties = object(tool.inputSchema.properties) ?? {};
     if (kind === "browse" && "limit" in properties && !Object.keys(properties).some(n => /^(cursor|next_cursor|page|page_number|offset|skip)$/i.test(n))) return browseCatalog(cursor);
     const { args, supportsCursor, pageField, offsetField } = argsFor(tool, kind, query.trim(), cursor);
-    const data = decoded(await client.callTool({ name: tool.name, arguments: args }));
+    const data = decoded(await callLoose(client, tool.name, args));
     const root = object(data);
     const raw = Array.isArray(data) ? data : root?.items ?? root?.templates ?? root?.results ?? root?.data;
     if (!Array.isArray(raw)) return { items: [] as TemplateResult[], nextCursor: null, note: typeof data === "string" ? data.slice(0, 12000) : "Scrolltide returned a catalog format that needs review." };
@@ -110,7 +114,7 @@ export async function fetchTemplate(userId: string, id: string) {
   return withScrolltide(userId, async client => {
     const tool = selectTool(await definitions(client), "detail");
     const { args } = argsFor(tool, "detail", id);
-    const data = decoded(await client.callTool({ name: tool.name, arguments: args }));
+    const data = decoded(await callLoose(client, tool.name, args));
     const root = object(data); const row = root && object(root.template ?? root.item ?? root.data) || root;
     const brief = typeof data === "string" ? data : row ? valueText(row, ["rebuild_prompt", "rebuildPrompt", "prompt", "instructions", "content", "full_prompt"]) : "";
     if (!brief) throw new Error("Scrolltide did not return rebuild instructions in a supported format.");
