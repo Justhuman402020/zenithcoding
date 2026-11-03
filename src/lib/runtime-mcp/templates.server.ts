@@ -51,7 +51,8 @@ function argsFor(tool: Descriptor, kind: "search" | "detail" | "browse", input: 
   if (required.some(n => typeof n === "string" && !(n in args))) throw new Error("Scrolltide requires additional search options. Its tool format needs review.");
   return { args, supportsCursor: Boolean(cursorField), pageField, offsetField };
 }
-function decoded(result: Awaited<ReturnType<MCPClient["callTool"]>>) {
+type ToolResult = { isError?: boolean; structuredContent?: unknown; content?: unknown };
+function decoded(result: ToolResult) {
   if (result.isError) throw new Error("Scrolltide rejected the request. Check your subscription or daily allowance.");
   if (result.structuredContent) return result.structuredContent;
   const content: unknown[] = Array.isArray(result.content) ? result.content : [];
