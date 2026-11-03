@@ -1,22 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
-import { verifyDomain } from "@/lib/domains.functions";
+import { connectDomain, setPrimaryDomain, verifyDomain } from "@/lib/domains.functions";
+import { normalizeHostname, STATUS_LABEL, type DomainStatus } from "@/lib/domain-policy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Globe, Loader2, Trash2, CheckCircle2, Copy, RefreshCw } from "lucide-react";
+import { Globe, Loader2, Trash2, CheckCircle2, Copy, RefreshCw, Star } from "lucide-react";
 
+type DnsRecord = { type: string; name: string; value: string };
 type Domain = {
   id: string;
   hostname: string;
   verification_token: string;
   verified: boolean;
+  status: string;
+  ssl_status: string | null;
+  dns_records: DnsRecord[] | null;
+  is_primary: boolean;
   last_check_error: string | null;
 };
 
-const hostRe = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+$/i;
+const STEPS: DomainStatus[] = ["waiting_records", "verifying", "setting_up_ssl", "live"];
+
+/** Registrars want the name relative to the domain: "www", "@", "_forge-verify". */
+function relName(full: string, hostname: string) {
+  const root = hostname.replace(/^www\./, "");
+  if (full === root) return "@";
+  return full.endsWith(`.${root}`) ? full.slice(0, -(root.length + 1)) : full;
+}
 
 export function DomainsPanel({ projectId }: { projectId: string }) {
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -25,14 +38,19 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
   const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const verify = useServerFn(verifyDomain);
+  const connect = useServerFn(connectDomain);
+  const setPrimary = useServerFn(setPrimaryDomain);
+  const domainsRef = useRef<Domain[]>([]);
 
   async function load() {
     const { data } = await supabase
       .from("project_domains")
-      .select("id,hostname,verification_token,verified,last_check_error")
+      .select("id,hostname,verification_token,verified,status,ssl_status,dns_records,is_primary,last_check_error")
       .eq("project_id", projectId)
       .order("created_at", { ascending: true });
-    setDomains((data ?? []) as Domain[]);
+    const list = (data ?? []) as unknown as Domain[];
+    domainsRef.current = list;
+    setDomains(list);
     setLoading(false);
   }
 
@@ -40,25 +58,36 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
     load();
   }, [projectId]);
 
+  // Keep checking unfinished domains every 30 seconds while this screen is open.
+  useEffect(() => {
+    const t = setInterval(async () => {
+      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "failed" && normalizeHostname(d.hostname));
+      if (!pending.length) return;
+      for (const d of pending) await verify({ data: { domainId: d.id } }).catch(() => null);
+      load();
+    }, 30_000);
+    return () => clearInterval(t);
+  }, [projectId]);
+
   async function addDomain(e: React.FormEvent) {
     e.preventDefault();
-    const host = newHost.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    if (!hostRe.test(host)) {
-      toast.error("Enter a real domain like mysite.com or app.mysite.com");
+    const host = normalizeHostname(newHost);
+    if (!host) {
+      toast.error("Type the full domain with its ending, like mysite.com or www.mysite.xyz");
       return;
     }
     setAdding(true);
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes.user) { setAdding(false); return; }
-    const { error } = await supabase.from("project_domains").insert({
-      project_id: projectId,
-      user_id: userRes.user.id,
-      hostname: host,
-    });
-    setAdding(false);
-    if (error) return toast.error(error.message.includes("duplicate") ? "That domain is already connected" : error.message);
-    setNewHost("");
-    load();
+    try {
+      const res = await connect({ data: { projectId, hostname: host } });
+      if (!res.ok && res.message) toast.error(res.message);
+      else toast.success(`${host} added. Copy the records below.`);
+      setNewHost("");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not add domain");
+    } finally {
+      setAdding(false);
+      load();
+    }
   }
 
   async function removeDomain(id: string) {
@@ -71,14 +100,19 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
     setBusyId(d.id);
     try {
       const res = await verify({ data: { domainId: d.id } });
-      if (res.verified) toast.success(`${d.hostname} is verified!`);
-      else toast(res.message ?? "Not verified yet");
+      if (res.live) toast.success(`${d.hostname} is live!`);
+      else toast(res.message ?? "Not ready yet");
     } catch (e: any) {
-      toast.error(e?.message ?? "Verification failed");
+      toast.error(e?.message ?? "Check failed");
     } finally {
       setBusyId(null);
       load();
     }
+  }
+
+  async function togglePrimary(d: Domain) {
+    await setPrimary({ data: { domainId: d.id, primary: !d.is_primary } }).catch((e) => toast.error(e?.message));
+    load();
   }
 
   function copy(text: string, label: string) {
@@ -93,107 +127,99 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
       <form onSubmit={addDomain} className="space-y-2">
         <Label htmlFor="newDomain" className="text-xs uppercase tracking-wider text-muted-foreground">Connect a domain you bought</Label>
         <div className="flex gap-2">
-          <Input
-            id="newDomain"
-            value={newHost}
-            onChange={(e) => setNewHost(e.target.value)}
-            placeholder="yourname.com"
-            className="h-10 bg-background/40"
-          />
+          <Input id="newDomain" value={newHost} onChange={(e) => setNewHost(e.target.value)} placeholder="www.yourname.com" className="h-10 bg-background/40" />
           <Button type="submit" disabled={adding} className="h-10 shrink-0 bg-gold-gradient text-primary-foreground hover:opacity-95">
-            {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+            {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Bought it on Namecheap? Add the domain here first. Code Haven will show the exact records to copy into Namecheap's Advanced DNS screen.</p>
+        <p className="text-xs text-muted-foreground">Tip: connect <span className="text-foreground">www.yourname.com</span>. Most domain shops can't point the bare name (yourname.com) with a CNAME, but they can forward it to www.</p>
       </form>
 
       {loading ? (
-        <div className="text-xs text-muted-foreground">Loading…</div>
-      ) : domains.length === 0 ? null : (
+        <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : domains.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No domains yet.</p>
+      ) : (
         <div className="space-y-3">
-          {domains.map((d) => (
-            <div key={d.id} className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-primary shrink-0" />
-                <span className="font-medium text-sm truncate">{d.hostname}</span>
-                {d.verified ? (
-                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
-                    <CheckCircle2 className="h-3 w-3" /> Verified
+          {domains.map((d) => {
+            const status = (STEPS.includes(d.status as DomainStatus) || d.status === "failed" ? d.status : "waiting_records") as DomainStatus;
+            const stepIdx = STEPS.indexOf(status);
+            const cname = (d.dns_records ?? []).find((r) => r.type === "CNAME");
+            const cfTxt = (d.dns_records ?? []).filter((r) => r.type === "TXT");
+            const valid = !!normalizeHostname(d.hostname);
+            return (
+              <div key={d.id} className="rounded-lg hairline-gold bg-card/40 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-sm font-medium truncate">{d.hostname}</span>
+                  <span className={`ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded font-medium ${status === "live" ? "bg-primary/15 text-primary" : status === "failed" ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                    {status === "live" && <CheckCircle2 className="h-3 w-3" />} {STATUS_LABEL[status]}
                   </span>
-                ) : (
-                  <span className="ml-auto text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
-                    Pending
-                  </span>
+                  <button onClick={() => togglePrimary(d)} className={`p-1.5 rounded-md ${d.is_primary ? "text-primary" : "text-muted-foreground hover:text-foreground"}`} title={d.is_primary ? "Main address (tap to unset)" : "Make main address"}>
+                    <Star className={`h-3.5 w-3.5 ${d.is_primary ? "fill-current" : ""}`} />
+                  </button>
+                  <button onClick={() => removeDomain(d.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Remove">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {status !== "failed" && (
+                  <ol className="flex gap-1">
+                    {STEPS.map((s, i) => (
+                      <li key={s} className="flex-1">
+                        <div className={`h-1 rounded-full ${i <= stepIdx ? "bg-primary" : "bg-muted"}`} />
+                        <div className={`mt-1 text-[10px] ${i === stepIdx ? "text-foreground" : "text-muted-foreground"}`}>{STATUS_LABEL[s]}</div>
+                      </li>
+                    ))}
+                  </ol>
                 )}
-                <button
-                  onClick={() => removeDomain(d.id)}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  title="Remove"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
 
-              {!d.verified ? (
-                <div className="space-y-2 text-xs">
-                  <p className="text-muted-foreground leading-relaxed">
-                    <strong className="text-primary">Step 1:</strong> Sign in to Namecheap (or wherever you bought <span className="text-foreground">{d.hostname}</span>) and open <em className="text-foreground">Advanced DNS</em>.
-                  </p>
-                  <p className="text-muted-foreground leading-relaxed">
-                    <strong className="text-primary">Step 2:</strong> Add these three records exactly as shown, then tap <em>Verify now</em>.
-                  </p>
-                  <DnsBlock title="A record — root domain" rows={[["Type","A"],["Name / Host","@"],["Value","185.158.133.1"],["TTL","Automatic"]]} copy={copy} />
-                  <DnsBlock title="A record — www subdomain" rows={[["Type","A"],["Name / Host","www"],["Value","185.158.133.1"],["TTL","Automatic"]]} copy={copy} />
-                  <DnsBlock title="TXT record — ownership check" rows={[["Type","TXT"],["Name / Host","_forge-verify"],["Value",d.verification_token],["TTL","Automatic"]]} copy={copy} />
-                  <p className="text-[11px] text-muted-foreground/80 italic leading-relaxed">
-                    DNS changes usually take 5–30 minutes. SSL turns on automatically once verified.
-                  </p>
-                  {d.last_check_error && (
-                    <p className="text-[11px] text-destructive/80 leading-relaxed">Last check: {d.last_check_error}</p>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground space-y-2">
-                  <p className="leading-relaxed">
+                {!valid ? (
+                  <p className="text-xs text-destructive">This name has no ending (like .com). Remove it and connect the full domain.</p>
+                ) : status !== "live" ? (
+                  <div className="space-y-2 text-xs">
+                    <p className="text-muted-foreground leading-relaxed">
+                      <strong className="text-primary">Step 1:</strong> Open the DNS settings where you bought the domain (Namecheap: <em className="text-foreground">Advanced DNS</em>). Delete any old A record for this name.
+                    </p>
+                    <p className="text-muted-foreground leading-relaxed"><strong className="text-primary">Step 2:</strong> Add these records exactly. Code Haven checks every 30 seconds.</p>
+                    {cname ? (
+                      <DnsBlock title="CNAME — points your domain at Code Haven" rows={[["Type", "CNAME"], ["Name / Host", relName(d.hostname, d.hostname)], ["Value", cname.value], ["TTL", "Automatic"]]} copy={copy} />
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground italic">Preparing your records… tap Check again in a moment.</p>
+                    )}
+                    <DnsBlock title="TXT — proves you own it" rows={[["Type", "TXT"], ["Name / Host", relName(`_forge-verify.${d.hostname}`, d.hostname)], ["Value", d.verification_token], ["TTL", "Automatic"]]} copy={copy} />
+                    {cfTxt.map((r, i) => (
+                      <DnsBlock key={i} title="TXT — turns on the padlock (SSL)" rows={[["Type", "TXT"], ["Name / Host", relName(r.name, d.hostname)], ["Value", r.value], ["TTL", "Automatic"]]} copy={copy} />
+                    ))}
+                    <p className="text-[11px] text-muted-foreground/80 italic leading-relaxed">Changes usually show up in 5–30 minutes, sometimes up to a day.</p>
+                    {d.last_check_error && <p className="text-[11px] text-destructive/80 leading-relaxed">Last check: {d.last_check_error}</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     <CheckCircle2 className="inline h-3 w-3 text-primary mr-1" />
-                     <strong className="text-foreground">{d.hostname}</strong> is live. SSL is provisioned automatically — usually within a few minutes.
+                    <a href={`https://${d.hostname}`} target="_blank" rel="noreferrer" className="text-foreground underline">{d.hostname}</a> is live and shows your latest published version.
                   </p>
-                  {d.last_check_error && (
-                    <p className="text-[11px] text-muted-foreground/80 italic leading-relaxed">Heads up: {d.last_check_error}</p>
-                  )}
-                </div>
-              )}
+                )}
 
-              <Button
-                type="button"
-                size="sm"
-                variant={d.verified ? "outline" : "default"}
-                onClick={() => runVerify(d)}
-                disabled={busyId === d.id}
-                className={`w-full h-9 gap-1.5 ${d.verified ? "hairline-gold" : "bg-gold-gradient text-primary-foreground hover:opacity-95"}`}
-              >
-                {busyId === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {d.verified ? "Re-check DNS" : "Verify now"}
-              </Button>
-            </div>
-          ))}
+                <Button type="button" size="sm" variant={status === "live" ? "outline" : "default"} onClick={() => runVerify(d)} disabled={busyId === d.id || !valid} className={`w-full h-9 gap-1.5 ${status === "live" ? "hairline-gold" : "bg-gold-gradient text-primary-foreground hover:opacity-95"}`}>
+                  {busyId === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Check again
+                </Button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function DnsRow({ label, value, display, copy }: { label: string; value: string; display?: string; copy: (t: string, l: string) => void }) {
+function DnsRow({ label, value, copy }: { label: string; value: string; copy: (t: string, l: string) => void }) {
   return (
     <div className="flex items-center gap-2 text-[11px]">
       <span className="text-muted-foreground w-16 shrink-0">{label}</span>
-      <span className="flex-1 truncate text-foreground">{display ?? value}</span>
-      <button
-        type="button"
-        onClick={() => copy(display ?? value, label)}
-        className="p-1 text-muted-foreground hover:text-foreground"
-        title="Copy"
-      >
+      <span className="flex-1 truncate text-foreground">{value}</span>
+      <button type="button" onClick={() => copy(value, label)} className="p-1 text-muted-foreground hover:text-foreground" title="Copy">
         <Copy className="h-3 w-3" />
       </button>
     </div>
