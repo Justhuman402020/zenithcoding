@@ -225,7 +225,7 @@ export const autoSetupDns = createServerFn({ method: "POST" })
     }
     await supabaseAdmin
       .from("project_domains")
-      .update({ verified: true, verified_at: new Date().toISOString(), last_check_error: null })
+      .update({ status: "verifying", last_check_error: "Records added for you. Code Haven will keep checking." })
       .eq("id", row.id);
     const { registerAndRecord } = await import("./cloudflare-saas.server");
     await registerAndRecord(row.id, row.hostname).catch(() => null);
