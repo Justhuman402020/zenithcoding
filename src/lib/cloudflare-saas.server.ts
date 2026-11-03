@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { decryptSecret } from "./secrets-crypto.server";
 
 import { signHost } from "./domain-policy";
+import { cloudflareDomainError } from "./cloudflare-domain-permissions";
 
 // Placeholder origin: real traffic for customer domains is answered by the forwarder Worker.
 const ORIGIN_PLACEHOLDER_IP = "192.0.2.1";
@@ -60,8 +61,7 @@ async function ensureWorker(cf: ReturnType<typeof client>, token: string, accoun
   });
   const j: any = await res.json().catch(() => ({}));
   if (!res.ok || !j.success) {
-    const hint = res.status === 403 ? " (tick Account → Workers Scripts: Edit and Zone → Workers Routes: Edit on your Cloudflare key)" : "";
-    throw new Error(`Cloudflare said: ${j?.errors?.[0]?.message ?? `HTTP ${res.status}`}${hint}`);
+    throw new Error(cloudflareDomainError(`/accounts/${accountId}/workers/scripts/${WORKER_NAME}`, res.status, j?.errors?.[0]?.message ?? `HTTP ${res.status}`));
   }
   void cf;
 }
@@ -102,8 +102,7 @@ function client(token: string) {
     const j: any = await res.json().catch(() => ({}));
     if (!res.ok || !j.success) {
       const msg = j?.errors?.[0]?.message ?? `HTTP ${res.status}`;
-      const hint = res.status === 403 ? " (the token needs SSL and Certificates: Edit, Zone: Read and DNS: Edit)" : "";
-      throw new Error(`Cloudflare said: ${msg}${hint}`);
+      throw new Error(cloudflareDomainError(path, res.status, msg));
     }
     return j.result;
   };
@@ -123,7 +122,8 @@ export async function registerCustomHostname(hostname: string): Promise<SaasResu
   const cf = client(token);
   const zones = await cf(`/zones?name=${encodeURIComponent(saasDomain)}`);
   const zone = zones?.[0];
-  if (!zone) throw new Error(`Your Cloudflare key can't see ${saasDomain}`);
+  if (!zone) throw new Error(`Your Cloudflare key can't see ${saasDomain}. Required permission: Zone Read (zone). Select this main domain under Zone Resources.`);
+  if (!zone.account?.id) throw new Error(`Cloudflare did not return the account for ${saasDomain}. Select the account that owns this main domain under Account Resources with Workers Scripts Edit (account).`);
 
   // Fallback origin: a proxied record in your zone that points at the live-site server.
   const origin = `origin.${saasDomain}`;
@@ -134,7 +134,7 @@ export async function registerCustomHostname(hostname: string): Promise<SaasResu
       body: JSON.stringify({ type: "A", name: origin, content: ORIGIN_PLACEHOLDER_IP, proxied: true, ttl: 1 }),
     });
   }
-  const fb = await cf(`/zones/${zone.id}/custom_hostnames/fallback_origin`).catch(() => null);
+  const fb = await cf(`/zones/${zone.id}/custom_hostnames/fallback_origin`);
   if (!fb?.origin || fb.origin !== origin) {
     await cf(`/zones/${zone.id}/custom_hostnames/fallback_origin`, {
       method: "PUT",

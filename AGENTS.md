@@ -68,3 +68,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Work details use stable job/message/edit routes with owner-scoped reads; compact cards share this surface, and file-store wrappers persist sanitized patch evidence in traces so history survives browser disconnects without a separate log store.
 - Declare Admin chat-key RPCs directly with createServerFn, not a local factory alias, so compilation preserves authenticated middleware context.
 - Project custom domains use Cloudflare for SaaS hostnames plus a per-hostname Worker route that forwards to the app with an HMAC-signed x-code-haven-host header (src/lib/domain-policy.ts); the app host only serves its own known domains, so direct A records cannot work.
+- Cloudflare domain setup shares endpoint-to-permission mapping with Admin guidance; never suppress authorization errors or imply a read-only token test verified edit permissions.

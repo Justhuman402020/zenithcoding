@@ -67,11 +67,11 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "cloudflare_dns",
     name: "Cloudflare Domains (DNS)",
-    purpose: "Manage your domain's DNS. Changing the key keeps your domain settings.",
+    purpose: "Connect project domains with DNS, certificates and domain forwarding. Changing the key keeps your domain settings.",
     getUrl: "https://dash.cloudflare.com/profile/api-tokens",
     fields: [
-      { key: "apiToken", label: "API Token", required: true, placeholder: "Paste Cloudflare API token (Zone: DNS Edit)" },
-      { key: "domain", label: "Domain", required: false, placeholder: "shopprometheanaction.store" },
+      { key: "apiToken", label: "API Token", required: true, placeholder: "Paste Cloudflare API token with the five permissions below" },
+      { key: "domain", label: "Main domain (Cloudflare for SaaS zone)", required: false, placeholder: "Your main domain in Cloudflare" },
     ],
   },
 ];
