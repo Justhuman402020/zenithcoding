@@ -142,6 +142,14 @@ export async function registerCustomHostname(hostname: string): Promise<SaasResu
     });
   }
 
+  // A hostname inside the main zone itself is already covered by that zone's own SSL;
+  // Cloudflare never validates a Custom Hostname for it, so only the Worker route is needed.
+  if (hostname === saasDomain || hostname.endsWith(`.${saasDomain}`)) {
+    await ensureWorker(cf, token, zone.account?.id);
+    await ensureRoute(cf, zone.id, hostname);
+    return { hostname, status: "active", sslStatus: "active", cnameTarget: origin, records: [] };
+  }
+
   const found = (await cf(`/zones/${zone.id}/custom_hostnames?hostname=${encodeURIComponent(hostname)}`)) as any[];
   let ch = found?.[0];
   if (!ch) {
