@@ -8,6 +8,8 @@ export function normalizeHostname(input: string): string | null {
   if (!host || host.length > 253) return null;
   const parts = host.split(".");
   if (parts.length < 2 || !parts.every((p) => LABEL.test(p))) return null;
+  // "www.something" with nothing after it is a name missing its ending.
+  if (parts[0] === "www" && parts.length < 3) return null;
   // The ending (.com, .xyz, .org…) must be letters, at least 2 of them.
   if (!/^[a-z]{2,63}$/.test(parts[parts.length - 1]!) && !/^xn--[a-z0-9-]+$/.test(parts[parts.length - 1]!)) return null;
   return host;
