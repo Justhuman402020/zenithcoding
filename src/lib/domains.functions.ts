@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-
-const hostnameRe = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})+$/i;
+import { domainStatus, normalizeHostname, STATUS_LABEL } from "./domain-policy";
 
 async function dohLookup(name: string, type: "TXT" | "CNAME" | "A") {
   const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`;
@@ -12,7 +11,26 @@ async function dohLookup(name: string, type: "TXT" | "CNAME" | "A") {
   return (json.Answer ?? []).map((a) => a.data.replace(/^"|"$/g, "").replace(/"\s*"/g, ""));
 }
 
-const FORGE_IP = "185.158.133.1";
+/** Add a domain to a project and immediately prepare it on Cloudflare so the exact records can be shown. */
+export const connectDomain = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ projectId: z.string().uuid(), hostname: z.string().min(3).max(260) }).parse(data))
+  .handler(async ({ data, context }) => {
+    const host = normalizeHostname(data.hostname);
+    if (!host) throw new Error("That isn't a full domain. Include the ending, like mysite.com or www.mysite.xyz.");
+    const { supabase, userId } = context;
+    const { data: project } = await supabase.from("projects").select("id").eq("id", data.projectId).maybeSingle();
+    if (!project) throw new Error("Project not found");
+    const { data: row, error } = await supabase
+      .from("project_domains")
+      .insert({ project_id: data.projectId, user_id: userId, hostname: host })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message.includes("duplicate") ? "That domain is already connected" : error.message);
+    const { registerAndRecord } = await import("./cloudflare-saas.server");
+    const r = await registerAndRecord(row.id, host);
+    return { id: row.id, hostname: host, ok: r.ok, message: r.ok ? null : r.message };
+  });
 
 export const verifyDomain = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -26,45 +44,59 @@ export const verifyDomain = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .maybeSingle();
     if (error || !row) throw new Error("Domain not found");
-    if (!hostnameRe.test(row.hostname)) throw new Error("Invalid hostname");
+    const host = normalizeHostname(row.hostname);
+    if (!host) {
+      await supabase.from("project_domains").update({ status: "failed", last_check_error: "This isn't a full domain (it needs an ending like .com). Remove it and add the full name." }).eq("id", row.id);
+      return { verified: false, live: false, status: "failed", message: "This domain name is incomplete" };
+    }
 
     const checkedAt = new Date().toISOString();
-    try {
-      const [txt, aRoot, aWww] = await Promise.all([
-        dohLookup(`_forge-verify.${row.hostname}`, "TXT"),
-        dohLookup(row.hostname, "A"),
-        dohLookup(`www.${row.hostname}`, "A"),
-      ]);
-      const txtOk = txt.some((t) => t.trim() === row.verification_token);
-      const aRootOk = aRoot.includes(FORGE_IP);
-      const aWwwOk = aWww.includes(FORGE_IP);
+    const txt = await dohLookup(`_forge-verify.${host}`, "TXT").catch((): string[] => []);
+    const txtOk = txt.some((t) => t.trim() === row.verification_token);
+    const aRecords = await dohLookup(host, "A").catch((): string[] => []);
 
-      if (!txtOk || !aRootOk) {
-        const missing: string[] = [];
-        if (!txtOk) missing.push(`TXT _forge-verify (found: ${txt.join(", ") || "none"})`);
-        if (!aRootOk) missing.push(`A @ → ${FORGE_IP} (found: ${aRoot.join(", ") || "none"})`);
-        if (!aWwwOk) missing.push(`A www → ${FORGE_IP} (found: ${aWww.join(", ") || "none"})`);
-        await supabase
-          .from("project_domains")
-          .update({ last_check_at: checkedAt, last_check_error: `Waiting on: ${missing.join(" • ")}` })
-          .eq("id", row.id);
-        return { verified: false, message: "DNS not ready yet. Records can take a few minutes to update." };
-      }
-      await supabase
-        .from("project_domains")
-        .update({ verified: true, verified_at: checkedAt, last_check_at: checkedAt, last_check_error: aWwwOk ? null : "Root verified. Add the www A record too so www.yourdomain.com works." })
-        .eq("id", row.id);
-      // Once verified, register on Cloudflare for SaaS so SSL + routing come up automatically.
-      try {
-        const { registerAndRecord } = await import("./cloudflare-saas.server");
-        await registerAndRecord(row.id, row.hostname);
-      } catch {}
-      return { verified: true, message: aWwwOk ? "Verified" : "Verified (add www A record so www works too)" };
-    } catch (e: any) {
-      await supabase
-        .from("project_domains")
-        .update({ last_check_at: checkedAt, last_check_error: e?.message ?? "Lookup failed" })
-        .eq("id", row.id);
-      throw e;
+    const { registerAndRecord } = await import("./cloudflare-saas.server");
+    const cf = await registerAndRecord(row.id, host);
+    const status = cf.ok ? domainStatus({ txtOk, cfStatus: cf.status, sslStatus: cf.sslStatus }) : (txtOk ? "verifying" : "waiting_records");
+
+    const hints: string[] = [];
+    if (!txtOk) hints.push(`TXT _forge-verify is missing (found: ${txt.join(", ") || "nothing"})`);
+    if (aRecords.includes("185.158.133.1")) hints.push("An old A record pointing to 185.158.133.1 is still there. Delete it and add the CNAME instead.");
+    if (!cf.ok) hints.push(cf.message);
+    else if (status !== "live") {
+      const missing = cf.records.filter((r) => r.type === "TXT").map((r) => `${r.type} ${r.name}`);
+      if (cf.status !== "active" && missing.length) hints.push(`Cloudflare still needs: ${missing.join(", ")}`);
+      if (cf.sslStatus !== "active") hints.push(`SSL: ${cf.sslStatus}`);
     }
+
+    await supabase
+      .from("project_domains")
+      .update({
+        status,
+        verified: txtOk,
+        verified_at: txtOk ? checkedAt : null,
+        last_check_at: checkedAt,
+        last_check_error: hints.length ? hints.join(" • ") : null,
+      })
+      .eq("id", row.id);
+
+    return { verified: txtOk, live: status === "live", status, message: STATUS_LABEL[status] };
+  });
+
+/** Make one domain the main address; its www/root partner and other domains redirect to it. */
+export const setPrimaryDomain = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ domainId: z.string().uuid(), primary: z.boolean() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: row } = await supabase
+      .from("project_domains")
+      .select("id,project_id")
+      .eq("id", data.domainId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!row) throw new Error("Domain not found");
+    await supabase.from("project_domains").update({ is_primary: false }).eq("project_id", row.project_id);
+    if (data.primary) await supabase.from("project_domains").update({ is_primary: true }).eq("id", row.id);
+    return { ok: true };
   });
