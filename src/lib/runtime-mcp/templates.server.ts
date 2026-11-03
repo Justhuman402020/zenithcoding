@@ -52,7 +52,8 @@ function argsFor(tool: Descriptor, kind: "search" | "detail" | "browse", input: 
   return { args, supportsCursor: Boolean(cursorField), pageField, offsetField };
 }
 type ToolResult = { isError?: boolean; structuredContent?: unknown; content?: unknown };
-function decoded(result: ToolResult) {
+function decoded(input: unknown) {
+  const result = input as ToolResult;
   if (result.isError) throw new Error("Scrolltide rejected the request. Check your subscription or daily allowance.");
   if (result.structuredContent) return result.structuredContent;
   const content: unknown[] = Array.isArray(result.content) ? result.content : [];
