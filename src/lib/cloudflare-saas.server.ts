@@ -4,7 +4,80 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { decryptSecret } from "./secrets-crypto.server";
 
-const FORGE_IP = "185.158.133.1";
+import { signHost } from "./domain-policy";
+
+// Placeholder origin: real traffic for customer domains is answered by the forwarder Worker.
+const ORIGIN_PLACEHOLDER_IP = "192.0.2.1";
+const WORKER_NAME = "code-haven-domains";
+
+function appHost() {
+  return (process.env.FORGE_APP_HOST || "boostallsocial.org").toLowerCase();
+}
+
+// Forwards every customer-domain request to Code Haven with a signed host header.
+const WORKER_SOURCE = `
+async function sign(secret, host) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const buf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(host.toLowerCase()));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const host = url.hostname.toLowerCase();
+    const target = new URL(url.pathname + url.search, "https://" + env.APP_HOST);
+    const headers = new Headers(request.headers);
+    headers.set("x-code-haven-host", host);
+    headers.set("x-code-haven-sig", await sign(env.PROXY_SECRET, host));
+    headers.delete("host");
+    const init = { method: request.method, headers, redirect: "manual" };
+    if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
+    return fetch(target.toString(), init);
+  },
+};
+`;
+
+async function ensureWorker(cf: ReturnType<typeof client>, token: string, accountId: string) {
+  const secret = process.env.DOMAIN_PROXY_SECRET;
+  if (!secret) throw new Error("Domain forwarder secret is missing");
+  const form = new FormData();
+  form.append(
+    "metadata",
+    new Blob([JSON.stringify({
+      main_module: "worker.js",
+      compatibility_date: "2025-01-01",
+      bindings: [
+        { type: "plain_text", name: "APP_HOST", text: appHost() },
+        { type: "secret_text", name: "PROXY_SECRET", text: secret },
+      ],
+    })], { type: "application/json" }),
+  );
+  form.append("worker.js", new Blob([WORKER_SOURCE], { type: "application/javascript+module" }), "worker.js");
+  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${WORKER_NAME}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const j: any = await res.json().catch(() => ({}));
+  if (!res.ok || !j.success) {
+    const hint = res.status === 403 ? " (tick Account → Workers Scripts: Edit and Zone → Workers Routes: Edit on your Cloudflare key)" : "";
+    throw new Error(`Cloudflare said: ${j?.errors?.[0]?.message ?? `HTTP ${res.status}`}${hint}`);
+  }
+  void cf;
+}
+
+async function ensureRoute(cf: ReturnType<typeof client>, zoneId: string, hostname: string) {
+  const pattern = `${hostname}/*`;
+  const routes = (await cf(`/zones/${zoneId}/workers/routes`)) as any[];
+  if (!routes.some((r) => r.pattern === pattern)) {
+    await cf(`/zones/${zoneId}/workers/routes`, { method: "POST", body: JSON.stringify({ pattern, script: WORKER_NAME }) });
+  }
+}
+
+/** Used by tests/diagnostics: the signature the forwarder will send for a host. */
+export async function expectedSignature(host: string) {
+  return signHost(process.env.DOMAIN_PROXY_SECRET ?? "", host);
+}
 
 async function loadSaasConfig() {
   const { data } = await supabaseAdmin
@@ -58,7 +131,7 @@ export async function registerCustomHostname(hostname: string): Promise<SaasResu
   if (!existing.length) {
     await cf(`/zones/${zone.id}/dns_records`, {
       method: "POST",
-      body: JSON.stringify({ type: "A", name: origin, content: FORGE_IP, proxied: true, ttl: 1 }),
+      body: JSON.stringify({ type: "A", name: origin, content: ORIGIN_PLACEHOLDER_IP, proxied: true, ttl: 1 }),
     });
   }
   const fb = await cf(`/zones/${zone.id}/custom_hostnames/fallback_origin`).catch(() => null);
@@ -78,6 +151,9 @@ export async function registerCustomHostname(hostname: string): Promise<SaasResu
     });
   }
 
+  await ensureWorker(cf, token, zone.account?.id);
+  await ensureRoute(cf, zone.id, hostname);
+
   const records: SaasResult["records"] = [{ type: "CNAME", name: hostname, value: origin }];
   if (ch.ownership_verification?.name)
     records.push({ type: "TXT", name: ch.ownership_verification.name, value: ch.ownership_verification.value });
@@ -94,12 +170,7 @@ export async function registerAndRecord(domainId: string, hostname: string) {
     const live = r.status === "active" && r.sslStatus === "active";
     await supabaseAdmin
       .from("project_domains")
-      .update({
-        last_check_error: live
-          ? null
-          : `Cloudflare: hostname ${r.status}, SSL ${r.sslStatus}. Needed records: ` +
-            r.records.map((x) => `${x.type} ${x.name} → ${x.value}`).join(" • "),
-      })
+      .update({ ssl_status: r.sslStatus, dns_records: r.records as any })
       .eq("id", domainId);
     return { ok: true as const, ...r, live };
   } catch (e: any) {
