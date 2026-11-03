@@ -197,20 +197,25 @@ export const autoSetupDns = createServerFn({ method: "POST" })
       if (!res.ok || !j.success) throw new Error(`Cloudflare said: ${j?.errors?.[0]?.message ?? res.status}`);
       return j.result;
     };
-    const host = row.hostname.replace(/^www\./, "");
-    const zones = await cf(`/zones?name=${encodeURIComponent(host)}`);
-    const zone = zones?.[0];
-    if (!zone) throw new Error(`Your Cloudflare key can't see ${host}`);
+    const { registerCustomHostname } = await import("./cloudflare-saas.server");
+    const saas = await registerCustomHostname(row.hostname);
+    const parts = row.hostname.split(".");
+    const zoneCandidates = parts.map((_, i) => parts.slice(i).join(".")).filter((z) => z.includes("."));
+    let zone: any = null;
+    for (const name of zoneCandidates) {
+      zone = (await cf(`/zones?name=${encodeURIComponent(name)}`))?.[0];
+      if (zone) break;
+    }
+    if (!zone) throw new Error(`Your Cloudflare key can't see ${row.hostname}. Add the records at your domain provider instead.`);
     const wanted = [
-      { type: "A", name: host, content: FORGE_IP, proxied: false },
-      { type: "A", name: `www.${host}`, content: FORGE_IP, proxied: false },
-      { type: "TXT", name: `_forge-verify.${host}`, content: row.verification_token, proxied: false },
+      { type: "CNAME", name: row.hostname, content: saas.cnameTarget, proxied: false },
+      { type: "TXT", name: `_forge-verify.${row.hostname}`, content: row.verification_token, proxied: false },
+      ...saas.records.filter((r) => r.type === "TXT").map((r) => ({ type: "TXT", name: r.name, content: r.value, proxied: false })),
     ];
     for (const rec of wanted) {
       const existing = (await cf(`/zones/${zone.id}/dns_records?name=${encodeURIComponent(rec.name)}`)) as any[];
-      // Remove records that would clash (other A/AAAA/CNAME on the same name, or old verify TXT).
       for (const e of existing) {
-        const clash = rec.type === "A" ? ["A", "AAAA", "CNAME"].includes(e.type) : e.type === "TXT";
+        const clash = rec.type === "CNAME" ? ["A", "AAAA", "CNAME"].includes(e.type) : e.type === "TXT" && rec.name.startsWith("_forge-verify");
         if (clash && !(e.type === rec.type && e.content.replace(/^"|"$/g, "") === rec.content)) {
           await cf(`/zones/${zone.id}/dns_records/${e.id}`, { method: "DELETE" });
         }
@@ -220,7 +225,7 @@ export const autoSetupDns = createServerFn({ method: "POST" })
     }
     await supabaseAdmin
       .from("project_domains")
-      .update({ verified: true, verified_at: new Date().toISOString(), last_check_error: null })
+      .update({ status: "verifying", last_check_error: "Records added for you. Code Haven will keep checking." })
       .eq("id", row.id);
     const { registerAndRecord } = await import("./cloudflare-saas.server");
     await registerAndRecord(row.id, row.hostname).catch(() => null);

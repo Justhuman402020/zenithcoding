@@ -53,20 +53,39 @@ function isForgeHost(host: string) {
 
 async function serveCustomDomain(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
-  if (request.method !== "GET") return null;
-  if (url.pathname !== "/") return null;
-  const host = (request.headers.get("host") || url.host).split(":")[0]!.toLowerCase();
-  if (!host || isForgeHost(host)) return null;
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  const { pageForPath, verifyHostSignature, domainPair } = await import("./lib/domain-policy");
+  // Customer domains arrive through Code Haven's Cloudflare forwarder with a signed host header.
+  const forwarded = request.headers.get("x-code-haven-host")?.toLowerCase() ?? "";
+  let host = "";
+  if (forwarded && (await verifyHostSignature(process.env.DOMAIN_PROXY_SECRET, forwarded, request.headers.get("x-code-haven-sig")))) {
+    host = forwarded;
+  } else {
+    const direct = (request.headers.get("host") || url.host).split(":")[0]!.toLowerCase();
+    if (!direct || isForgeHost(direct)) return null;
+    host = direct;
+  }
+  const page = pageForPath(url.pathname);
+  if (!page) return null;
 
-  const candidates = host.startsWith("www.") ? [host, host.slice(4)] : [host, `www.${host}`];
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: domain } = await supabaseAdmin
+  const { data: rows } = await supabaseAdmin
     .from("project_domains")
-    .select("project_id,hostname")
-    .in("hostname", candidates)
-    .limit(1)
-    .maybeSingle();
+    .select("project_id,hostname,is_primary")
+    .in("hostname", domainPair(host));
+  const domain = (rows ?? []).find((r) => r.hostname === host) ?? rows?.[0];
   if (!domain) return null;
+
+  const { data: primary } = await supabaseAdmin
+    .from("project_domains")
+    .select("hostname")
+    .eq("project_id", domain.project_id)
+    .eq("is_primary", true)
+    .eq("status", "live")
+    .maybeSingle();
+  if (primary && primary.hostname !== host) {
+    return Response.redirect(`https://${primary.hostname}${url.pathname}${url.search}`, 301);
+  }
 
   const { data: project } = await supabaseAdmin
     .from("projects")
@@ -82,10 +101,12 @@ async function serveCustomDomain(request: Request): Promise<Response | null> {
     );
   }
 
+  const renderUrl = new URL(request.url);
+  if (!renderUrl.searchParams.has("page") && page !== "index.html") renderUrl.searchParams.set("page", page);
   return renderProjectHtml({
     projectId: project.id,
     projectName: project.name,
-    requestUrl: request.url,
+    requestUrl: renderUrl.toString(),
     navLinkBase: "/",
   });
 }
