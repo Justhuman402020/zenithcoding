@@ -61,12 +61,19 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
   // Keep checking unfinished domains every 30 seconds while this screen is open.
   useEffect(() => {
     const t = setInterval(async () => {
-      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "failed" && normalizeHostname(d.hostname));
+      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "offline" && d.status !== "failed" && normalizeHostname(d.hostname));
       if (!pending.length) return;
       for (const d of pending) await verify({ data: { domainId: d.id } }).catch(() => null);
       load();
     }, 30_000);
-    return () => clearInterval(t);
+    // Live and offline domains get a quiet check every 5 minutes.
+    const slow = setInterval(async () => {
+      const settled = domainsRef.current.filter((d) => (d.status === "live" || d.status === "offline") && normalizeHostname(d.hostname));
+      if (!settled.length) return;
+      for (const d of settled) await verify({ data: { domainId: d.id } }).catch(() => null);
+      load();
+    }, 300_000);
+    return () => { clearInterval(t); clearInterval(slow); };
   }, [projectId]);
 
   async function addDomain(e: React.FormEvent) {
@@ -142,7 +149,7 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
       ) : (
         <div className="space-y-3">
           {domains.map((d) => {
-            const status = (STEPS.includes(d.status as DomainStatus) || d.status === "failed" ? d.status : "waiting_records") as DomainStatus;
+            const status = (STEPS.includes(d.status as DomainStatus) || d.status === "failed" || d.status === "offline" ? d.status : "waiting_records") as DomainStatus;
             const stepIdx = STEPS.indexOf(status);
             const cname = (d.dns_records ?? []).find((r) => r.type === "CNAME");
             const cfTxt = (d.dns_records ?? []).filter((r) => r.type === "TXT");
@@ -163,7 +170,10 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
                   </button>
                 </div>
 
-                {status !== "failed" && (
+                {status === "offline" && (
+                  <p className="text-xs text-destructive leading-relaxed">This domain was live but hasn't answered for a while. Check the records below are still there.</p>
+                )}
+                {status !== "failed" && status !== "offline" && (
                   <ol className="flex gap-1">
                     {STEPS.map((s, i) => (
                       <li key={s} className="flex-1">
@@ -198,6 +208,7 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     <CheckCircle2 className="inline h-3 w-3 text-primary mr-1" />
                     <a href={`https://${d.hostname}`} target="_blank" rel="noreferrer" className="text-foreground underline">{d.hostname}</a> is live and shows your latest published version.
+                    {d.last_check_error && <span className="block mt-1 text-[11px] text-muted-foreground/80 italic">{d.last_check_error}</span>}
                   </p>
                 )}
 

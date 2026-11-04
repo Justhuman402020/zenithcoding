@@ -1161,8 +1161,10 @@ export type Database = {
       }
       project_domains: {
         Row: {
+          consecutive_failures: number
           created_at: string
           dns_records: Json
+          first_failure_at: string | null
           hostname: string
           id: string
           is_primary: boolean
@@ -1178,8 +1180,10 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
+          consecutive_failures?: number
           created_at?: string
           dns_records?: Json
+          first_failure_at?: string | null
           hostname: string
           id?: string
           is_primary?: boolean
@@ -1195,8 +1199,10 @@ export type Database = {
           verified_at?: string | null
         }
         Update: {
+          consecutive_failures?: number
           created_at?: string
           dns_records?: Json
+          first_failure_at?: string | null
           hostname?: string
           id?: string
           is_primary?: boolean

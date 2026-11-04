@@ -103,12 +103,15 @@ async function serveCustomDomain(request: Request): Promise<Response | null> {
 
   const renderUrl = new URL(request.url);
   if (!renderUrl.searchParams.has("page") && page !== "index.html") renderUrl.searchParams.set("page", page);
-  return renderProjectHtml({
+  const rendered = await renderProjectHtml({
     projectId: project.id,
     projectName: project.name,
     requestUrl: renderUrl.toString(),
     navLinkBase: "/",
   });
+  const out = new Response(rendered.body, rendered);
+  out.headers.set("x-code-haven-site", project.id);
+  return out;
 }
 
 export default {
