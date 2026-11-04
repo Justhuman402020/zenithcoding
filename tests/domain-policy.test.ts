@@ -27,3 +27,16 @@ describe("domain policy", () => {
     expect(pageForPath("/forge-sdk.js")).toBeNull();
   });
 });
+
+import { nextDomainStatus as nds } from "../src/lib/domain-policy";
+describe("sticky live domains", () => {
+  const base = { prevStatus: "live", everVerified: true, txtOk: true, cfOk: true, cfStatus: "active", sslStatus: "active", siteServes: true, consecutiveFailures: 0, firstFailureAt: null, now: "2026-11-04T20:00:00Z" };
+  it("live survives a single TXT miss", () => { expect(nds({ ...base, txtOk: false, siteServes: false }).status).toBe("live"); });
+  it("live survives a Cloudflare error", () => { expect(nds({ ...base, cfOk: false, siteServes: false }).status).toBe("live"); });
+  it("site answering means live", () => { expect(nds({ ...base, prevStatus: "verifying", everVerified: false, txtOk: false, cfOk: false, siteServes: true }).status).toBe("live"); });
+  it("3 failures over 30 minutes goes offline", () => {
+    expect(nds({ ...base, cfOk: false, siteServes: false, consecutiveFailures: 2, firstFailureAt: "2026-11-04T19:20:00Z" }).status).toBe("offline");
+    expect(nds({ ...base, cfOk: false, siteServes: false, consecutiveFailures: 2, firstFailureAt: "2026-11-04T19:55:00Z" }).status).toBe("live");
+  });
+  it("ownership stays verified once proven", () => { expect(nds({ ...base, prevStatus: "verifying", txtOk: false, siteServes: false, cfStatus: "pending" }).verified).toBe(true); });
+});
