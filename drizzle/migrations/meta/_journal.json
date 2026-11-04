@@ -169,6 +169,13 @@
       "when": 1793688649328,
       "tag": "0023_project_domains_live_status",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793825254409,
+      "tag": "0024_project_domains_sticky_live",
+      "breakpoints": true
     }
   ]
 }
