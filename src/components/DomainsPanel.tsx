@@ -61,12 +61,19 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
   // Keep checking unfinished domains every 30 seconds while this screen is open.
   useEffect(() => {
     const t = setInterval(async () => {
-      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "failed" && normalizeHostname(d.hostname));
+      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "offline" && d.status !== "failed" && normalizeHostname(d.hostname));
       if (!pending.length) return;
       for (const d of pending) await verify({ data: { domainId: d.id } }).catch(() => null);
       load();
     }, 30_000);
-    return () => clearInterval(t);
+    // Live and offline domains get a quiet check every 5 minutes.
+    const slow = setInterval(async () => {
+      const settled = domainsRef.current.filter((d) => (d.status === "live" || d.status === "offline") && normalizeHostname(d.hostname));
+      if (!settled.length) return;
+      for (const d of settled) await verify({ data: { domainId: d.id } }).catch(() => null);
+      load();
+    }, 300_000);
+    return () => { clearInterval(t); clearInterval(slow); };
   }, [projectId]);
 
   async function addDomain(e: React.FormEvent) {
