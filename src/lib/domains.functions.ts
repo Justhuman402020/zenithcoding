@@ -1,7 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { domainStatus, normalizeHostname, STATUS_LABEL } from "./domain-policy";
+import { nextDomainStatus, normalizeHostname, STATUS_LABEL } from "./domain-policy";
+
+/** Open the domain over https and confirm this project's published site answered. */
+async function probeSite(host: string, projectId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://${host}/`, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(8000) });
+    if (res.headers.get("x-code-haven-site") === projectId) return true;
+    // A redirect to this project's primary domain still means routing works.
+    return res.status >= 300 && res.status < 400 && !!res.headers.get("location");
+  } catch {
+    return false;
+  }
+}
 
 async function dohLookup(name: string, type: "TXT" | "CNAME" | "A") {
   const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`;
@@ -39,7 +51,7 @@ export const verifyDomain = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { data: row, error } = await supabase
       .from("project_domains")
-      .select("id,hostname,verification_token")
+      .select("id,hostname,verification_token,project_id,status,verified,consecutive_failures,first_failure_at")
       .eq("id", data.domainId)
       .eq("user_id", userId)
       .maybeSingle();
@@ -57,10 +69,24 @@ export const verifyDomain = createServerFn({ method: "POST" })
 
     const { registerAndRecord } = await import("./cloudflare-saas.server");
     const cf = await registerAndRecord(row.id, host);
-    const status = cf.ok ? domainStatus({ txtOk, cfStatus: cf.status, sslStatus: cf.sslStatus }) : (txtOk ? "verifying" : "waiting_records");
+    const siteServes = await probeSite(host, row.project_id);
+    const next = nextDomainStatus({
+      prevStatus: row.status,
+      everVerified: !!row.verified,
+      txtOk,
+      cfOk: cf.ok,
+      cfStatus: cf.ok ? cf.status : null,
+      sslStatus: cf.ok ? cf.sslStatus : null,
+      siteServes,
+      consecutiveFailures: row.consecutive_failures ?? 0,
+      firstFailureAt: row.first_failure_at,
+      now: checkedAt,
+    });
+    const status = next.status;
 
     const hints: string[] = [];
-    if (!txtOk) hints.push(`TXT _forge-verify is missing (found: ${txt.join(", ") || "nothing"})`);
+    if (status === "live" && !siteServes && next.consecutiveFailures > 0) hints.push("Last check had a problem, retrying.");
+    if (!next.verified) hints.push(`TXT _forge-verify is missing (found: ${txt.join(", ") || "nothing"})`);
     if (aRecords.includes("185.158.133.1")) hints.push("An old A record pointing to 185.158.133.1 is still there. Delete it and add the CNAME instead.");
     if (!cf.ok) hints.push(cf.message);
     else if (status !== "live") {
@@ -73,14 +99,16 @@ export const verifyDomain = createServerFn({ method: "POST" })
       .from("project_domains")
       .update({
         status,
-        verified: txtOk,
-        verified_at: txtOk ? checkedAt : null,
+        verified: next.verified,
+        ...(txtOk && !row.verified ? { verified_at: checkedAt } : {}),
+        consecutive_failures: next.consecutiveFailures,
+        first_failure_at: next.firstFailureAt,
         last_check_at: checkedAt,
         last_check_error: hints.length ? hints.join(" • ") : null,
       })
       .eq("id", row.id);
 
-    return { verified: txtOk, live: status === "live", status, message: STATUS_LABEL[status] };
+    return { verified: next.verified, live: status === "live", status, message: STATUS_LABEL[status] };
   });
 
 /** Make one domain the main address; its www/root partner and other domains redirect to it. */
