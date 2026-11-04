@@ -15,7 +15,7 @@ export function normalizeHostname(input: string): string | null {
   return host;
 }
 
-export type DomainStatus = "waiting_records" | "verifying" | "setting_up_ssl" | "live" | "failed";
+export type DomainStatus = "waiting_records" | "verifying" | "setting_up_ssl" | "live" | "offline" | "failed";
 
 /** Map our TXT check plus Cloudflare's custom-hostname state onto one owner-facing status. */
 export function domainStatus(input: { txtOk: boolean; cfStatus?: string | null; sslStatus?: string | null }): DomainStatus {
@@ -28,11 +28,49 @@ export function domainStatus(input: { txtOk: boolean; cfStatus?: string | null; 
   return "verifying";
 }
 
+export type DomainSignals = {
+  prevStatus: string | null;
+  everVerified: boolean;
+  txtOk: boolean;
+  cfOk: boolean;
+  cfStatus?: string | null;
+  sslStatus?: string | null;
+  siteServes: boolean;
+  consecutiveFailures: number;
+  firstFailureAt: string | null;
+  now: string;
+};
+
+const OFFLINE_AFTER_FAILURES = 3;
+const OFFLINE_AFTER_MS = 30 * 60_000;
+
+/** Decide the next status; live domains survive single hiccups and only go Offline after repeated failures over time. */
+export function nextDomainStatus(s: DomainSignals): { status: DomainStatus; verified: boolean; consecutiveFailures: number; firstFailureAt: string | null } {
+  const verified = s.everVerified || s.txtOk;
+  const cf = (s.cfStatus ?? "").toLowerCase();
+  const ssl = (s.sslStatus ?? "").toLowerCase();
+  const cfLive = s.cfOk && cf === "active" && ssl === "active";
+  if (s.siteServes || (cfLive && verified)) return { status: "live", verified: true, consecutiveFailures: 0, firstFailureAt: null };
+
+  const wasLive = s.prevStatus === "live" || s.prevStatus === "offline";
+  if (wasLive) {
+    const fails = s.consecutiveFailures + 1;
+    const first = s.firstFailureAt ?? s.now;
+    const longEnough = Date.parse(s.now) - Date.parse(first) >= OFFLINE_AFTER_MS;
+    const status: DomainStatus = fails >= OFFLINE_AFTER_FAILURES && longEnough ? "offline" : (s.prevStatus as DomainStatus);
+    return { status, verified, consecutiveFailures: fails, firstFailureAt: first };
+  }
+
+  const base = s.cfOk ? domainStatus({ txtOk: verified, cfStatus: s.cfStatus, sslStatus: s.sslStatus }) : verified ? "verifying" : "waiting_records";
+  return { status: base, verified, consecutiveFailures: 0, firstFailureAt: null };
+}
+
 export const STATUS_LABEL: Record<DomainStatus, string> = {
   waiting_records: "Waiting for records",
   verifying: "Verifying",
   setting_up_ssl: "Setting up SSL",
   live: "Live",
+  offline: "Offline",
   failed: "Needs attention",
 };
 
