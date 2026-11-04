@@ -106,3 +106,17 @@ export function pageForPath(pathname: string): string | null {
   if (p.includes("..")) return "index.html";
   return /\.[a-z0-9]+$/i.test(p) ? p : `${p.replace(/\/$/, "")}.html`;
 }
+
+export type ServableDomain = { hostname: string; status: string; project_id: string };
+
+/** Only an exact, non-disconnected hostname may serve a site; a sibling www/root never stands in. */
+export function shouldServeDomain(host: string, rows: ServableDomain[]): ServableDomain | null {
+  return rows.find((r) => r.hostname === host && r.status !== "disconnected") ?? null;
+}
+
+/** What a disconnect does, in order: stop serving first, then clean Cloudflare, then forget the row. */
+export function disconnectPlan(records: Array<{ type: string; name: string; value: string }> | null, hostname: string, verifyName = `_forge-verify.${hostname}`) {
+  const toDelete = [...(records ?? [])];
+  if (!toDelete.some((r) => r.name === verifyName)) toDelete.push({ type: "TXT", name: verifyName, value: "(your verification code)" });
+  return { steps: ["mark_disconnected", "remove_custom_hostname", "remove_worker_route", "delete_row"] as const, recordsToDelete: toDelete };
+}

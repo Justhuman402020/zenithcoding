@@ -54,12 +54,14 @@ function isForgeHost(host: string) {
 async function serveCustomDomain(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   if (request.method !== "GET" && request.method !== "HEAD") return null;
-  const { pageForPath, verifyHostSignature, domainPair } = await import("./lib/domain-policy");
+  const { pageForPath, verifyHostSignature, domainPair, shouldServeDomain } = await import("./lib/domain-policy");
   // Customer domains arrive through Code Haven's Cloudflare forwarder with a signed host header.
   const forwarded = request.headers.get("x-code-haven-host")?.toLowerCase() ?? "";
   let host = "";
+  let viaForwarder = false;
   if (forwarded && (await verifyHostSignature(process.env.DOMAIN_PROXY_SECRET, forwarded, request.headers.get("x-code-haven-sig")))) {
     host = forwarded;
+    viaForwarder = true;
   } else {
     const direct = (request.headers.get("host") || url.host).split(":")[0]!.toLowerCase();
     if (!direct || isForgeHost(direct)) return null;
@@ -71,10 +73,16 @@ async function serveCustomDomain(request: Request): Promise<Response | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: rows } = await supabaseAdmin
     .from("project_domains")
-    .select("project_id,hostname,is_primary")
+    .select("project_id,hostname,is_primary,status")
     .in("hostname", domainPair(host));
-  const domain = (rows ?? []).find((r) => r.hostname === host) ?? rows?.[0];
-  if (!domain) return null;
+  const domain = shouldServeDomain(host, (rows ?? []) as any);
+  const { notFoundHtml, renderProjectHtml } = await import("./lib/render-site.server");
+  const noStore = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" };
+  if (!domain) {
+    // A disconnected or unknown domain never falls through to the Code Haven app.
+    if (!viaForwarder) return null;
+    return new Response(notFoundHtml("This domain is not connected."), { status: 404, headers: noStore });
+  }
 
   const { data: primary } = await supabaseAdmin
     .from("project_domains")
@@ -93,11 +101,10 @@ async function serveCustomDomain(request: Request): Promise<Response | null> {
     .eq("id", domain.project_id)
     .maybeSingle();
 
-  const { notFoundHtml, renderProjectHtml } = await import("./lib/render-site.server");
   if (!project || !project.published) {
     return new Response(
       notFoundHtml("This domain is connected, but the site hasn't been published yet."),
-      { status: 404, headers: { "content-type": "text/html; charset=utf-8" } },
+      { status: 404, headers: noStore },
     );
   }
 
@@ -111,6 +118,7 @@ async function serveCustomDomain(request: Request): Promise<Response | null> {
   });
   const out = new Response(rendered.body, rendered);
   out.headers.set("x-code-haven-site", project.id);
+  out.headers.set("cache-control", "no-store");
   return out;
 }
 

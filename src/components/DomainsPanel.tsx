@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
-import { connectDomain, setPrimaryDomain, verifyDomain } from "@/lib/domains.functions";
-import { normalizeHostname, STATUS_LABEL, type DomainStatus } from "@/lib/domain-policy";
+import { connectDomain, disconnectDomain, setPrimaryDomain, verifyDomain } from "@/lib/domains.functions";
+import { disconnectPlan, normalizeHostname, STATUS_LABEL, type DomainStatus } from "@/lib/domain-policy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Globe, Loader2, Trash2, CheckCircle2, Copy, RefreshCw, Star } from "lucide-react";
 
 type DnsRecord = { type: string; name: string; value: string };
@@ -40,6 +41,9 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
   const verify = useServerFn(verifyDomain);
   const connect = useServerFn(connectDomain);
   const setPrimary = useServerFn(setPrimaryDomain);
+  const disconnect = useServerFn(disconnectDomain);
+  const [removing, setRemoving] = useState<Domain | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
   const domainsRef = useRef<Domain[]>([]);
 
   async function load() {
@@ -61,7 +65,7 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
   // Keep checking unfinished domains every 30 seconds while this screen is open.
   useEffect(() => {
     const t = setInterval(async () => {
-      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "offline" && d.status !== "failed" && normalizeHostname(d.hostname));
+      const pending = domainsRef.current.filter((d) => d.status !== "live" && d.status !== "offline" && d.status !== "failed" && d.status !== "disconnected" && normalizeHostname(d.hostname));
       if (!pending.length) return;
       for (const d of pending) await verify({ data: { domainId: d.id } }).catch(() => null);
       load();
@@ -97,10 +101,20 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  async function removeDomain(id: string) {
-    if (!confirm("Disconnect this domain?")) return;
-    await supabase.from("project_domains").delete().eq("id", id);
-    load();
+  async function confirmRemove() {
+    if (!removing) return;
+    setRemoveBusy(true);
+    try {
+      const res = await disconnect({ data: { domainId: removing.id } });
+      if (res.ok) toast.success(`${removing.hostname} disconnected`);
+      else toast.error(res.message ?? "Cleanup incomplete");
+      setRemoving(null);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not disconnect");
+    } finally {
+      setRemoveBusy(false);
+      load();
+    }
   }
 
   async function runVerify(d: Domain) {
@@ -165,11 +179,17 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
                   <button onClick={() => togglePrimary(d)} className={`p-1.5 rounded-md ${d.is_primary ? "text-primary" : "text-muted-foreground hover:text-foreground"}`} title={d.is_primary ? "Main address (tap to unset)" : "Make main address"}>
                     <Star className={`h-3.5 w-3.5 ${d.is_primary ? "fill-current" : ""}`} />
                   </button>
-                  <button onClick={() => removeDomain(d.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Remove">
+                  <button onClick={() => setRemoving(d)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Remove">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
 
+                {d.status === "disconnected" ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-destructive leading-relaxed">Disconnected — this domain no longer shows any site. {d.last_check_error}</p>
+                    <Button size="sm" className="w-full h-9" onClick={() => setRemoving(d)}>Retry cleanup</Button>
+                  </div>
+                ) : <>
                 {status === "offline" && (
                   <p className="text-xs text-destructive leading-relaxed">This domain was live but hasn't answered for a while. Check the records below are still there.</p>
                 )}
@@ -216,11 +236,32 @@ export function DomainsPanel({ projectId }: { projectId: string }) {
                   {busyId === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Check again
                 </Button>
+                </>}
               </div>
             );
           })}
         </div>
       )}
+      <AlertDialog open={!!removing} onOpenChange={(o) => { if (!o && !removeBusy) setRemoving(null); }}>
+        <AlertDialogContent className="w-[calc(100%-2rem)] max-w-md rounded-2xl border-border/60 bg-card/95 p-6 shadow-2xl backdrop-blur-xl">
+          <AlertDialogTitle className="text-lg font-semibold text-center">Disconnect {removing?.hostname}?</AlertDialogTitle>
+          <AlertDialogDescription className="text-sm text-foreground/90 text-center">
+            It stops showing your site right away. Code Haven will remove it from Cloudflare (the custom address and its site route).
+          </AlertDialogDescription>
+          {removing && (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              <p className="text-xs text-muted-foreground">After this, delete these records where you bought the domain:</p>
+              {disconnectPlan(removing.dns_records, removing.hostname).recordsToDelete.map((r, i) => (
+                <DnsBlock key={i} title={`${r.type} record`} rows={[["Type", r.type], ["Name / Host", relName(r.name, removing.hostname)], ["Value", r.value]]} copy={copy} />
+              ))}
+            </div>
+          )}
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <Button variant="outline" className="h-11 rounded-xl" disabled={removeBusy} onClick={() => setRemoving(null)}>Deny</Button>
+            <Button className="h-11 rounded-xl" disabled={removeBusy} onClick={confirmRemove}>{removeBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}</Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
