@@ -128,3 +128,32 @@ export const setPrimaryDomain = createServerFn({ method: "POST" })
     if (data.primary) await supabase.from("project_domains").update({ is_primary: true }).eq("id", row.id);
     return { ok: true };
   });
+
+/** Stop serving a domain immediately, clean it out of Cloudflare, then forget it. */
+export const disconnectDomain = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ domainId: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: row } = await supabase
+      .from("project_domains")
+      .select("id,hostname")
+      .eq("id", data.domainId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!row) throw new Error("Domain not found");
+    await supabase.from("project_domains").update({ status: "disconnected", is_primary: false, last_check_error: null }).eq("id", row.id);
+    const host = normalizeHostname(row.hostname);
+    if (host) {
+      try {
+        const { removeCustomHostname } = await import("./cloudflare-saas.server");
+        await removeCustomHostname(host);
+      } catch (e: any) {
+        const msg = `Cleanup incomplete: ${e?.message ?? "Cloudflare failed"}`;
+        await supabase.from("project_domains").update({ last_check_error: msg }).eq("id", row.id);
+        return { ok: false as const, message: msg };
+      }
+    }
+    await supabase.from("project_domains").delete().eq("id", row.id);
+    return { ok: true as const, message: null };
+  });

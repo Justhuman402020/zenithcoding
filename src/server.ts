@@ -91,9 +91,6 @@ async function serveCustomDomain(request: Request): Promise<Response | null> {
     .eq("is_primary", true)
     .eq("status", "live")
     .maybeSingle();
-  if (primary && primary.hostname !== host && !domainPair(host).includes(primary.hostname)) {
-    // primary is a different name; still redirect
-  }
   if (primary && primary.hostname !== host) {
     return Response.redirect(`https://${primary.hostname}${url.pathname}${url.search}`, 301);
   }

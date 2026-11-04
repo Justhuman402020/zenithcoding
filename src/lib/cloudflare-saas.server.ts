@@ -186,3 +186,22 @@ export async function registerAndRecord(domainId: string, hostname: string) {
     return { ok: false as const, message: e?.message ?? "Cloudflare failed" };
   }
 }
+
+/** Remove the Custom Hostname and Worker route for `hostname`. Safe to repeat. */
+export async function removeCustomHostname(hostname: string): Promise<void> {
+  const { token, saasDomain } = await loadSaasConfig();
+  const cf = client(token);
+  const zones = await cf(`/zones?name=${encodeURIComponent(saasDomain)}`);
+  const zone = zones?.[0];
+  if (!zone) throw new Error(`Your Cloudflare key can't see ${saasDomain}. Required permission: Zone Read (zone).`);
+  const pattern = `${hostname}/*`;
+  const routes = (await cf(`/zones/${zone.id}/workers/routes`)) as any[];
+  for (const r of routes.filter((r) => r.pattern === pattern)) {
+    await cf(`/zones/${zone.id}/workers/routes/${r.id}`, { method: "DELETE" });
+  }
+  if (hostname === saasDomain || hostname.endsWith(`.${saasDomain}`)) return;
+  const found = (await cf(`/zones/${zone.id}/custom_hostnames?hostname=${encodeURIComponent(hostname)}`)) as any[];
+  for (const ch of found ?? []) {
+    if (ch.hostname === hostname) await cf(`/zones/${zone.id}/custom_hostnames/${ch.id}`, { method: "DELETE" });
+  }
+}
