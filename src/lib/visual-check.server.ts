@@ -53,16 +53,17 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
       if (error || !blob) throw new Error("Could not read a private screenshot for inspection.");
       const bytes = new Uint8Array(await blob.arrayBuffer());
       let binary = ""; for (const value of bytes) binary += String.fromCharCode(value);
-      parts.push({ type: "text", text: shot.label }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${btoa(binary)}` } });
+      parts.push({ type: "text", text: shot.label }, { type: "image_url", image_url: { url: `data:${imageMime(bytes)};base64,${btoa(binary)}` } });
     }
     log("Image reader is inspecting the captured preview"); await args.trace?.flush();
     const started = Date.now();
-    const response = await fetch(`${provider.baseURL}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: preferred.model, messages: [{ role: "user", content: parts }], stream: false, max_tokens: 1800 }) });
+    const response = await fetch(`${provider.baseURL}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: preferred.model, messages: [{ role: "user", content: parts }], stream: false, max_tokens: 6000, reasoning: { effort: "low" } }) });
     const { recordModelCall } = await import("./workspace-ai.server");
     await recordModelCall({ user_id: args.userId, project_id: args.projectId, provider: preferred.provider, model: preferred.model, section: "visual_check", started_at: started, status: response.ok ? "ok" : "failed", error: response.ok ? null : `Image inspection ${response.status}` });
     if (!response.ok) throw new Error(`Image reader could not inspect screenshots (${response.status}). Check model access or provider credit; no automatic retry was sent.`);
-    const json = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const visual = parseVisualReport(redactSecrets(json.choices?.[0]?.message?.content ?? ""));
+    if (!response.ok) throw new Error(`Screenshots saved, but the image reader (${preferred.model}) refused them: ${response.status} ${(await response.text()).slice(0, 300)}`);
+    const json = await response.json() as { choices?: Array<{ message?: { content?: string | null; reasoning?: string | null } }> };
+    const visual = parseVisualReport(redactSecrets(readerText(json.choices?.[0]?.message)));
     if (issueCount(capture.findings) && visual.status === "passed") visual.status = "problems";
     const report = visual.report + (issueCount(capture.findings) ? "\n" + findingsMessage(capture.findings) : "");
     const { error } = await db.from("browser_checks").update({ ok: visual.status === "passed", visual_status: visual.status, inspection_status: visual.status, visual_report: report }).eq("id", saved.id);
@@ -91,4 +92,19 @@ export function publicCaptureOrigin(origin: string) {
   const configured = process.env["PUBLIC_APP_ORIGIN"];
   if (configured) return configured.replace(/\/$/, "");
   return /^https:\/\/(project--|id-preview--)[^.]+\.lovable\.app$/i.test(origin) ? "https://boostallsocial.org" : origin;
+}
+
+/** Screenshot services return PNG or JPEG; a wrong label makes some readers reply empty. */
+export function imageMime(bytes: Uint8Array) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return "image/png";
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57) return "image/webp";
+  return "image/jpeg";
+}
+/** Thinking models sometimes leave the verdict only in their reasoning text. */
+export function readerText(message: { content?: string | null; reasoning?: string | null } | undefined) {
+  const content = (message?.content ?? "").trim();
+  if (content) return content;
+  const reasoning = message?.reasoning ?? "";
+  const at = reasoning.search(/\b(PASS|PROBLEMS|UNVERIFIED)\b/);
+  return at >= 0 ? reasoning.slice(at) : "";
 }

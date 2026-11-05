@@ -12,3 +12,8 @@ import { parseVisualReport } from "./visual-check-policy";
 describe("parseVisualReport", () => {
   it("reads a bold PASS", () => { expect(parseVisualReport("**PASS** looks fine").status).toBe("passed"); });
 });
+import { imageMime, readerText } from "./visual-check.server";
+describe("screenshot reading", () => {
+  it("labels PNG screenshots as PNG", () => { expect(imageMime(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe("image/png"); });
+  it("uses the verdict from reasoning when the answer is empty", () => { expect(readerText({ content: "", reasoning: "thinking... PROBLEMS: button clipped" })).toBe("PROBLEMS: button clipped"); });
+});
