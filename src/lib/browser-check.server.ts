@@ -52,6 +52,7 @@ export async function createSourcePreviewToken(userId: string, projectId: string
 }
 
 class PermissionError extends Error {}
+class RateLimitError extends Error {}
 
 async function cf(acct: Account, endpoint: "screenshot" | "scrape", body: unknown) {
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acct.account}/browser-rendering/${endpoint}`, {
@@ -61,6 +62,7 @@ async function cf(acct: Account, endpoint: "screenshot" | "scrape", body: unknow
     signal: AbortSignal.timeout(60_000),
   });
   if (res.status === 401 || res.status === 403) throw new PermissionError("Cloudflare needs Account → Browser Rendering → Edit on this account; check the token's account access.");
+  if (res.status === 429) throw new RateLimitError("Cloudflare screenshot limit reached on this account.");
   if (!res.ok) throw new Error(`Browser test failed (${res.status}): ${redactSecrets((await res.text()).slice(0, 200))}`);
   return res;
 }
@@ -83,8 +85,8 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
   if (["localhost", "127.0.0.1", "::1"].includes(new URL(opts.url).hostname)) return { ok: false, error: "The remote screenshot browser cannot open the local editor address. Publish this update, then run the screenshot check from your live Code Haven site.", missingPermission: [], durationMs: 0 };
   const accounts = await poolAccounts();
   const missing: string[] = [];
-  if (!accounts.length) return { ok: false, error: "No Cloudflare accounts are saved yet.", missingPermission: [], durationMs: 0 };
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let rateLimited = !accounts.length;
   for (const acct of accounts) {
     try {
       const sep = opts.url.includes("?") ? "&" : "?";
@@ -112,8 +114,51 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
       return { ok: true, findings: cleanFindings(parsed), shots, accountLabel: acct.label, durationMs: Date.now() - started, missingPermission: missing };
     } catch (e) {
     if (e instanceof PermissionError) { missing.push(acct.label); continue; }
+      if (e instanceof RateLimitError) { rateLimited = true; continue; }
       return { ok: false, error: e instanceof Error ? e.message : "Browser test failed", missingPermission: missing, durationMs: Date.now() - started };
     }
   }
+  if (rateLimited) {
+    const backup = await runBackupBrowser(opts, started, missing).catch((e) => ({ ok: false as const, error: `Backup browser failed: ${e instanceof Error ? redactSecrets(e.message) : "unknown error"}`, missingPermission: missing, durationMs: Date.now() - started }));
+    return backup;
+  }
   return { ok: false, error: "Browser capture needs Account → Browser Rendering → Edit, with access to the selected Cloudflare account.", missingPermission: missing, durationMs: Date.now() - started };
+}
+
+// Backup browser (Microlink): used only when every Cloudflare account is rate-limited or none is saved.
+// Works without signup (small daily free allowance); MICROLINK_API_KEY raises the allowance.
+async function runBackupBrowser(opts: { userId: string; projectId: string; url: string }, started: number, missing: string[]): Promise<CheckOutcome> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const key = process.env.MICROLINK_API_KEY;
+  const sep = opts.url.includes("?") ? "&" : "?";
+  const specs = [
+    { label: "Phone", url: opts.url, viewport: PHONE, mobile: true },
+    { label: "Phone, scrolled", url: `${opts.url}${sep}__scroll=2200`, viewport: PHONE, mobile: true },
+    { label: "Desktop", url: opts.url, viewport: DESKTOP, mobile: false },
+  ];
+  const shots: CheckShot[] = [];
+  for (const s of specs) {
+    const res = await fetch(microlinkScreenshotUrl(s.url, s.viewport, s.mobile, !!key), {
+      headers: key ? { "x-api-key": key } : {},
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (res.status === 429) throw new Error("the backup browser's daily free limit is used up too.");
+    const type = res.headers.get("content-type") ?? "";
+    if (!res.ok || !type.startsWith("image/")) throw new Error(`backup browser returned ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const path = `${opts.userId}/${opts.projectId}/${Date.now()}-${shots.length}.jpg`;
+    const { error } = await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: type, upsert: true });
+    if (error) throw new Error("could not save the private screenshot.");
+    shots.push({ label: s.label, url: path });
+  }
+  return { ok: true, findings: cleanFindings({}), shots, accountLabel: "Backup browser (Microlink)", durationMs: Date.now() - started, missingPermission: missing };
+}
+
+export function microlinkScreenshotUrl(url: string, vp: { width: number; height: number }, mobile: boolean, pro: boolean) {
+  const q = new URLSearchParams({
+    url, screenshot: "true", meta: "false", embed: "screenshot.url", type: "jpeg",
+    "viewport.width": String(vp.width), "viewport.height": String(vp.height),
+    "viewport.isMobile": String(mobile), waitForTimeout: "2500", waitUntil: "networkidle0", force: "true",
+  });
+  return `https://${pro ? "pro" : "api"}.microlink.io/?${q}`;
 }
