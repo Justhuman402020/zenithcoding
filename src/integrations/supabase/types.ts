@@ -365,11 +365,17 @@ export type Database = {
           error_short: string | null
           findings: Json
           id: string
+          job_id: string | null
           ok: boolean
           project_id: string
           screenshots: Json
+          source_fingerprint: string | null
           target: string
+          trace_id: string | null
           user_id: string
+          visual_model: string | null
+          visual_report: string | null
+          visual_status: string
         }
         Insert: {
           created_at?: string
@@ -377,11 +383,17 @@ export type Database = {
           error_short?: string | null
           findings?: Json
           id?: string
+          job_id?: string | null
           ok?: boolean
           project_id: string
           screenshots?: Json
+          source_fingerprint?: string | null
           target: string
+          trace_id?: string | null
           user_id: string
+          visual_model?: string | null
+          visual_report?: string | null
+          visual_status?: string
         }
         Update: {
           created_at?: string
@@ -389,13 +401,27 @@ export type Database = {
           error_short?: string | null
           findings?: Json
           id?: string
+          job_id?: string | null
           ok?: boolean
           project_id?: string
           screenshots?: Json
+          source_fingerprint?: string | null
           target?: string
+          trace_id?: string | null
           user_id?: string
+          visual_model?: string | null
+          visual_report?: string | null
+          visual_status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "browser_checks_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "chat_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       chat_jobs: {
         Row: {
@@ -426,6 +452,10 @@ export type Database = {
           trace_id: string | null
           updated_at: string
           user_id: string
+          visual_check_count: number
+          work_paused_at: string | null
+          work_paused_ms: number
+          work_started_at: string | null
         }
         Insert: {
           assistant_reply?: string | null
@@ -455,6 +485,10 @@ export type Database = {
           trace_id?: string | null
           updated_at?: string
           user_id: string
+          visual_check_count?: number
+          work_paused_at?: string | null
+          work_paused_ms?: number
+          work_started_at?: string | null
         }
         Update: {
           assistant_reply?: string | null
@@ -484,6 +518,10 @@ export type Database = {
           trace_id?: string | null
           updated_at?: string
           user_id?: string
+          visual_check_count?: number
+          work_paused_at?: string | null
+          work_paused_ms?: number
+          work_started_at?: string | null
         }
         Relationships: [
           {
