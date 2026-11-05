@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
 
 import { successfulEdit } from "./owner-policy";
+import { imageMessageContent } from "./assistant-images";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -250,12 +251,14 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
       return { ok: true };
     }
     const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
-    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText });
+    const { error: saveError } = await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText, parts: { images: data.images ?? [] } });
+    if (saveError) throw new Error("Could not save your message. Please try again.");
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at", { ascending: false }).limit(60);
     const ctxText = await buildContext(context as Ctx, chat.project_id);
     let reply: string;
     try {
-      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...((history ?? []).reverse() as any[]).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })), ...(data.images?.length ? [{ role: "user", content: [{ type: "text", text: data.text }, ...data.images.map((image) => ({ type: "image_url", image_url: { url: image.url } }))] }] : [])], !!data.images?.length);
+      const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
+      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length);
     } catch (e) {
       reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
