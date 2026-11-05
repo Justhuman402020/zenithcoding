@@ -71,3 +71,5 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Cloudflare domain setup shares endpoint-to-permission mapping with Admin guidance; never suppress authorization errors or imply a read-only token test verified edit permissions.
 - Sidebar chat uses shared image-message helpers for image-only eligibility and multimodal payloads; save image parts with the message so attachments remain visible after reload.
 - Sidebar project previews mount by chat/project identity and reuse the browser build/asset pipeline with owner-scoped reads; viewing never navigates to the editor, and switching attachments unmounts stale frames.
+- Work clocks use saved execution/pause/end timestamps with a local one-second display tick; counts only come from saved job statistics.
+- Approved visual checks persist screenshots, reader snapshot, briefs and round count per job; screenshot inspection is separate from coding and never silently switches models or publishes.

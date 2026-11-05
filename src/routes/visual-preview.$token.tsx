@@ -13,11 +13,13 @@ export const Route = createFileRoute("/visual-preview/$token")({
 function VisualPreview() {
   const { token } = Route.useParams();
   const load = useServerFn(loadVisualPreview);
+  const [scrollTo, setScrollTo] = useState(0);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const frame = useRef<HTMLIFrameElement>(null);
   const report = useRef<HTMLPreElement>(null);
   useEffect(() => {
+    setScrollTo(Number(new URLSearchParams(window.location.search).get("__scroll")) || 0);
     let cancelled = false;
     void (async () => {
       try {
@@ -41,6 +43,6 @@ function VisualPreview() {
   }, []);
   return <div className="h-[100dvh] w-full bg-background text-foreground">
     <pre id="__ch_report" ref={report} className="hidden">{JSON.stringify({ pageErrors: [error || "Preview has not finished rendering"], brokenImages: [], failedLoads: [] })}</pre>
-    {html ? <iframe ref={frame} title="Private project visual preview" sandbox="allow-scripts allow-forms" className="block h-full w-full border-0" srcDoc={html} /> : <div role="status" className="p-6">{error || "Preparing preview…"}</div>}
+    {html ? <iframe ref={frame} title="Private project visual preview" sandbox="allow-scripts allow-forms" className="block h-full w-full border-0" srcDoc={html + `<script>window.addEventListener('load',function(){setTimeout(function(){scrollTo(0,${scrollTo})},200)});<\/script>`} /> : <div role="status" className="p-6">{error || "Preparing preview…"}</div>}
   </div>;
 }
