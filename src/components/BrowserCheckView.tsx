@@ -19,17 +19,6 @@ export function BrowserCheckView({ check, onFix, fixBlockedReason }: { check: Br
     return (
       <div className="space-y-3 text-base">
         <p className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" /> {check.error}</p>
-        {check.missingPermission.length > 0 && (
-          <div className="rounded-xl border border-border bg-card/70 p-3 text-sm">
-            <p className="font-medium">These Cloudflare accounts can't open a test browser yet: {check.missingPermission.join(", ")}</p>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
-              <li>Sign in to Cloudflare with that account.</li>
-              <li>Open My Profile → API Tokens and tap Edit on the token you saved in Code Haven.</li>
-              <li>Tap "Add more", choose Account → <b>Browser Rendering</b> → <b>Edit</b>.</li>
-              <li>Tap Continue to summary → Update token. The token text stays the same, so you don't need to paste anything again.</li>
-            </ol>
-          </div>
-        )}
       </div>
     );
   }
@@ -39,7 +28,7 @@ export function BrowserCheckView({ check, onFix, fixBlockedReason }: { check: Br
     <div className="space-y-4 text-base">
       <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${n ? "border-destructive/40" : "border-primary/40"}`}>
         {n ? <AlertTriangle className="h-4 w-4 text-destructive" /> : <CheckCircle2 className="h-4 w-4 text-primary" />}
-        <span>{n ? `${n} problem${n === 1 ? "" : "s"} found` : "Looks good: no broken pictures or page errors"}</span>
+        <span>{n ? `${n} problem${n === 1 ? "" : "s"} found` : "Screenshots captured · page errors not scanned"}</span>
         <span className="ml-auto text-sm text-muted-foreground">{check.findings.imageCount} pictures · {(check.durationMs / 1000).toFixed(0)}s</span>
       </div>
       {n > 0 && (
