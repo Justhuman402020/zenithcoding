@@ -1089,6 +1089,59 @@ export type Database = {
         }
         Relationships: []
       }
+      project_ai_settings: {
+        Row: {
+          cloudflare_enabled: boolean
+          day_requests: number
+          last_checked_at: string | null
+          last_error: string | null
+          last_reply: string | null
+          model: string | null
+          project_id: string
+          status: string
+          token_hash: string | null
+          updated_at: string
+          usage_day: string | null
+          user_id: string
+        }
+        Insert: {
+          cloudflare_enabled?: boolean
+          day_requests?: number
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_reply?: string | null
+          model?: string | null
+          project_id: string
+          status?: string
+          token_hash?: string | null
+          updated_at?: string
+          usage_day?: string | null
+          user_id: string
+        }
+        Update: {
+          cloudflare_enabled?: boolean
+          day_requests?: number
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_reply?: string | null
+          model?: string | null
+          project_id?: string
+          status?: string
+          token_hash?: string | null
+          updated_at?: string
+          usage_day?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_ai_settings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_assets: {
         Row: {
           content_type: string | null
