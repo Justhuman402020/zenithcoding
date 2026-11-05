@@ -23,6 +23,7 @@ import { WorkLogCard } from "@/components/WorkLogCard";
 import { messageRunId } from "@/lib/work-log";
 import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
 import { runBrowserCheck } from "@/lib/browser-check.functions";
+import { startVisualCheck } from "@/lib/visual-check.functions";
 import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
 import { zipCheckDecision, zipFixPrompt, ZIP_QUIET_MS, ZIP_SETTLE_MS } from "@/lib/zip-check";
 import { Input } from "@/components/ui/input";
@@ -996,6 +997,8 @@ function ProjectEditor() {
 
   // "Test it like a real visitor": opens the preview/published site in Cloudflare's real browser.
   const [browserCheck, setBrowserCheck] = useState<BrowserCheck | null>(null);
+  const startVisualCheckFn = useServerFn(startVisualCheck);
+  const [startingVisualCheck, setStartingVisualCheck] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
   const [fixRounds, setFixRounds] = useState(0);
   const pendingAutoTest = useRef(false);
@@ -2791,6 +2794,13 @@ function ProjectEditor() {
               <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} />
             </div>
           </div>
+        )}
+        {tab === "preview" && (
+          <div className="flex shrink-0 justify-end border-b px-3 py-1"><Button variant="ghost" size="sm" className="h-8 text-xs" disabled={startingVisualCheck || isBusy} title="Uses browser and selected image-reader credit" onClick={async () => {
+            if (!(await requestApproval("Inspect phone and PC preview screenshots with your selected image reader? This uses browser and model credit. No files will be edited."))) return;
+            setStartingVisualCheck(true);
+            try { await startVisualCheckFn({ data: { projectId, html: previewDoc } }); toast.success("Screenshot inspection started. Results will be saved in your work log."); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not start visual check"); } finally { setStartingVisualCheck(false); }
+          }}><Eye className="h-3.5 w-3.5" />Inspect screenshots</Button></div>
         )}
         {tab === "preview" && (
           <PreviewFrame

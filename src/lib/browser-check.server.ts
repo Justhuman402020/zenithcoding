@@ -102,7 +102,7 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
       try { parsed = JSON.parse(text); } catch { parsed = { pageErrors: text ? [] : ["The page did not finish loading in the test browser."] }; }
       return { ok: true, findings: cleanFindings(parsed), shots, accountLabel: acct.label, durationMs: Date.now() - started, missingPermission: missing };
     } catch (e) {
-      if (e instanceof PermissionError) { missing.push(acct.label); continue; }
+    if (e instanceof PermissionError) { missing.push(acct.label); continue; }
       return { ok: false, error: e instanceof Error ? e.message : "Browser test failed", missingPermission: missing, durationMs: Date.now() - started };
     }
   }
