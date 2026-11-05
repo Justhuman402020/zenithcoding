@@ -2,6 +2,7 @@ import { shouldHandoff, emptyBaton, mergeBaton, batonNote } from "@/lib/neuron-b
 import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/lib/cf-pool-policy";
 import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, trimCarried } from "@/lib/completion-gate";
 import { createFileRoute } from "@tanstack/react-router";
+import { lookOnlyAction, LOOK_ONLY_NOTE } from "@/lib/edit-budget-policy";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
 import { recoveryHeaders } from "@/lib/build-recovery";
@@ -941,7 +942,10 @@ export const Route = createFileRoute("/api/public/chat")({
                 // final reply never repeats itself.
                 if (visible && !replyTexts.some((t) => t.trim() === visible.trim())) replyTexts.push(visible);
                 // Only successful writes/edits/deletes count as changed files; reads don't.
-                for (const p of changedPathsFromStep(step)) progressModel.files.add(p);
+                const editedNow = changedPathsFromStep(step);
+                for (const p of editedNow) progressModel.files.add(p);
+                stepsWithoutEdit = editedNow.length ? 0 : stepsWithoutEdit + 1;
+                if (lookOnlyAction(stepsWithoutEdit, needsFileChange) === "stop") { lookOnlyHit = true; trace.log("budget.look_only_stop", { detail: { steps: stepsWithoutEdit } }); }
                 let last = "";
                 for (const c of (step?.toolCalls ?? []) as any[]) {
                   const path = c?.input?.path ?? c?.args?.path;
@@ -973,7 +977,8 @@ export const Route = createFileRoute("/api/public/chat")({
               },
               prepareStep: (opts: any) => {
                 createPrepareStep(needsFileChange, trace)(opts);
-                if (!cfPool) return undefined;
+                const editNote = lookOnlyAction(stepsWithoutEdit, needsFileChange) === "nudge" ? `\n\n${LOOK_ONLY_NOTE}` : "";
+                if (!cfPool) return editNote ? { system: systemPrompt + editNote } : undefined;
                 const total = Math.round(baseNeurons + attemptNeurons);
                 // Preflight guard: never send a call whose worst case could pass 9,500.
                 const lastCost = stepCosts.length ? Math.max(stepCosts[stepCosts.length - 1]!, stepCosts.reduce((a, b) => a + b, 0) / stepCosts.length) * 1.25 : 500;
@@ -984,12 +989,13 @@ export const Route = createFileRoute("/api/public/chat")({
                   return undefined;
                 }
                 return {
-                  system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.${baton.items.length || baton.keyLog.length ? `\n\n${batonNote(baton, `Key #${keyNo(current.ref.provider)}`)}` : ""}`,
+                  system: `${systemPrompt}\n\n## Neuron budget (this key)\nStarted at ${Math.round(baseNeurons)}, used this turn ${Math.round(attemptNeurons)}, now ${total} of the 9,000 soft cap (${Math.max(0, 9000 - total)} left). Finish each step completely; if close to 9,000, end the current step cleanly so the next key can continue.${editNote}${baton.items.length || baton.keyLog.length ? `\n\n${batonNote(baton, `Key #${keyNo(current.ref.provider)}`)}` : ""}`,
                 };
               },
               stopWhen: [
                 stepCountIs(STEP_LIMIT),
                 () => handoff,
+                () => lookOnlyHit,
                 () => {
                   const n = recentCalls.length;
                   const looping = n >= 3 && recentCalls[n - 1] === recentCalls[n - 2] && recentCalls[n - 2] === recentCalls[n - 3];
