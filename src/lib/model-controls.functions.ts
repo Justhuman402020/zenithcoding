@@ -15,7 +15,7 @@ export type EditorModelOption = {
 };
 
 export const BAD_CF_MODEL = /(glm[-_. ]?5\.2|deepseek.*distill|embedding|rerank|guard|whisper|tts)/i;
-export const FREE_CF_CODER = /(qwen|glm[-_. ]?\d)/i;
+export const FREE_CF_CODER = /(qwen|glm[-_. ]?4)/i;
 
 async function loadControls(refresh = false) {
   const { loadProviderRegistry } = await import("./model-router.server");
