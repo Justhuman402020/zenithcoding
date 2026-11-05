@@ -1,3 +1,4 @@
+import { defaultIndexHtml } from "./zip-scaffold";
 // In-browser build pipeline using esbuild-wasm.
 // Bundles a Vite/React/Vue/Svelte source project into static dist/ files
 // entirely client-side. Bare imports are resolved via https://esm.sh.
@@ -262,8 +263,8 @@ export async function buildInBrowser(
       }
       entry = "/" + found;
       log("warn", `No module entry in index.html — using ${found}`);
-      if (!indexHtml) indexHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preview</title></head><body><div id="root"></div><div id="app"></div></body></html>`;
-      indexHtml = indexHtml.replace(/<\/body>/i, `<script type="module" src="${entry}"></script></body>`);
+      if (!indexHtml) indexHtml = fsMap.get(".code-haven-build/scaffold/index.html") || defaultIndexHtml(found);
+      else indexHtml = indexHtml.replace(/<\/body>/i, `<script type="module" src="${entry}"></script></body>`);
     }
     const aliases = readAliases(fsMap);
 
