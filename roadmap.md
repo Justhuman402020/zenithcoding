@@ -1,6 +1,7 @@
 # Roadmap
 
-- [ ] Plan automatic necessary screenshot capture/display and shared ordered Cloudflare retries/recovery for enabled project-site AI only; awaiting approval before implementation.
+- [x] Implement approved automatic screenshot eligibility/phases/thumbnails and site-only persisted Cloudflare key reservations/retries/recovery; 249 tests passed.
+- [ ] Verify new real capture→reader→repair→recheck and project AI recovery on hosted update: published recovery endpoint returns 404; requires publishing. Signed-in local home checked on phone/PC, no horizontal overflow or browser errors; recovery rejects unauthenticated requests with 401.
 
 - [x] Require real before/after screenshot checks for approved preview-error repairs; return visible problems to the coder and report capture blockers honestly. Live capture still requires a reachable published preview and configured browser/image-reader access.
 
