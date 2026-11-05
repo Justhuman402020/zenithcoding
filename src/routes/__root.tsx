@@ -16,6 +16,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeBoot } from "@/components/ThemePicker";
+import { AppInstallProvider } from "@/components/AppInstall";
 import { Button } from "@/components/ui/button";
 import { authIdentityChanged, isWorkspaceAccessDenied } from "@/lib/session-policy";
 
@@ -157,7 +158,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <ThemeBoot />
-      <WorkspaceGate><Outlet /></WorkspaceGate>
+      <AppInstallProvider><WorkspaceGate><Outlet /></WorkspaceGate></AppInstallProvider>
       <Toaster position="top-center" richColors />
     </QueryClientProvider>
   );
