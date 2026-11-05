@@ -2,7 +2,7 @@
 
 ## What is wrong now
 - Screenshot capture exists, but its permission is tied to a narrowly classified approved edit. That can produce the “unverified / approved capture build” message in your screenshot even when inspection would help.
-- Project-site Cloudflare chat currently moves straight to another key on temporary failures, treats every 429 as daily exhaustion, and updates usage without a safe shared reservation. This is not the four-retry, cross-project workflow you requested.
+- Project-site Cloudflare chat currently moves straight to another key on temporary failures, treats every 429 as daily exhaustion, and updates usage without a safe shared reservation. It also records usage through two paths that can double-count or race. This is not the four-retry, cross-project workflow you requested.
 
 ## 1. Screenshots when they are needed—without asking again
 - Automatically inspect the actual preview for new visible pages, layout/theme changes, image or navigation changes, imported ZIP previews, and blank/broken previews. Also allow read-only preview diagnosis without needing an edit approval first.
@@ -41,13 +41,14 @@
 - Replace keyword-only screenshot approval with a persisted task-scoped visual verification decision. Separate capture authorization from write authorization in the chat runner and `inspect_preview` tool.
 - Use the existing browser capture, selected image-reader, private screenshot storage and work-log pages. Add real pre/post/recheck phase metadata, separate capture/inspection outcomes, and thumbnail links. Ensure post-edit findings enter the repair loop before the job is marked finished.
 - Isolate project-site retries in project AI policy/server modules and the `/api/public/sites/ai/chat` surface. Avoid changing shared workspace retry behavior.
+- Settle each provider attempt once through the existing ledger; remove the site's duplicate direct usage increment. Apply the same atomic switch/cap admission to the owner's test button. Validate provider addresses before sending credentials and bound request input before parsing.
 - Add narrowly scoped shared cooldown/reservation and durable request records with explicit grants, RLS and privileged atomic operations. Keep the normalized Neuron ledger as the only inference event history.
 - Use server-owned delayed recovery, request leases and idempotent completion—not browser timers or in-memory worker state. Authenticate recovery callbacks with server-only credentials; preserve project token checks and switch/cap enforcement.
 
 ## Verification before calling it finished
 - Automated tests: necessary versus unnecessary screenshots; no separate capture approval; real before/after phase handling; failures never marked passed; three-round bound.
 - Mocked pool tests: project 1 exhausts keys 1/2 and project 2 starts at 3; first attempt plus exactly four retries; quota versus temporary 429; cooldown expiry; UTC reset; simultaneous usage reservations; switch-off stops retries; denials do not waterfall.
-- Recovery tests: screen-off reconnect, saved retry count, no duplicate worker or reply, interrupted/unknown stream outcomes, all-keys-unavailable waiting state.
+- Recovery tests: screen-off reconnect, saved retry count, no duplicate worker, reply or usage entry, interrupted/unknown stream outcomes, all-keys-unavailable waiting state. Verify the deployed accounting trigger before relying on its totals.
 - Signed-in phone and PC checks: screenshot thumbnail opens saved evidence without disrupting work.
 - Run one owner-authorized real preview capture → image inspection → approved repair → fresh recheck. Confirm actual screenshots and findings read back through the chat/work log. Report service blockers honestly if that cannot complete; do not claim live verification from tests alone.
 
