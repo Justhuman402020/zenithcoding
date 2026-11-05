@@ -5,7 +5,8 @@ export function visualCheckRequested(text: string) {
 }
 export function parseVisualReport(text: string): { status: "passed" | "problems" | "unverified"; report: string } {
   const cleaned = text.trim();
-  const status = /^PASS\b/i.test(cleaned) ? "passed" : /^PROBLEMS\b/i.test(cleaned) ? "problems" : "unverified";
+  const head = cleaned.replace(/^[\s#*_>`:-]+/, "");
+  const status = /^PASS(?:ED)?\b/i.test(head) ? "passed" : /^PROBLEMS?\b/i.test(head) ? "problems" : "unverified";
   return { status, report: cleaned.slice(0, 12000) || "The image reader did not return a visual assessment." };
 }
 export function visualRoundAllowed(count: number) { return count < 3; }

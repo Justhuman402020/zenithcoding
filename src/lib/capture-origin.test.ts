@@ -8,3 +8,7 @@ describe("publicCaptureOrigin", () => {
     expect(publicCaptureOrigin("https://boostallsocial.org")).toBe("https://boostallsocial.org");
   });
 });
+import { parseVisualReport } from "./visual-check-policy";
+describe("parseVisualReport", () => {
+  it("reads a bold PASS", () => { expect(parseVisualReport("**PASS** looks fine").status).toBe("passed"); });
+});
