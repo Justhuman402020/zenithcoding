@@ -1,5 +1,6 @@
 // Runs a project site's AI chat through the owner's Cloudflare pool (key #1 → #2 …).
 import { estimateNeurons, isCloudflareBaseUrl, loadCloudflarePool, addNeurons, markExhausted, readCloudflareCodingModel } from "./cloudflare-pool.server";
+import { pickSiteChatModel } from "./project-ai-policy";
 
 type Msg = { role: string; content: string };
 

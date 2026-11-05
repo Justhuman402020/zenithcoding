@@ -41,6 +41,12 @@ export function cleanMessages(input: unknown): Array<{ role: "system" | "user" |
   return out.some((m) => m.role === "user") ? out : null;
 }
 
+/** Which model a site chat uses: the project's pick, else the owner's selected Cloudflare model. */
+export function pickSiteChatModel(projectModel: string | null | undefined, fallbackModel: string) {
+  const pick = (projectModel ?? "").trim();
+  return pick && pick.length <= 120 ? pick : fallbackModel;
+}
+
 export function rewirePrompt() {
   return [
     "Switch this project's AI chat to Cloudflare through Code Haven.",
