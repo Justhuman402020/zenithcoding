@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Add Admin Brain Microlink screenshot keys with automatic quota handoff; remove Cloudflare screenshot calls, preserve OpenRouter reading/builds; verify pricing and mocked capture/key controls.
+
 - [x] Implement approved automatic screenshot eligibility/phases/thumbnails and site-only persisted Cloudflare key reservations/retries/recovery; 249 tests passed.
 - [ ] Verify new real capture→reader→repair→recheck and project AI recovery on hosted update: published recovery endpoint returns 404; requires publishing. Real published Mobula inspection attempted 2026-11-05: Cloudflare returned 429 rate limit, zero screenshots, saved result unverified. Wait for provider allowance before another capture; no inference bypass. Automatic typecheck build OK; all 249 tests pass. Signed-in local home checked on phone/PC, no horizontal overflow or browser errors; recovery rejects unauthenticated requests with 401.
 
