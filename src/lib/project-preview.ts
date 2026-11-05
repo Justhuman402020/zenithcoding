@@ -34,7 +34,7 @@ export function projectPreviewDocument(files: PreviewFile[], path = "index.html"
     const js = map.get(previewPath(src, current));
     return js == null ? tag : `<script ${pre}${post}>${js}\n</script>`;
   });
-  const navigation = `<script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(!a)return;var h=a.getAttribute('href')||'';if(!h||/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(h))return;e.preventDefault();parent.postMessage({type:'forge-preview-navigate',path:h},'*');});<\/script>`;
+  const navigation = `<script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(!a)return;var h=a.getAttribute('href')||'';if(!h||/^[a-z][a-z0-9+.-]*:/i.test(h)||h.startsWith('//')||h.startsWith('#'))return;e.preventDefault();parent.postMessage({type:'forge-preview-navigate',path:h},'*');});<\/script>`;
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${navigation}</body>`) : html + navigation;
   return injectPreviewAssets(html, files);
 }
