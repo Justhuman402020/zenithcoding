@@ -1,23 +1,27 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { Cloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { requestApproval } from "@/components/BuildApprovalDialog";
-import { setProjectCloudflare, testProjectCloudflare } from "@/lib/project-ai.functions";
+import { listProjectAiModels, setProjectAiModel, setProjectCloudflare, testProjectCloudflare } from "@/lib/project-ai.functions";
 
 const LABEL: Record<string, string> = { off: "Off", setting_up: "Setting up", on: "On", needs_fix: "Needs fix" };
 const TONE: Record<string, string> = { off: "text-muted-foreground", setting_up: "text-primary", on: "text-emerald-500", needs_fix: "text-destructive" };
 
-export type ProjectAiRow = { id: string; name: string; cloudflare_enabled: boolean; status: string; last_error: string | null; last_reply: string | null };
+export type ProjectAiRow = { id: string; name: string; cloudflare_enabled: boolean; status: string; last_error: string | null; last_reply: string | null; model: string | null };
 
 export function ProjectCloudflareSwitch({ row, onChange }: { row: ProjectAiRow; onChange: () => void }) {
   const navigate = useNavigate();
   const setFn = useServerFn(setProjectCloudflare);
   const testFn = useServerFn(testProjectCloudflare);
-  const [busy, setBusy] = useState<"" | "switch" | "test">("");
+  const modelsFn = useServerFn(listProjectAiModels);
+  const saveModel = useServerFn(setProjectAiModel);
+  const modelsQ = useQuery({ queryKey: ["project-ai-models"], queryFn: () => modelsFn(), enabled: row.cloudflare_enabled, staleTime: 5 * 60_000 });
+  const [busy, setBusy] = useState<"" | "switch" | "test" | "model">("");
 
   const toggle = async (on: boolean) => {
     setBusy("switch");
