@@ -23,7 +23,12 @@ export async function processSiteRequest(id: string) {
   const messages = job.messages as Msg[];
   const input = Math.ceil(messages.reduce((n,m)=>n+m.content.length,0)/4);
   const cost = estimateNeurons(input,2000);
-  const pool = eligibleSiteKeys(await loadCloudflarePool(),job.key_position);
+  const allKeys = await loadCloudflarePool();
+  let pool = eligibleSiteKeys(allKeys,job.key_position);
+  if (job.provider_id && job.key_attempt > 0) {
+    const pinned = pool.find(k=>k.id===job.provider_id);
+    if (pinned) pool=[pinned];
+  }
   const { data: providers } = await db.from("custom_ai_providers").select("id,base_url,key_encrypted").in("id",pool.map(k=>k.id));
   const { decryptSecret } = await import("./secrets-crypto.server");
   for (const key of pool) {
@@ -32,7 +37,9 @@ export async function processSiteRequest(id: string) {
     const { data: reserved, error } = await db.rpc("reserve_site_ai",{_id:id,_version:job.lease_version,_provider:key.id,_position:key.position,_cost:cost,_observed:key.used});
     if (error) throw new Error("Could not reserve shared Cloudflare allowance");
     if (!reserved) continue;
-    const token = (await decryptSecret(row.key_encrypted)).replace(/^Bearer\s+/i,"").trim();
+    let token:string;
+    try { token = (await decryptSecret(row.key_encrypted)).replace(/^Bearer\s+/i,"").trim(); }
+    catch { await settle("denied","Saved Cloudflare credential could not be read. Re-enter it in Admin.");return; }
     let response: Response;
     try {
       response = await fetch(`${row.base_url.replace(/\/$/,"")}/chat/completions`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({model:job.model,messages,stream:true,max_tokens:2000})});
@@ -49,20 +56,33 @@ export async function processSiteRequest(id: string) {
     let reply="",pending="",done=false;
     const decoder=new TextDecoder();
     const heartbeat=setInterval(()=>{void db.from("site_ai_requests").update({lease_until:new Date(Date.now()+180000).toISOString(),updated_at:new Date().toISOString()}).eq("id",id).eq("lease_version",job.lease_version).eq("status","running").then(()=>undefined,()=>undefined);},20000);
-    try {
-      if (!response.body) throw new Error("Empty provider stream");
-      for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-        pending+=decoder.decode(chunk,{stream:true});
-        const frames=pending.split(/\r?\n\r?\n/);pending=frames.pop()??"";
-        for(const frame of frames) for(const line of frame.split(/\r?\n/)) {
+    const handle=(frame:string)=>{
+        for(const line of frame.split(/\r?\n/)) {
           if(!line.startsWith("data:")) continue;
           const data=line.slice(5).trim();if(data==="[DONE]"){done=true;continue;}
           const parsed=JSON.parse(data);if(parsed.error) throw new Error("Provider stream rejected");
-          reply+=parsed.choices?.[0]?.delta?.content??"";
+          const choice=parsed.choices?.[0];
+          if(choice?.delta?.refusal||choice?.finish_reason==="content_filter")throw new Error("Provider refused request");
+          reply+=choice?.delta?.content??"";
+          if(choice?.finish_reason==="stop")done=true;
         }
-        const {error}=await db.from("site_ai_requests").update({reply,updated_at:new Date().toISOString()}).eq("id",id).eq("lease_version",job.lease_version).eq("status","running");
-        if(error) throw new Error("Could not save partial reply");
+    };
+    const saveReply=async()=>{
+        const {data:saved,error}=await db.from("site_ai_requests").update({reply,lease_until:new Date(Date.now()+180000).toISOString(),updated_at:new Date().toISOString()}).eq("id",id).eq("lease_version",job.lease_version).eq("status","running").select("id");
+        if(error||!saved?.length) throw new Error("Could not save partial reply or lease lost");
+    };
+    try {
+      if (!response.body) throw new Error("Empty provider stream");
+      const reader=response.body.getReader();
+      while(true) {
+        const chunk=await reader.read();if(chunk.done)break;
+        pending+=decoder.decode(chunk.value,{stream:true});
+        const frames=pending.split(/\r?\n\r?\n/);pending=frames.pop()??"";
+        for(const frame of frames)handle(frame);
+        await saveReply();
       }
+      pending+=decoder.decode();if(pending.trim())handle(pending);
+      await saveReply();
       if(!done||!reply.trim()) throw new Error("Incomplete provider reply");
       await settle("complete",null,estimateNeurons(input,Math.ceil(reply.length/4)));
     } catch { await settle("uncertain","Reply interrupted. Saved partial text retained; no duplicate generation sent.",cost); }
@@ -76,7 +96,7 @@ export async function runSiteChat(opts:{projectId:string;userId:string;messages:
   const {supabaseAdmin:db}=await import("@/integrations/supabase/client.server");
   const model=pickSiteChatModel(opts.model,await readCloudflareCodingModel());
   const {data:id,error}=await db.rpc("admit_site_ai",{_project:opts.projectId,_user:opts.userId,_key:opts.requestKey??crypto.randomUUID(),_messages:opts.messages,_model:model});
-  if(error||!id) return {ok:false as const,status:/limit/i.test(error?.message??"")?429:503,error:error?.message??"Could not save AI request"};
+  if(error||!id) return {ok:false as const,status:/limit/i.test(error?.message??"")?429:/off for this site/i.test(error?.message??"")?403:503,error:error?.message??"Could not save AI request"};
   const {error:dispatchError}=await db.rpc("dispatch_site_ai",{_id:id});
   if(dispatchError) return {ok:false as const,status:503,error:"Request saved; automatic recovery will retry starting it."};
   const read=async()=>{const {data}=await db.from("site_ai_requests").select("status,reply,error,next_attempt_at").eq("id",id).single();return data;};

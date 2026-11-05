@@ -42,7 +42,7 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
     const { createPreviewToken, createSourcePreviewToken, runCheck } = await import("./browser-check.server");
     const url = frameworkFiles ? `${args.origin}/visual-preview/${await createSourcePreviewToken(args.userId, args.projectId, frameworkFiles)}` : `${args.origin}/api/public/preview/${await createPreviewToken(args.userId, args.projectId, html)}`;
     const capture = await runCheck({ userId: args.userId, projectId: args.projectId, url, published: false });
-    if (!capture.ok) throw new Error(capture.error);
+    if (!capture.ok) { await db.from("browser_checks").update({capture_status:"failed"}).eq("id",saved.id); throw new Error(capture.error); }
     const { error: captureError } = await db.from("browser_checks").update({ screenshots: capture.shots, findings: capture.findings, duration_ms: capture.durationMs, visual_status: "inspecting", capture_status: "captured", inspection_status: "inspecting" }).eq("id", saved.id);
     if (captureError) throw new Error("Could not save captured screenshots.");
     if (!preferred || !provider || !key) throw new Error("Screenshots saved, but your selected OpenRouter image reader is unavailable. Select an image reader in AI Models to inspect them.");
