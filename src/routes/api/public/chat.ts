@@ -905,6 +905,8 @@ export const Route = createFileRoute("/api/public/chat")({
             let attemptSteps: any[] = [];
             let attemptStepCount = 0;
             let loopHit = false;
+            let stepsWithoutEdit = 0;
+            let lookOnlyHit = false;
             let watchdog: ReturnType<typeof setTimeout> | undefined;
             // Reasoning models on OpenRouter can think silently for a while; give them longer.
             const stepTimeout = isCf ? STEP_TIMEOUT_MS : 90_000;
