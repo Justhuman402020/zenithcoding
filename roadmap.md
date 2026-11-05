@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Plan automatic necessary screenshot capture/display and shared ordered Cloudflare retries/recovery for enabled project-site AI only; awaiting approval before implementation.
+
 - [x] Require real before/after screenshot checks for approved preview-error repairs; return visible problems to the coder and report capture blockers honestly. Live capture still requires a reachable published preview and configured browser/image-reader access.
 
 - [x] Implement shared steady job timers, saved execution/pause/end timing and separate action/step counts; screenshot agent tool, private visual briefs, saved reader snapshots and three-round cap; signed-in Timeline and phone/PC approval verified, 26 tests pass.
