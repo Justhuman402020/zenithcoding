@@ -130,6 +130,7 @@ function WorkDetails() {
       </div>
       <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5" role="tabpanel">
         <div className="mx-auto max-w-4xl">
+          {tab === "timeline" && data.visualChecks.length > 0 && <div className="mb-6 space-y-4">{data.visualChecks.map((check, index) => <details key={check.id} className="border-b pb-4"><summary className="cursor-pointer text-sm font-medium">{index === 0 ? "Before / first capture" : "Recheck"} · Visual check: {check.status}</summary><p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{check.report}</p><div className="mt-3 grid gap-3 sm:grid-cols-3">{check.shots.map((shot) => <figure key={shot.label}>{shot.url && <img src={shot.url} alt={shot.label + " preview screenshot"} className="w-full rounded-md border" />}<figcaption className="mt-1 text-xs text-muted-foreground">{shot.label}</figcaption></figure>)}</div></details>)}</div>}
           {tab === "timeline" ? (
             data.steps.length ? (
               <ol className="relative space-y-5 border-l border-border pl-6 ml-3">

@@ -314,14 +314,14 @@ export const checkEdit = createServerFn({ method: "POST" }).middleware([requireS
   .handler(async ({ data, context }) => {
     const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("*").eq("id", data.id).single();
     if (req.status !== "running" || !req.request_key) return { status: req.status as EditStatus, progress: null as string | null, log: [] as string[] };
-    const { data: job } = await (context.supabase as any).from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply,created_at").eq("request_key", req.request_key).maybeSingle();
+    const { data: job } = await (context.supabase as any).from("chat_jobs").select("id,status,progress,outcome,steps_done,files_changed,error,trace_id,assistant_reply,created_at,work_started_at,work_paused_at,work_paused_ms,completed_at").eq("request_key", req.request_key).maybeSingle();
     if (!job) return { status: "running" as EditStatus, progress: "Starting…", log: [] as string[] };
     if (job.status === "queued" || job.status === "running") {
       // Live work log: this build's trace lines so far.
       const { data: rows } = await (context.supabase as any).from("chat_traces").select("phase,status,message,detail,created_at")
         .eq("project_id", req.project_id).eq("trace_id", job.trace_id ?? "none").order("created_at", { ascending: false }).limit(40);
       const log = ((rows ?? []) as any[]).reverse().map((t) => liveLine(t)).filter(Boolean) as string[];
-      return { status: "running" as EditStatus, progress: job.progress ?? "Working…", log };
+      return { status: "running" as EditStatus, progress: job.progress ?? "Working…", log, clock: { status: job.status, outcome: job.outcome, work_started_at: job.work_started_at, work_paused_at: job.work_paused_at, work_paused_ms: job.work_paused_ms, completed_at: job.completed_at }, stepCount: Number(job.steps_done), fileCount: Number(job.files_changed) };
     }
     const { data: trace } = job.trace_id ? await (context.supabase as any).from("chat_traces").select("phase,status,message").eq("trace_id", job.trace_id).order("seq").limit(200) : { data: [] };
     const log = ((trace ?? []) as any[]).map((t) => `${t.phase} [${t.status}] ${t.message ?? ""}`.trim());
