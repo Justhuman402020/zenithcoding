@@ -17,7 +17,7 @@ export async function processSiteRequest(id: string) {
   const job = claimed?.[0];
   if (!job) return;
   const settle = async (outcome: string, message: string | null, neurons = 0, delay = 1) => {
-    const { error } = await db.rpc("settle_site_ai", { _id: id, _version: job.lease_version, _outcome: outcome, _error: message, _neurons: neurons, _delay: delay });
+    const { error } = await db.rpc("settle_site_ai", { _id: id, _version: job.lease_version, _outcome: outcome, _error: message ?? "", _neurons: neurons, _delay: delay });
     if (error) throw new Error("Could not save site AI outcome");
   };
   const messages = job.messages as Msg[];

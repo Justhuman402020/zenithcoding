@@ -6,6 +6,8 @@ import { parseWorkLog, workedFor, rememberChatScroll } from "@/lib/work-log";
 import { durationLabel } from "@/lib/work-log";
 import { useRunClock } from "@/hooks/use-run-clock";
 import type { RunClock } from "@/lib/run-clock";
+import { useQuery } from "@tanstack/react-query";
+import { getWorkScreenshot } from "@/lib/work-screenshot.functions";
 
 export function WorkLogCard({
   log = "",
@@ -33,6 +35,7 @@ export function WorkLogCard({
   clock?: RunClock;
 }) {
   const { steps, files } = parseWorkLog(log);
+  const {data:screenshot}=useQuery({queryKey:["work-screenshot",projectId,runId],queryFn:()=>getWorkScreenshot({data:{projectId,runId}}),enabled:/^[jk]-/.test(runId),refetchInterval:running?5000:false,staleTime:60000});
   const clock = useRunClock(savedClock ?? {});
   const dur = clock.ms == null ? workedFor(steps) : durationLabel(clock.ms);
   return (
@@ -75,6 +78,7 @@ export function WorkLogCard({
           </span>
         </div>
       </Link>
+      {screenshot && <Link to="/work/$projectId/$runId" params={{projectId,runId}} search={{chatId}} className="mt-3 flex items-center gap-3" aria-label="Open saved preview screenshot"><img src={screenshot.url} alt={screenshot.label} className="h-16 w-24 shrink-0 rounded-md border object-cover object-top" /><span className="text-sm text-muted-foreground">{screenshot.phase} · {screenshot.status}</span></Link>}
       <Button asChild variant="ghost" size="sm" className="mt-1 h-7 px-0 text-muted-foreground">
         <Link
           to="/work/$projectId/$runId"
