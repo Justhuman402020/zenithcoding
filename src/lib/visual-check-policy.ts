@@ -1,5 +1,7 @@
 export function visualCheckRequested(text: string) {
-  return /\b(screenshot|visual(?:ly)? (?:check|test|verify)|(?:see|inspect|test|check) (?:my |the )?preview)\b/i.test(text);
+  return /\b(screenshot|visual(?:ly)? (?:check|test|verify)|(?:see|inspect|test|check) (?:my |the )?preview)\b/i.test(text)
+    || /\b(?:fix|repair|debug|diagnose)\b[^.!?\n]{0,100}\bpreview\b/i.test(text)
+    || /\bpreview\b[^.!?\n]{0,100}\b(?:blank|broken|error|fail(?:ed|ing|ure)?|not (?:working|loading|showing))\b/i.test(text);
 }
 export function parseVisualReport(text: string): { status: "passed" | "problems" | "unverified"; report: string } {
   const cleaned = text.trim();
