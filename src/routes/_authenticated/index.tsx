@@ -30,6 +30,7 @@ import { Plus, Trash2, Code2, LogOut, Globe, ExternalLink, Share2, PanelLeft, Ho
 
 import { X, MessageSquare } from "lucide-react";
 import { ThemePicker } from "@/components/ThemePicker";
+import { AppInstallMenuItem } from "@/components/AppInstall";
 import { formatDistanceToNow } from "date-fns";
 import { ForgeMark } from "@/components/ForgeMark";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -742,6 +743,7 @@ function Dashboard() {
                 <SidebarItem icon={Library} label="Scrolltide" />
               </Link>
               <SidebarItem icon={Globe} label="Domains & publish" onClick={() => { setSidebarOpen(false); document.getElementById("projects-grid")?.scrollIntoView({ behavior: "smooth" }); }} />
+              <AppInstallMenuItem />
             </nav>
             <div className="px-2 py-2 border-t border-sidebar-border mt-2 space-y-0.5">
               <SidebarItem icon={LogOut} label="Sign out" onClick={signOut} />
