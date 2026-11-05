@@ -14,5 +14,5 @@ export const loadVisualPreview = createServerFn({ method: "POST" }).inputValidat
     if (error || !claimed?.length) throw new Error("Preview is already loading. Try again.");
     const payload = JSON.parse(row.html) as { files?: Array<{ path: string; content: string }> };
     if (!Array.isArray(payload.files)) throw new Error("Preview files unavailable.");
-    return { files: payload.files };
+    return { files: payload.files.filter((file) => !/(^|\/)(\.env(?:\..*)?|.*\.(pem|key|p12)|credentials(?:\..*)?)$/i.test(file.path)) };
   });

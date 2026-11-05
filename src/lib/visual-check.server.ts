@@ -24,7 +24,7 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
   if (!html) {
     const { data: rows, error } = await db.from("files").select("path,content").eq("project_id", args.projectId).or("kind.is.null,kind.neq.build").order("path");
     if (error) throw new Error("Could not read current preview files.");
-    const source = (rows ?? []).filter((f) => !f.path.startsWith(".code-haven-build/"));
+    const source = (rows ?? []).filter((f) => !f.path.startsWith(".code-haven-build/") && !/(^|\/)(\.env(?:\..*)?|.*\.(pem|key|p12)|credentials(?:\..*)?)$/i.test(f.path));
     const framework = source.some((f) => /(?:src\/main\.[jt]sx?|src\/App\.[jt]sx?)$/.test(f.path));
     if (framework) frameworkFiles = source;
     html = framework ? JSON.stringify(source) : (await import("./project-preview")).projectPreviewDocument(source);
@@ -32,7 +32,7 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
   const fingerprint = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, "0")).join("");
   const { data: previous } = await db.from("browser_checks").select("id,visual_status,visual_report,findings").eq("job_id", args.jobId).eq("source_fingerprint", fingerprint).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (previous) return { status: previous.visual_status, report: previous.visual_report ?? "Previous check could not verify this preview.", checkId: previous.id };
+  if (previous) return { status: ["capturing", "inspecting"].includes(previous.visual_status) ? "unverified" : previous.visual_status, report: previous.visual_report ?? "Previous capture/inspection did not finish. No automatic paid replay was sent.", checkId: previous.id };
   const { data: claimed, error: claimError } = await db.from("chat_jobs").update({ visual_check_count: job.visual_check_count + 1 }).eq("id", args.jobId).eq("status", "running").eq("visual_check_count", job.visual_check_count).lt("visual_check_count", 3).select("id");
   if (claimError || !claimed?.length) throw new Error("Stopped after three visual-check rounds, or another check is already starting.");
   const { data: saved, error: saveError } = await db.from("browser_checks").insert({ user_id: args.userId, project_id: args.projectId, job_id: args.jobId, trace_id: args.trace?.traceId, target: "preview", ok: false, source_fingerprint: fingerprint, visual_status: "capturing", visual_model: preferred.model }).select("id").single();
