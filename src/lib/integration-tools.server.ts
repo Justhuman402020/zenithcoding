@@ -232,16 +232,20 @@ export async function runProjectSql(projectId: string, sql: string) {
         "Need SUPABASE_ACCESS_TOKEN (personal access token from supabase.com/dashboard/account/tokens) or SUPABASE_SERVICE_ROLE_KEY. Use request_secret to ask for SUPABASE_ACCESS_TOKEN.",
     };
   }
-  const res = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/rpc/exec_sql`, {
+  const call = (query: string) => fetch(`${url.replace(/\/+$/, "")}/rest/v1/rpc/exec_sql`, {
     method: "POST",
     headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query: sql }),
+    body: JSON.stringify({ query }),
   });
-  const text = await res.text();
-  if (res.ok) {
-    if (isBareOk(text) && returnsRows(sql)) return { ok: true, result: text, warning: "The query ran, but this database's exec_sql helper is the old version that only answers ok:true and hides the rows. Ask the user to run this once in their SQL editor, then retry:\n" + EXEC_SQL_HELPER };
-    return { ok: true, result: text.slice(0, 4000) };
+  let res = await call(sql);
+  let text = await res.text();
+  if (res.ok && isBareOk(text) && returnsRows(sql)) {
+    // The old helper hides rows. It still runs any statement, so let it replace itself, then ask again.
+    const upgrade = await call(EXEC_SQL_HELPER);
+    if (upgrade.ok) { res = await call(sql); text = await res.text(); }
+    if (res.ok && isBareOk(text)) return { ok: true, result: text, warning: "The query ran, but this database's exec_sql helper only answers ok:true and could not be upgraded automatically. Ask the user to run this once in their SQL editor, then retry:\n" + EXEC_SQL_HELPER };
   }
+  if (res.ok) return { ok: true, result: text.slice(0, 4000) };
   return {
     ok: false,
     error: `${res.status}: ${text.slice(0, 400)}`,

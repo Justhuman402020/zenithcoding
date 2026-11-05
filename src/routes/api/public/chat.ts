@@ -2,7 +2,7 @@ import { shouldHandoff, emptyBaton, mergeBaton, batonNote } from "@/lib/neuron-b
 import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/lib/cf-pool-policy";
 import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, trimCarried } from "@/lib/completion-gate";
 import { createFileRoute } from "@tanstack/react-router";
-import { lookOnlyAction, LOOK_ONLY_NOTE } from "@/lib/edit-budget-policy";
+import { lookOnlyAction, LOOK_ONLY_NOTE, LOOK_ONLY_STOP } from "@/lib/edit-budget-policy";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
 import { createClient } from "@supabase/supabase-js";
 import { recoveryHeaders } from "@/lib/build-recovery";
@@ -1115,8 +1115,8 @@ export const Route = createFileRoute("/api/public/chat")({
                   });
                   trace.log("gate.check", { status: gate.ok ? "ok" : "warn", message: gate.ok ? undefined : gate.reason, detail: { changed: changedList.length, retries: gateRetries } });
                   if (!gate.ok) {
-                    incompleteReason = gate.reason;
-                    if (gateRetries < MAX_GATE_RETRIES) {
+                    incompleteReason = lookOnlyHit ? `${gate.reason} after ${LOOK_ONLY_STOP} look-only steps` : gate.reason;
+                    if (gateRetries < MAX_GATE_RETRIES && !lookOnlyHit) {
                       gateRetries += 1;
                       if (attemptSteps.length) carried = [...carried, ...attemptSteps];
                       carried.push({ role: "user", content: gate.nudge });
