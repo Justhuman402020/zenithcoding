@@ -133,6 +133,27 @@ export const Route = createFileRoute("/api/public/chat")({
           return fail(404, "Project not found");
         }
 
+        // Only the authenticated database starter may run this read-only durable check.
+        if (request.headers.get("x-forge-visual-only") === "yes") {
+          if (!isResume) return fail(403, "Saved visual-check approval required");
+          const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+          const { data: job } = await db.from("chat_jobs").select("id,status,resume_payload").eq("request_key", request.headers.get("x-forge-request-key") ?? "").eq("project_id", projectId).eq("user_id", userId).maybeSingle();
+          if (!job || job.status !== "running") return fail(409, "Visual check is not running");
+          const payload = job.resume_payload as { visualHtml?: string } | null;
+          if (!payload?.visualHtml) return fail(422, "Saved preview missing");
+          const { checkProjectVisually } = await import("@/lib/visual-check.server");
+          await db.from("chat_jobs").update({ trace_id: trace.traceId, progress: "Taking and inspecting preview screenshots" }).eq("id", job.id);
+          let report: string;
+          try {
+            const result = await checkProjectVisually({ projectId, userId, jobId: job.id, origin: new URL(request.url).origin, trace, html: payload.visualHtml });
+            report = `Visual check: ${result.status}.\n${result.report}\nNo files changed. Repairs require approval.`;
+          } catch (e) { report = `Visual check: could not verify. ${e instanceof Error ? e.message : "Check failed"}\nNo files changed.`; }
+          await db.from("chat_jobs").update({ status: "completed", outcome: "finished", assistant_reply: report, progress: "Visual check finished", completed_at: new Date().toISOString() }).eq("id", job.id);
+          await db.from("chat_messages").insert({ project_id: projectId, user_id: userId, role: "assistant", content: `${report}\n\n<!-- worklog -->\n<!-- run:${job.id} -->` });
+          await trace.flush();
+          return new Response(report, { headers: { "Content-Type": "text/plain" } });
+        }
+
         const body = (await request.json()) as { messages?: UIMessage[] };
         if (!Array.isArray(body.messages)) {
           trace.log("request.invalid", { status: "error", message: "messages required" });
@@ -547,7 +568,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const brainZipTools = createBrainZipTools(supabase, projectId, store, trace);
         const brainReferences = await listBrainZips(supabase, projectId);
         const { visualCheckRequested } = await import("@/lib/visual-check-policy");
-        const visualApproved = !planMode && needsFileChange && body.messages.some((m) => m.role === "user" && visualCheckRequested(m.parts.filter((p) => p.type === "text").map((p) => p.type === "text" ? p.text : "").join(" ")));
+        const visualApproved = !planMode && needsFileChange && visualCheckRequested(isResume ? body.messages.filter((m) => m.role === "user").map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.type === "text" ? p.text : "").join(" ")).join("\n") : lastUserText);
         const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
         const allTools = {
