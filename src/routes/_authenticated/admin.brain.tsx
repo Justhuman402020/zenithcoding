@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainNotesEditor } from "@/components/BrainNotesEditor";
+import { BrainScreenshotKeys } from "@/components/BrainScreenshotKeys";
 import { deleteCredential, getAdminBrain, saveAdminBrain, saveCredential, scanCredentialModels } from "@/lib/admin-brain.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/brain")({
@@ -107,6 +108,8 @@ function AdminBrainPage() {
         </section>
 
         <BrainNotesEditor />
+
+        <BrainScreenshotKeys />
 
         <section className="rounded-2xl border border-border bg-card/70 p-5 space-y-3">
           <div className="flex items-center justify-between gap-2">
