@@ -40,7 +40,8 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
   try {
     log("Taking phone, scrolled-phone and PC screenshots"); await args.trace?.flush();
     const { createPreviewToken, createSourcePreviewToken, runCheck } = await import("./browser-check.server");
-    const url = frameworkFiles ? `${args.origin}/visual-preview/${await createSourcePreviewToken(args.userId, args.projectId, frameworkFiles)}` : `${args.origin}/api/public/preview/${await createPreviewToken(args.userId, args.projectId, html)}`;
+    const origin = publicCaptureOrigin(args.origin);
+    const url = frameworkFiles ? `${origin}/visual-preview/${await createSourcePreviewToken(args.userId, args.projectId, frameworkFiles)}` : `${origin}/api/public/preview/${await createPreviewToken(args.userId, args.projectId, html)}`;
     const capture = await runCheck({ userId: args.userId, projectId: args.projectId, url, published: false });
     if (!capture.ok) { await db.from("browser_checks").update({capture_status:"failed"}).eq("id",saved.id); throw new Error(capture.error); }
     const { error: captureError } = await db.from("browser_checks").update({ screenshots: capture.shots, findings: capture.findings, duration_ms: capture.durationMs, visual_status: "inspecting", capture_status: "captured", inspection_status: "inspecting" }).eq("id", saved.id);
@@ -84,4 +85,10 @@ export function visualCheckTools(args: Parameters<typeof checkProjectVisually>[0
     used += 1;
     return checkProjectVisually(args);
   } }) };
+}
+/** Background builds run on an internal host that refuses outside browsers (403); screenshots must open the public site. */
+export function publicCaptureOrigin(origin: string) {
+  const configured = process.env["PUBLIC_APP_ORIGIN"];
+  if (configured) return configured.replace(/\/$/, "");
+  return /^https:\/\/(project--|id-preview--)[^.]+\.lovable\.app$/i.test(origin) ? "https://boostallsocial.org" : origin;
 }
