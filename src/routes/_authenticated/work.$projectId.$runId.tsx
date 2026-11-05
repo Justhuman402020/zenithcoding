@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { getWorkDetails } from "@/lib/work-log.functions";
 import { durationLabel, workedFor } from "@/lib/work-log";
+import { useRunClock } from "@/hooks/use-run-clock";
 
 function workQuery(projectId: string, runId: string, chatId?: string) {
   return queryOptions({
@@ -61,14 +62,9 @@ function WorkDetails() {
   const { chatId } = Route.useSearch();
   const { data } = useSuspenseQuery(workQuery(projectId, runId, chatId));
   const [tab, setTab] = useState<"timeline" | "changes">("timeline");
-  const running = ["running", "queued"].includes(data.status);
-  const elapsed =
-    data.startedAt && (data.completedAt || running)
-      ? durationLabel(
-          (data.completedAt ? Date.parse(data.completedAt) : Date.now()) -
-            Date.parse(data.startedAt),
-        )
-      : workedFor(data.steps);
+  const clock = useRunClock(data.clock);
+  const running = ["running", "queued"].includes(data.status) && data.clock.outcome !== "paused";
+  const elapsed = clock.ms == null ? workedFor(data.steps) : durationLabel(clock.ms);
   return (
     <div className="flex h-[100dvh] flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-3">
@@ -112,11 +108,11 @@ function WorkDetails() {
           {elapsed && (
             <span className="inline-flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
-              {running ? "Working for" : "Worked for"} {elapsed}
+              {clock.label} {elapsed}
             </span>
           )}
           <span>
-            {data.steps.length} recorded actions · {data.fileCount} files
+            {data.steps.length} recorded actions · {data.stepCount} completed steps · {data.fileCount} files
           </span>
         </div>
         <h1 className="mt-2 line-clamp-2 break-words text-base font-medium text-foreground">
