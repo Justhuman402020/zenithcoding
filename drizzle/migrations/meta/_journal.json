@@ -197,6 +197,13 @@
       "when": 1793853487908,
       "tag": "0027_project_ai_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793855210880,
+      "tag": "0028_site_ai_recovery_and_visual_phases",
+      "breakpoints": true
     }
   ]
 }

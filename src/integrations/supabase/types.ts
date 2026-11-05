@@ -360,11 +360,13 @@ export type Database = {
       }
       browser_checks: {
         Row: {
+          capture_status: string
           created_at: string
           duration_ms: number | null
           error_short: string | null
           findings: Json
           id: string
+          inspection_status: string
           job_id: string | null
           ok: boolean
           project_id: string
@@ -374,15 +376,18 @@ export type Database = {
           trace_id: string | null
           user_id: string
           visual_model: string | null
+          visual_phase: string
           visual_report: string | null
           visual_status: string
         }
         Insert: {
+          capture_status?: string
           created_at?: string
           duration_ms?: number | null
           error_short?: string | null
           findings?: Json
           id?: string
+          inspection_status?: string
           job_id?: string | null
           ok?: boolean
           project_id: string
@@ -392,15 +397,18 @@ export type Database = {
           trace_id?: string | null
           user_id: string
           visual_model?: string | null
+          visual_phase?: string
           visual_report?: string | null
           visual_status?: string
         }
         Update: {
+          capture_status?: string
           created_at?: string
           duration_ms?: number | null
           error_short?: string | null
           findings?: Json
           id?: string
+          inspection_status?: string
           job_id?: string | null
           ok?: boolean
           project_id?: string
@@ -410,6 +418,7 @@ export type Database = {
           trace_id?: string | null
           user_id?: string
           visual_model?: string | null
+          visual_phase?: string
           visual_report?: string | null
           visual_status?: string
         }
@@ -455,6 +464,7 @@ export type Database = {
           visual_check_count: number
           visual_reader_model: string | null
           visual_reader_provider: string | null
+          visual_required: boolean | null
           work_paused_at: string | null
           work_paused_ms: number
           work_started_at: string | null
@@ -490,6 +500,7 @@ export type Database = {
           visual_check_count?: number
           visual_reader_model?: string | null
           visual_reader_provider?: string | null
+          visual_required?: boolean | null
           work_paused_at?: string | null
           work_paused_ms?: number
           work_started_at?: string | null
@@ -525,6 +536,7 @@ export type Database = {
           visual_check_count?: number
           visual_reader_model?: string | null
           visual_reader_provider?: string | null
+          visual_required?: boolean | null
           work_paused_at?: string | null
           work_paused_ms?: number
           work_started_at?: string | null
@@ -1767,6 +1779,104 @@ export type Database = {
           },
         ]
       }
+      site_ai_key_state: {
+        Row: {
+          cooldown_until: string | null
+          day: string
+          provider_id: string
+        }
+        Insert: {
+          cooldown_until?: string | null
+          day: string
+          provider_id: string
+        }
+        Update: {
+          cooldown_until?: string | null
+          day?: string
+          provider_id?: string
+        }
+        Relationships: []
+      }
+      site_ai_requests: {
+        Row: {
+          attempt_serial: number
+          created_at: string
+          deadline: string
+          error: string | null
+          id: string
+          key_attempt: number
+          key_position: number
+          lease_until: string | null
+          lease_version: number
+          messages: Json
+          model: string
+          next_attempt_at: string
+          project_id: string
+          provider_id: string | null
+          reply: string
+          request_key: string
+          reserved: number
+          status: string
+          updated_at: string
+          usage_day: string
+          user_id: string
+        }
+        Insert: {
+          attempt_serial?: number
+          created_at?: string
+          deadline?: string
+          error?: string | null
+          id?: string
+          key_attempt?: number
+          key_position?: number
+          lease_until?: string | null
+          lease_version?: number
+          messages: Json
+          model: string
+          next_attempt_at?: string
+          project_id: string
+          provider_id?: string | null
+          reply?: string
+          request_key: string
+          reserved?: number
+          status?: string
+          updated_at?: string
+          usage_day?: string
+          user_id: string
+        }
+        Update: {
+          attempt_serial?: number
+          created_at?: string
+          deadline?: string
+          error?: string | null
+          id?: string
+          key_attempt?: number
+          key_position?: number
+          lease_until?: string | null
+          lease_version?: number
+          messages?: Json
+          model?: string
+          next_attempt_at?: string
+          project_id?: string
+          provider_id?: string | null
+          reply?: string
+          request_key?: string
+          reserved?: number
+          status?: string
+          updated_at?: string
+          usage_day?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_ai_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_data: {
         Row: {
           collection: string
@@ -2114,6 +2224,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admit_site_ai: {
+        Args: {
+          _key: string
+          _messages: Json
+          _model: string
+          _project: string
+          _user: string
+        }
+        Returns: string
+      }
       arm_job_resume: { Args: never; Returns: undefined }
       claim_scrolltide_draft: {
         Args: { p_id: string; p_key: string; p_project: string; p_user: string }
@@ -2157,8 +2277,42 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      claim_site_ai: {
+        Args: { _id: string }
+        Returns: {
+          attempt_serial: number
+          created_at: string
+          deadline: string
+          error: string | null
+          id: string
+          key_attempt: number
+          key_position: number
+          lease_until: string | null
+          lease_version: number
+          messages: Json
+          model: string
+          next_attempt_at: string
+          project_id: string
+          provider_id: string | null
+          reply: string
+          request_key: string
+          reserved: number
+          status: string
+          updated_at: string
+          usage_day: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "site_ai_requests"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       disarm_job_resume_if_idle: { Args: never; Returns: undefined }
+      disarm_site_ai_recovery: { Args: never; Returns: undefined }
       dispatch_saved_build: { Args: { _job: string }; Returns: number }
+      dispatch_site_ai: { Args: { _id: string }; Returns: number }
       get_credit_balance: { Args: { _user: string }; Returns: number }
       has_role: {
         Args: {
@@ -2169,6 +2323,28 @@ export type Database = {
       }
       is_workspace_member: {
         Args: { _user: string; _ws: string }
+        Returns: boolean
+      }
+      reserve_site_ai: {
+        Args: {
+          _cost: number
+          _id: string
+          _observed: number
+          _position: number
+          _provider: string
+          _version: number
+        }
+        Returns: boolean
+      }
+      settle_site_ai: {
+        Args: {
+          _delay: number
+          _error: string
+          _id: string
+          _neurons: number
+          _outcome: string
+          _version: number
+        }
         Returns: boolean
       }
       start_approved_workspace_job: { Args: { _edit: string }; Returns: number }
