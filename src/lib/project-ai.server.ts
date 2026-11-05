@@ -1,5 +1,6 @@
 // Runs a project site's AI chat through the owner's Cloudflare pool (key #1 → #2 …).
 import { estimateNeurons, isCloudflareBaseUrl, loadCloudflarePool, addNeurons, markExhausted, readCloudflareCodingModel } from "./cloudflare-pool.server";
+import { pickSiteChatModel } from "./project-ai-policy";
 
 type Msg = { role: string; content: string };
 
@@ -18,7 +19,7 @@ export async function runSiteChat(opts: { projectId: string; userId: string; mes
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { decryptSecret } = await import("./secrets-crypto.server");
   const { recordNeuronCall } = await import("./workspace-ai.server");
-  const model = opts.model || (await readCloudflareCodingModel());
+  const model = pickSiteChatModel(opts.model, await readCloudflareCodingModel());
   const pool = (await loadCloudflarePool()).filter((k) => k.status !== "exhausted");
   if (!pool.length) return { ok: false as const, status: 503, error: "All Cloudflare keys are used up for today." };
   const { data: rows } = await supabaseAdmin.from("custom_ai_providers").select("id, base_url, key_encrypted").in("id", pool.map((k) => k.id));

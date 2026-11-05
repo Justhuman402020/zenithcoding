@@ -3,15 +3,16 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertOwnsProject } from "./project-secrets.server";
 import { AI_TOKEN_KEY, AI_URL_KEY, canEnable, rewirePrompt } from "./project-ai-policy";
+import { BAD_CF_MODEL, FREE_CF_CODER } from "./model-controls.functions";
 
-/** Owner's projects with their "Use Cloudflare" switch and status. */
+/** Owner's projects with their "Use Cloudflare" switch, status and picked model. */
 export const listProjectAi = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data: projects } = await context.supabase.from("projects").select("id,name,updated_at").eq("user_id", context.userId).order("updated_at", { ascending: false }).limit(300);
-    const { data: settings } = await context.supabase.from("project_ai_settings").select("project_id,cloudflare_enabled,status,last_error,last_reply,last_checked_at,day_requests,usage_day");
+    const { data: settings } = await context.supabase.from("project_ai_settings").select("project_id,cloudflare_enabled,status,last_error,last_reply,last_checked_at,day_requests,usage_day,model");
     const by = new Map((settings ?? []).map((s) => [s.project_id, s]));
-    return (projects ?? []).map((p) => ({ id: p.id, name: p.name, ...(by.get(p.id) ?? { cloudflare_enabled: false, status: "off", last_error: null, last_reply: null, last_checked_at: null, day_requests: 0, usage_day: null }) }));
+    return (projects ?? []).map((p) => ({ id: p.id, name: p.name, ...(by.get(p.id) ?? { cloudflare_enabled: false, status: "off", last_error: null, last_reply: null, last_checked_at: null, day_requests: 0, usage_day: null, model: null }) }));
   });
 
 export const setProjectCloudflare = createServerFn({ method: "POST" })
@@ -54,4 +55,42 @@ export const testProjectCloudflare = createServerFn({ method: "POST" })
     const ok = r.ok && "reply" in r && !!r.reply;
     await supabaseAdmin.from("project_ai_settings").update({ status: ok ? "on" : "needs_fix", last_reply: ok ? (r as any).reply.slice(0, 300) : null, last_error: ok ? null : (r as any).error ?? "Empty reply", last_checked_at: new Date().toISOString() }).eq("project_id", data.projectId);
     return ok ? { ok: true, reply: (r as any).reply as string } : { ok: false, error: String((r as any).error ?? "Empty reply") };
+  });
+
+/** Models this project's site chat can use: Cloudflare pool models plus the owner's selected one. */
+export const listProjectAiModels = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async () => {
+    const { loadCloudflarePool, readCloudflareCodingModel } = await import("./cloudflare-pool.server");
+    const { loadProviderRegistry } = await import("./model-router.server");
+    const { listProviderModels } = await import("./model-discovery.server");
+    const pool = await loadCloudflarePool();
+    const { providers, keys } = await loadProviderRegistry();
+    const models: Array<{ model: string; label: string; vision: boolean }> = [];
+    for (const key of pool) {
+      const provider = providers.find((p) => p.id === key.id);
+      const apiKey = keys[key.id];
+      if (!provider || !apiKey) continue;
+      for (const m of await listProviderModels(provider.id, apiKey, provider)) {
+        if (BAD_CF_MODEL.test(m.id)) continue;
+        if (!m.vision && !FREE_CF_CODER.test(m.id)) continue;
+        if (!models.some((x) => x.model === m.id)) models.push({ model: m.id, label: m.label, vision: m.vision });
+      }
+    }
+    return { models, defaultModel: await readCloudflareCodingModel() };
+  });
+
+/** Saves which model this project's site chat uses (null = the owner's selected model). */
+export const setProjectAiModel = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { projectId: string; model: string | null }) => z.object({ projectId: z.string().uuid(), model: z.string().max(120).nullable() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertOwnsProject(context.supabase, context.userId, data.projectId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("project_ai_settings")
+      .update({ model: data.model?.trim() || null, updated_at: new Date().toISOString() })
+      .eq("project_id", data.projectId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
   });
