@@ -70,3 +70,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Project custom domains use Cloudflare for SaaS hostnames plus a per-hostname Worker route that forwards to the app with an HMAC-signed x-code-haven-host header (src/lib/domain-policy.ts); the app host only serves its own known domains, so direct A records cannot work.
 - Cloudflare domain setup shares endpoint-to-permission mapping with Admin guidance; never suppress authorization errors or imply a read-only token test verified edit permissions.
 - Sidebar chat uses shared image-message helpers for image-only eligibility and multimodal payloads; save image parts with the message so attachments remain visible after reload.
+- Sidebar project previews mount by chat/project identity and reuse the browser build/asset pipeline with owner-scoped reads; viewing never navigates to the editor, and switching attachments unmounts stale frames.

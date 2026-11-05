@@ -24,6 +24,7 @@ import { runBrowserCheck } from "@/lib/browser-check.functions";
 import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
 import { zipCheckDecision, zipFixPrompt, ZIP_QUIET_MS, ZIP_SETTLE_MS } from "@/lib/zip-check";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -1859,10 +1860,10 @@ function ProjectEditor() {
   }
 
   return (
-    <div className="h-[100dvh] w-screen flex flex-col bg-background overflow-hidden">
+    <div className="project-workspace h-[100dvh] w-full min-w-0 flex flex-col bg-background overflow-hidden">
       <BuildApprovalHost />
       {/* Header */}
-      <header className="min-h-14 hairline-bottom-gold grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-3 py-2 shrink-0 bg-card/30 backdrop-blur-sm sm:flex sm:flex-wrap sm:py-2">
+      <header className="min-h-12 border-b grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-3 py-1.5 shrink-0 bg-background sm:flex sm:gap-3">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetTrigger asChild>
             <button
@@ -1916,7 +1917,7 @@ function ProjectEditor() {
             <DropdownMenuTrigger asChild>
               <button className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 hairline-gold bg-card/60 transition-colors hover:bg-accent/40 sm:max-w-[40vw]">
                 <ForgeMark className="h-5 w-5 shrink-0" />
-                <span className="font-display text-base truncate text-foreground/95">{projectName || "Untitled"}</span>
+                <span className="text-sm font-semibold truncate text-foreground">{projectName || "Untitled"}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               </button>
             </DropdownMenuTrigger>
@@ -1950,7 +1951,7 @@ function ProjectEditor() {
           onClick={(e) => { e.currentTarget.value = ""; }}
           onChange={(e) => void importZip(e.target.files?.[0])}
         />
-        <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-1 sm:col-span-1 sm:ml-auto sm:flex-nowrap">
+        <div className="flex shrink-0 items-center justify-end gap-0.5 sm:ml-auto sm:gap-1">
           <Button
             size="icon"
             variant={tab === "preview" ? "secondary" : "outline"}
@@ -1961,6 +1962,7 @@ function ProjectEditor() {
           >
             <Play className="h-4 w-4 fill-current" />
           </Button>
+          <div className="hidden items-center gap-1 sm:flex">
           <Button
           size="sm"
           variant="ghost"
@@ -2019,6 +2021,17 @@ function ProjectEditor() {
           </div>
           )}
           <BackendBadge projectId={projectId} compact />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 sm:hidden" aria-label="Project actions"><ChevronDown className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => { void refreshFiles(); setPreviewKey((k) => k + 1); setTab("preview"); }}><RefreshCw className="h-4 w-4" />Rebuild preview</DropdownMenuItem>
+              <DropdownMenuItem disabled={reverting} onSelect={() => void revertToLastStable()}><Undo2 className="h-4 w-4" />Revert last build</DropdownMenuItem>
+              {githubLinked && <DropdownMenuItem onSelect={() => setPushOpen(true)}><Github className="h-4 w-4" />Push to GitHub</DropdownMenuItem>}
+              <DropdownMenuItem onSelect={() => navigate({ to: "/p/$projectId/settings", params: { projectId } })}><Settings className="h-4 w-4" />Project settings</DropdownMenuItem>
+              <div className="px-2 py-2"><BackendBadge projectId={projectId} compact /></div>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
           size="sm"
           variant={published ? "outline" : "default"}
@@ -2036,7 +2049,7 @@ function ProjectEditor() {
           <Link
           to="/p/$projectId/settings"
           params={{ projectId }}
-          className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40"
+          className="hidden h-9 w-9 sm:inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-accent/40"
           title="Project settings, domains and publishing"
           aria-label="Project settings"
           >
@@ -2057,7 +2070,7 @@ function ProjectEditor() {
       )}
 
       {/* Tabs */}
-      <nav className="flex hairline-bottom-gold shrink-0 bg-card/40">
+      <nav aria-label="Project views" className="flex min-w-0 overflow-x-auto border-b shrink-0 bg-background">
         {([
           { k: "chat", label: "Chat", icon: MessageSquare },
           { k: "preview", label: "Preview", icon: Eye },
@@ -2066,18 +2079,18 @@ function ProjectEditor() {
           { k: "history", label: "History", icon: HistoryIcon },
           { k: "brain", label: "Brain", icon: Brain },
         ] as const).map(({ k, label, icon: Icon }) => (
-          <button
+          <Button variant="ghost" title={label} aria-label={label} aria-pressed={tab === k}
             key={k}
             onClick={() => setTab(k)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors border-b-2 -mb-px ${
+            className={`h-10 min-w-12 shrink-0 flex-1 rounded-none flex items-center justify-center gap-1 px-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
               tab === k
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
-            {label}
-          </button>
+            <span className={tab === k ? "inline" : "hidden sm:inline"}>{label}</span>
+          </Button>
         ))}
       </nav>
 
@@ -2111,7 +2124,7 @@ function ProjectEditor() {
                 }
               }}
               data-work-chat-scroll
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+              className="project-transcript min-w-0 flex-1 overflow-y-auto px-4 py-5 space-y-4"
             >
               {chatReady && messages.length === 0 && (
                 <div className="text-center py-12 space-y-3">
@@ -2501,7 +2514,7 @@ function ProjectEditor() {
               })()}
             </div>
             </div>
-            <form onSubmit={handleSend} className="p-3 hairline-top-gold bg-card/40 space-y-2">
+            <form onSubmit={handleSend} className="project-composer relative shrink-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-background space-y-2">
               {switchCountdown !== null ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
                   <span>
@@ -2512,7 +2525,10 @@ function ProjectEditor() {
                   </button>
                 </div>
               ) : null}
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="sm" className="h-7 min-w-0 gap-1.5 text-xs text-muted-foreground" aria-label="Model and usage settings"><Settings className="h-3.5 w-3.5 shrink-0" /><span className="truncate">Model & usage</span></Button></PopoverTrigger>
+                <PopoverContent align="start" side="top" className="w-80 max-w-[calc(100vw-1.5rem)] bg-popover text-popover-foreground">
+                <div className="flex flex-wrap items-center gap-3">
                 {isBusy && jobStartedAt ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5 text-[11px] text-primary tabular-nums" title="Time this job has been running">
                     <Timer className="h-3 w-3" />
@@ -2528,7 +2544,7 @@ function ProjectEditor() {
                 <ChatModelControls />
                 {activeModel ? (
                   <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
+                    className={`inline-flex max-w-full items-center gap-1.5 break-all rounded-md border px-2.5 py-1 text-xs ${isBusy ? "border-primary/50 text-primary" : "text-muted-foreground"}`}
                     title={isBusy ? "Model writing this reply" : "Model that wrote the last reply"}
                   >
                     <span className={`h-1.5 w-1.5 rounded-full ${isBusy ? "bg-primary animate-pulse" : "bg-muted-foreground"}`} />
@@ -2543,13 +2559,15 @@ function ProjectEditor() {
                 >
                   Auto-switch: {autoSwitch ? "On" : "Off"}
                 </button>
+                </div></PopoverContent></Popover>
+                {isBusy && jobStartedAt && <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />{fmtElapsed(nowTick - jobStartedAt)}</span>}
               </div>
               {!isOnline && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                   Offline — Code Haven keeps working on the server. You'll see where it is when you reconnect.
                 </div>
               )}
-              {(isBusy || queue.length > 0 || queuePaused) && (
+              {(queue.length > 0 || queuePaused) && (
                 <div className="rounded-md hairline-gold bg-card/60 px-3 py-2 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-muted-foreground">
@@ -2599,8 +2617,7 @@ function ProjectEditor() {
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">Mode</span>
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-0.5">
                 {([
                   { key: "plan" as const, label: "Plan", icon: Lightbulb, hint: "Think, ask questions, propose a plan first" },
                   { key: "build" as const, label: "Build", icon: HammerIcon, hint: "Build it straight away" },
@@ -2613,7 +2630,7 @@ function ProjectEditor() {
                     aria-pressed={mode === option.key}
                     title={option.hint}
                     onClick={() => { setMode(option.key); modeRef.current = option.key; requestModeRef.current = null; }}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
+                    className={`h-8 min-w-0 inline-flex items-center justify-center gap-1 rounded-md px-1 text-xs transition-colors ${
                       mode === option.key
                         ? "bg-primary/15 text-primary border border-primary/40"
                         : "hairline-gold text-muted-foreground hover:text-primary"
@@ -2625,7 +2642,7 @@ function ProjectEditor() {
                 ))}
               </div>
               {!isStreaming && !remoteWorking && (
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                <details className="text-xs text-muted-foreground"><summary className="cursor-pointer py-1">Suggestions</summary><div className="flex gap-2 overflow-x-auto py-2">
                   {[
                     { icon: Wand2, label: "Refine the design" },
                     { icon: Palette, label: "Change color scheme" },
@@ -2642,7 +2659,7 @@ function ProjectEditor() {
                       {s.label}
                     </button>
                   ))}
-                </div>
+                </div></details>
               )}
               {attachments.length > 0 && (
                 <div className="flex gap-2 overflow-x-auto">

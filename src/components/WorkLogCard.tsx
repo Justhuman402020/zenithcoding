@@ -69,7 +69,7 @@ export function WorkLogCard({
           </span>
         </div>
       </Link>
-      <Button asChild variant="outline" className="mt-3 w-full">
+      <Button asChild variant="ghost" size="sm" className="mt-1 h-7 px-0 text-muted-foreground">
         <Link
           to="/work/$projectId/$runId"
           params={{ projectId, runId }}
