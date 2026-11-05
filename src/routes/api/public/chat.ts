@@ -947,7 +947,7 @@ export const Route = createFileRoute("/api/public/chat")({
                 const editedNow = changedPathsFromStep(step);
                 for (const p of editedNow) progressModel.files.add(p);
                 stepsWithoutEdit = editedNow.length ? 0 : stepsWithoutEdit + 1;
-                if (lookOnlyAction(stepsWithoutEdit, needsFileChange) === "stop") { lookOnlyHit = true; trace.log("budget.look_only_stop", { detail: { steps: stepsWithoutEdit } }); }
+                if (lookOnlyAction(stepsWithoutEdit, needsFileChange) === "stop") { lookOnlyHit = true; trace.log("budget.look_only_stop", { detail: { steps: stepsWithoutEdit } }); replyTexts.push(`I stopped after ${stepsWithoutEdit} steps of looking around without changing any file, so I don't keep running without progress. Tell me to continue, or give me the access or command I said is missing.`); }
                 let last = "";
                 for (const c of (step?.toolCalls ?? []) as any[]) {
                   const path = c?.input?.path ?? c?.args?.path;
