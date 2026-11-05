@@ -15,6 +15,7 @@ import { WorkLogCard } from "@/components/WorkLogCard";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
+import { canSendChat, chatMessageText, isChatImage, type ChatImage } from "@/lib/assistant-images";
 import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
@@ -38,7 +39,8 @@ function ChatPage() {
   const [data, setData] = useState<Data | null>(null);
   const [text, setText] = useState("");
   const [plan, setPlan] = useState(false);
-  const [images, setImages] = useState<Array<{ type: "file"; mediaType: string; url: string }>>([]);
+  const [images, setImages] = useState<ChatImage[]>([]);
+  const [readingImages, setReadingImages] = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
   const aiFn = useServerFn(getWorkspaceAI);
   const [ai, setAi] = useState<Awaited<ReturnType<typeof getWorkspaceAI>> | null>(null);
@@ -81,12 +83,31 @@ function ChatPage() {
   }, [running.map((e) => e.id).join(","), check, reload]);
 
   async function submit() {
-    const msg = text.trim();
-    if (!msg || busy) return;
+    if (!canSendChat(text, images, attachments.length) || busy || readingImages) return;
+    const msg = chatMessageText(text, images, attachments.length);
     setBusy(true); setText("");
-    setData((d) => d ? { ...d, messages: [...d.messages, { id: "tmp", role: "user", content: msg, parts: {}, created_at: new Date().toISOString() }] } : d);
-    try { await send({ data: { id: chatId, text: msg, attachments, images, plan } }); setAttachments([]); setImages([]); } catch (e: any) { toast.error(e?.message ?? "Send failed"); }
+    setData((d) => d ? { ...d, messages: [...d.messages, { id: "tmp", role: "user", content: msg, parts: { images }, created_at: new Date().toISOString() }] } : d);
+    try { await send({ data: { id: chatId, text: msg, attachments, images, plan } }); setAttachments([]); setImages([]); } catch (e: any) { setText(msg); toast.error(e?.message ?? "Send failed"); }
     await reload(); setBusy(false); inputRef.current?.focus();
+  }
+
+  async function addImages(files: File[]) {
+    setPlan(false); setReadingImages(true);
+    try {
+      const added: ChatImage[] = [];
+      for (const file of files.filter(isChatImage).slice(0, 3)) {
+        if (file.size > 5000000) { toast.error("Image must be smaller than 5 MB"); continue; }
+        const url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error("Could not read image"));
+          reader.readAsDataURL(file);
+        });
+        added.push({ type: "file", mediaType: file.type, url });
+      }
+      setImages((current) => [...current, ...added].slice(0, 3));
+    } catch { toast.error("Could not attach image. Please try again."); }
+    finally { setReadingImages(false); }
   }
 
   async function approve(editId: string, prompt: string) {
@@ -123,12 +144,15 @@ function ChatPage() {
         <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
         <NeuronsBar />
       </header>
-      <main data-work-chat-scroll className="flex-1 overflow-y-auto px-4 py-4">
+      <main data-work-chat-scroll className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-2xl space-y-4">
           {items.length === 0 && <p className="text-center text-sm text-muted-foreground mt-10">Select a project to start.</p>}
           {items.map((it) => it.kind === "msg" ? (
             it.m.role === "user"
-              ? <div key={it.m.id + it.at} className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2 text-primary-foreground">{it.m.content}</div>
+              ? <div key={it.m.id + it.at} className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-primary px-4 py-2 text-primary-foreground">
+                  {Array.isArray(it.m.parts?.images) && <div className="mb-2 flex flex-wrap gap-2">{it.m.parts.images.map((image: ChatImage, i: number) => <img key={i} src={image.url} alt={`Attached image ${i + 1}`} className="max-h-48 max-w-full rounded-md object-contain" />)}</div>}
+                  {it.m.content}
+                </div>
               : <div key={it.m.id} className="max-w-full">
                   <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{it.m.content}</ReactMarkdown></div>
                   {it.m.parts?.planning && <div className="mt-3 border rounded-md p-3 text-xs"><NeuronLog><span className="ml-1">Planning · {it.m.parts.planning.used} Neurons</span></NeuronLog>{it.m.parts.planning.steps.map((step: any, i: number) => <div key={i} className="flex justify-between gap-2 border-b py-1"><span>Step {step.step} · Key #{step.key_number}</span><span>{step.neurons} Neurons</span></div>)}</div>}
@@ -164,28 +188,28 @@ function ChatPage() {
           <div ref={bottomRef} />
         </div>
       </main>
-      <footer className="border-t p-3">
+      <footer className="shrink-0 border-t p-3">
         <div className="mx-auto max-w-2xl flex flex-wrap gap-2 mb-2">
           <Button size="sm" variant={plan ? "default" : "outline"} onClick={() => { setPlan(!plan); setImages([]); }} aria-pressed={plan}><ClipboardList className="h-4 w-4 mr-1" />Plan</Button>
           <Button size="sm" variant="outline" title="Image message · selected OpenRouter VL model" aria-label="Attach image with OpenRouter" onClick={() => { setPlan(false); imageRef.current?.click(); }}><Zap className="h-4 w-4" /><ImagePlus className="h-4 w-4" /></Button>
           {images.length > 0 && <Button size="sm" variant="ghost" onClick={() => setImages([])}>{images.length} image(s) <X className="h-3 w-3 ml-1" /></Button>}
           <input ref={imageRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={async (e) => {
-            const files = Array.from(e.target.files ?? []).slice(0, 3);
-            const urls: typeof images = [];
-            for (const file of files) {
-              if (file.size > 5000000) { toast.error("Image must be smaller than 5 MB"); continue; }
-              const url = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); });
-              urls.push({ type: "file", mediaType: file.type, url });
-            }
-            setImages(urls); e.target.value = "";
+            await addImages(Array.from(e.target.files ?? [])); e.target.value = "";
           }} />
         </div>
         <div className="mx-auto max-w-2xl">
+          {images.length > 0 && <div className="mb-2 flex gap-2 overflow-x-auto" aria-label="Image attachments">{images.map((image, i) => <div key={image.url + i} className="relative shrink-0">
+            <img src={image.url} alt={`Image to send ${i + 1}`} className="h-16 w-20 rounded-md border object-cover" />
+            <Button size="icon" variant="secondary" className="absolute right-0 top-0 h-6 w-6" aria-label={`Remove image ${i + 1}`} onClick={() => setImages((current) => current.filter((_, index) => index !== i))}><X className="h-3 w-3" /></Button>
+          </div>)}</div>}
           {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-1">{attachments.map((a, i) => <span key={i} className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">{a.name}<button aria-label="Remove" onClick={() => setAttachments((x) => x.filter((_, j) => j !== i))}><X className="h-3 w-3" /></button></span>)}</div>}
           <div className="flex items-end gap-2 rounded-2xl border bg-card p-2">
             <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={async (id) => { await setup({ data: { id: chatId, projectId: id, initialize: false } }).catch((e) => toast.error(e.message)); void reload(); }} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} />
-            <Textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask about your project…" className="min-h-10 max-h-40 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
-            <Button size="icon" className="rounded-full shrink-0" disabled={busy || !text.trim()} onClick={submit} aria-label="Send"><ArrowUp className="h-4 w-4" /></Button>
+            <Textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => {
+              const files = Array.from(e.clipboardData.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null && isChatImage(file));
+              if (files.length) { e.preventDefault(); const caption = e.clipboardData.getData("text/plain"); if (caption) setText((current) => current + caption); void addImages(files); }
+            }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask about your project…" className="min-h-10 min-w-0 max-h-40 w-0 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
+            <Button size="icon" className="rounded-full shrink-0" disabled={busy || readingImages || !canSendChat(text, images, attachments.length)} onClick={submit} aria-label="Send">{readingImages ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}</Button>
           </div>
         </div>
       </footer>

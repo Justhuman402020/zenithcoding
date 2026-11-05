@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Fix sidebar chat image paste, image-only sending, visible send control and saved image previews; verify without live model inference.
+
 - [x] Compact work-log cards and dedicated reopenable Timeline/Changes pages; signed-in saved logs, reload/Back and phone layout verified; sanitized new-run patch capture tested, 32 tests pass.
 - [ ] Verify a real running work-details page through completion with new captured differences; requires explicit permission for live model inference.
 
