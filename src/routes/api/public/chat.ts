@@ -583,7 +583,7 @@ export const Route = createFileRoute("/api/public/chat")({
         };
         let requiredVisualContext = "";
         if (visualApproved && jobId) {
-          setProgress("Taking real preview screenshots before diagnosing the repair");
+          await supabaseAdmin.from("chat_jobs").update({ progress: "Taking real preview screenshots before diagnosing the repair" }).eq("id", jobId);
           const before = await inspectRequiredPreview();
           requiredVisualContext = `\n\n## Required preview screenshot evidence\nStatus: ${before.status}\n${before.report}\nThis preview repair requires real screenshots before and after edits. Use the captured evidence to repair the existing source. If unverified, report the exact blocker; never claim live capture is absent without a failed check, or claim a visual pass. After edits the runner will capture again and return visible problems for repair. Do not publish.`;
         }
