@@ -3,6 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { CheckCircle2, Clock, ListChecks, Loader2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseWorkLog, workedFor, rememberChatScroll } from "@/lib/work-log";
+import { durationLabel } from "@/lib/work-log";
+import { useRunClock } from "@/hooks/use-run-clock";
+import type { RunClock } from "@/lib/run-clock";
 
 export function WorkLogCard({
   log = "",
@@ -15,6 +18,7 @@ export function WorkLogCard({
   progress,
   stepCount,
   fileCount,
+  clock: savedClock,
 }: {
   log?: string;
   title: string;
@@ -26,9 +30,11 @@ export function WorkLogCard({
   progress?: string;
   stepCount?: number;
   fileCount?: number;
+  clock?: RunClock;
 }) {
   const { steps, files } = parseWorkLog(log);
-  const dur = workedFor(steps);
+  const clock = useRunClock(savedClock ?? {});
+  const dur = clock.ms == null ? workedFor(steps) : durationLabel(clock.ms);
   return (
     <div className="mt-3 rounded-lg border border-border bg-card p-3">
       <Link
@@ -61,7 +67,7 @@ export function WorkLogCard({
           {dur && (
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
-              {dur}
+              {clock.ms == null ? "" : `${clock.label} `}{dur}
             </span>
           )}
           <span>

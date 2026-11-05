@@ -1,0 +1,5 @@
+import { expect, it } from "vitest";
+import { parseVisualReport, visualCheckRequested, visualRoundAllowed } from "../src/lib/visual-check-policy";
+it("only runs vision for an explicit preview or screenshot check", () => { expect(visualCheckRequested("Take a screenshot and fix my preview")).toBe(true); expect(visualCheckRequested("Write a pricing page")).toBe(false); });
+it("does not call a vague response a pass", () => { expect(parseVisualReport("Looks nice").status).toBe("unverified"); expect(parseVisualReport("PROBLEMS: Phone text overlaps").status).toBe("problems"); expect(parseVisualReport("PASS: No visible overlap").status).toBe("passed"); });
+it("stops after three saved repair/check rounds", () => { expect(visualRoundAllowed(2)).toBe(true); expect(visualRoundAllowed(3)).toBe(false); });

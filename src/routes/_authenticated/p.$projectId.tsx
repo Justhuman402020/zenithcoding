@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { useRunClock } from "@/hooks/use-run-clock";
+import { durationLabel } from "@/lib/work-log";
 import { uploadRows } from "@/lib/zip-upload";
 import { buildStoragePath } from "@/lib/publish-files";
 import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
@@ -21,6 +23,7 @@ import { WorkLogCard } from "@/components/WorkLogCard";
 import { messageRunId } from "@/lib/work-log";
 import { BrowserCheckView, type BrowserCheck } from "@/components/BrowserCheckView";
 import { runBrowserCheck } from "@/lib/browser-check.functions";
+import { startVisualCheck } from "@/lib/visual-check.functions";
 import { nextFixRound, issueCount } from "@/lib/browser-check-policy";
 import { zipCheckDecision, zipFixPrompt, ZIP_QUIET_MS, ZIP_SETTLE_MS } from "@/lib/zip-check";
 import { Input } from "@/components/ui/input";
@@ -174,6 +177,10 @@ type LatestJob = {
   prompt?: string;
   request_key?: string;
   created_at?: string;
+  work_started_at?: string | null;
+  work_paused_at?: string | null;
+  work_paused_ms?: number;
+  completed_at?: string | null;
 };
 
 function PoolLedger({ rows }: { rows: any[] }) {
@@ -990,6 +997,8 @@ function ProjectEditor() {
 
   // "Test it like a real visitor": opens the preview/published site in Cloudflare's real browser.
   const [browserCheck, setBrowserCheck] = useState<BrowserCheck | null>(null);
+  const startVisualCheckFn = useServerFn(startVisualCheck);
+  const [startingVisualCheck, setStartingVisualCheck] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
   const [fixRounds, setFixRounds] = useState(0);
   const pendingAutoTest = useRef(false);
@@ -1042,16 +1051,7 @@ function ProjectEditor() {
     return () => clearTimeout(t);
   }, [isBusy, autoBuild.status, previewDoc, runTest]);
 
-  // Job timer: starts when work begins, ticks every second while busy.
-  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(0);
-  useEffect(() => {
-    if (!isBusy) { setJobStartedAt(null); return; }
-    setJobStartedAt((cur) => cur ?? Date.now());
-    setNowTick(Date.now());
-    const t = window.setInterval(() => setNowTick(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [isBusy]);
+  const workClock = useRunClock(latestJob ?? {});
   const liveNeurons = useMemo(() => {
     if (!isStreaming) return null;
     const last = messages[messages.length - 1] as { role: string; metadata?: { neurons?: { start: number; used: number; cap: number } } } | undefined;
@@ -1348,7 +1348,7 @@ function ProjectEditor() {
       if (disposed || !navigator.onLine) return;
       const { data: jobs } = await supabase
         .from("chat_jobs")
-        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes,pool_ledger,paused_at_key,prompt,request_key,created_at")
+        .select("id,status,progress,error,updated_at,outcome,steps_done,files_changed,rounds,auto_resumes,pool_ledger,paused_at_key,prompt,request_key,created_at,work_started_at,work_paused_at,work_paused_ms,completed_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -2260,7 +2260,7 @@ function ProjectEditor() {
                   </div>
                 );
               })}
-              {isBusy && <WorkLogCard projectId={projectId} runId={latestJob && ["running", "queued"].includes(latestJob.status) ? `j-${latestJob.id}` : `k-${requestKeyRef.current ?? "pending"}`} title={latestJob?.prompt ?? "Current task"} running progress={remoteWorking ?? latestJob?.progress ?? "Working…"} stepCount={latestJob?.steps_done} fileCount={latestJob?.files_changed} />}
+              {isBusy && <WorkLogCard projectId={projectId} runId={latestJob && ["running", "queued"].includes(latestJob.status) ? `j-${latestJob.id}` : `k-${requestKeyRef.current ?? "pending"}`} title={latestJob?.prompt ?? "Current task"} running progress={remoteWorking ?? latestJob?.progress ?? "Working…"} stepCount={latestJob?.steps_done} fileCount={latestJob?.files_changed} clock={latestJob ?? undefined} />}
               {isStreaming && (() => {
                 const last = messages[messages.length - 1];
                 const lastTools = last?.parts.filter((p: any) => typeof p.type === "string" && p.type.startsWith("tool-")) ?? [];
@@ -2529,10 +2529,10 @@ function ProjectEditor() {
                 <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="sm" className="h-7 min-w-0 gap-1.5 text-xs text-muted-foreground" aria-label="Model and usage settings"><Settings className="h-3.5 w-3.5 shrink-0" /><span className="truncate">Model & usage</span></Button></PopoverTrigger>
                 <PopoverContent align="start" side="top" className="w-80 max-w-[calc(100vw-1.5rem)] bg-popover text-popover-foreground">
                 <div className="flex flex-wrap items-center gap-3">
-                {isBusy && jobStartedAt ? (
+                {isBusy && workClock.ms != null ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5 text-[11px] text-primary tabular-nums" title="Time this job has been running">
                     <Timer className="h-3 w-3" />
-                    {fmtElapsed(nowTick - jobStartedAt)}
+                    {durationLabel(workClock.ms ?? 0)}
                   </span>
                 ) : null}
                 {liveNeurons ? (
@@ -2560,7 +2560,7 @@ function ProjectEditor() {
                   Auto-switch: {autoSwitch ? "On" : "Off"}
                 </button>
                 </div></PopoverContent></Popover>
-                {isBusy && jobStartedAt && <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />{fmtElapsed(nowTick - jobStartedAt)}</span>}
+                {isBusy && workClock.ms != null && <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />{durationLabel(workClock.ms ?? 0)}</span>}
               </div>
               {!isOnline && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -2794,6 +2794,13 @@ function ProjectEditor() {
               <BrowserCheckView check={browserCheck} onFix={fixFromTest} fixBlockedReason={fixGate.reason} />
             </div>
           </div>
+        )}
+        {tab === "preview" && (
+          <div className="flex shrink-0 justify-end border-b px-3 py-1"><Button variant="ghost" size="sm" className="h-8 text-xs" disabled={startingVisualCheck || isBusy} title="Uses browser and selected image-reader credit" onClick={async () => {
+            if (!(await requestApproval("openrouter-image", "Inspect phone and PC preview screenshots with your selected image reader? This uses browser and model credit. No files will be edited."))) return;
+            setStartingVisualCheck(true);
+            try { await startVisualCheckFn({ data: { projectId, html: previewDoc } }); toast.success("Screenshot inspection started. Results will be saved in your work log."); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not start visual check"); } finally { setStartingVisualCheck(false); }
+          }}><Eye className="h-3.5 w-3.5" />Inspect screenshots</Button></div>
         )}
         {tab === "preview" && (
           <PreviewFrame

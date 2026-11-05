@@ -43,6 +43,14 @@ export async function createPreviewToken(userId: string, projectId: string, html
   return raw;
 }
 
+export async function createSourcePreviewToken(userId: string, projectId: string, files: Array<{ path: string; content: string }>) {
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+  const raw = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const { error } = await db.from("preview_tokens").insert({ token_hash: await sha256(raw), user_id: userId, project_id: projectId, html: JSON.stringify({ files }), expires_at: new Date(Date.now() + PREVIEW_TOKEN_TTL_MS).toISOString() });
+  if (error) throw new Error("Could not prepare private source preview");
+  return raw;
+}
+
 class PermissionError extends Error {}
 
 async function cf(acct: Account, endpoint: "screenshot" | "scrape", body: unknown) {
@@ -52,7 +60,7 @@ async function cf(acct: Account, endpoint: "screenshot" | "scrape", body: unknow
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
   });
-  if (res.status === 401 || res.status === 403) throw new PermissionError(`${res.status}`);
+  if (res.status === 401 || res.status === 403) throw new PermissionError("Cloudflare needs Account → Browser Rendering → Edit on this account; check the token's account access.");
   if (!res.ok) throw new Error(`Browser test failed (${res.status}): ${redactSecrets((await res.text()).slice(0, 200))}`);
   return res;
 }
@@ -72,6 +80,7 @@ export type CheckOutcome =
 
 export async function runCheck(opts: { userId: string; projectId: string; url: string; published: boolean }): Promise<CheckOutcome> {
   const started = Date.now();
+  if (["localhost", "127.0.0.1", "::1"].includes(new URL(opts.url).hostname)) return { ok: false, error: "The remote screenshot browser cannot open the local editor address. Publish this update, then run the screenshot check from your live Code Haven site.", missingPermission: [], durationMs: 0 };
   const accounts = await poolAccounts();
   const missing: string[] = [];
   if (!accounts.length) return { ok: false, error: "No Cloudflare accounts are saved yet.", missingPermission: [], durationMs: 0 };
@@ -91,7 +100,8 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
         const res = await cf(acct, "screenshot", body);
         const bytes = new Uint8Array(await res.arrayBuffer());
         const path = `${opts.userId}/${opts.projectId}/${Date.now()}-${shots.length}.jpg`;
-        await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+        const { error: uploadError } = await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+        if (uploadError) throw new Error("Could not save the private screenshot.");
         shots.push({ label: s.label, url: path });
       }
       const scrape = await cf(acct, "scrape", { ...common(opts.url, opts.published), viewport: PHONE, elements: [{ selector: "#__ch_report" }] });
@@ -101,9 +111,9 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
       try { parsed = JSON.parse(text); } catch { parsed = { pageErrors: text ? [] : ["The page did not finish loading in the test browser."] }; }
       return { ok: true, findings: cleanFindings(parsed), shots, accountLabel: acct.label, durationMs: Date.now() - started, missingPermission: missing };
     } catch (e) {
-      if (e instanceof PermissionError) { missing.push(acct.label); continue; }
+    if (e instanceof PermissionError) { missing.push(acct.label); continue; }
       return { ok: false, error: e instanceof Error ? e.message : "Browser test failed", missingPermission: missing, durationMs: Date.now() - started };
     }
   }
-  return { ok: false, error: "None of your Cloudflare accounts allow Browser Rendering yet.", missingPermission: missing, durationMs: Date.now() - started };
+  return { ok: false, error: "Browser capture needs Account → Browser Rendering → Edit, with access to the selected Cloudflare account.", missingPermission: missing, durationMs: Date.now() - started };
 }

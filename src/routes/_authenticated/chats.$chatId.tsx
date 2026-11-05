@@ -14,6 +14,7 @@ import { NeuronLog } from "@/components/NeuronLog";
 import { WorkLogCard } from "@/components/WorkLogCard";
 import { AttachedProjectPreview } from "@/components/AttachedProjectPreview";
 import { attachedPreviewProject } from "@/lib/project-preview";
+import type { RunClock } from "@/lib/run-clock";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
@@ -38,6 +39,7 @@ function ChatPage() {
   const check = useServerFn(checkEdit);
   const stopFn = useServerFn(stopEdit);
   const [liveLog, setLiveLog] = useState<Record<string, string[]>>({});
+  const [runStats, setRunStats] = useState<Record<string, { clock: RunClock; stepCount: number; fileCount: number }>>({});
   const [data, setData] = useState<Data | null>(null);
   const [text, setText] = useState("");
   const [plan, setPlan] = useState(false);
@@ -75,6 +77,7 @@ function ChatPage() {
         const r = await check({ data: { id: e.id } }).catch(() => null);
         if (r?.progress) { const value = r.progress; setProgress((p) => ({ ...p, [e.id]: value })); }
         if (r?.log?.length) setLiveLog((l) => ({ ...l, [e.id]: r.log }));
+        if (r && "clock" in r && r.clock) setRunStats((stats) => ({ ...stats, [e.id]: { clock: r.clock, stepCount: r.stepCount, fileCount: r.fileCount } }));
         if (r && r.status !== "running") {
           const msg = r.status === "done" ? "Finished ✅" : "Stopped — see why below";
           if (r.status === "done") toast.success(msg); else toast.error(msg);
@@ -208,7 +211,7 @@ function ChatPage() {
               {it.e.status === "declined" && <div className="mt-2 text-sm text-muted-foreground">Not sent.</div>}
               {it.e.status === "done" && <div className="mt-2 text-sm text-primary">Finished — summary below.</div>}
               {it.e.status === "failed" && <div className="mt-2 text-sm text-destructive">Stopped — see summary below.</div>}
-              {data.chat.projectId && ["running", "done", "failed"].includes(it.e.status) && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`e-${it.e.id}`} title={it.e.prompt} running={it.e.status === "running"} progress={progress[it.e.id]} log={(liveLog[it.e.id] ?? it.e.report?.log ?? []).join("\n")} />}
+              {data.chat.projectId && ["running", "done", "failed"].includes(it.e.status) && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`e-${it.e.id}`} title={it.e.prompt} running={it.e.status === "running"} progress={progress[it.e.id]} clock={runStats[it.e.id]?.clock} stepCount={runStats[it.e.id]?.stepCount} fileCount={runStats[it.e.id]?.fileCount} log={(liveLog[it.e.id] ?? it.e.report?.log ?? []).join("\n")} />}
             </div>
           ))}
           {busy && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Thinking…</div>}
