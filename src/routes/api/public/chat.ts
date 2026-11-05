@@ -571,6 +571,22 @@ export const Route = createFileRoute("/api/public/chat")({
         const visualApproved = !planMode && needsFileChange && visualCheckRequested(isResume ? body.messages.filter((m) => m.role === "user").map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.type === "text" ? p.text : "").join(" ")).join("\n") : lastUserText);
         const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
+        // Required preview repairs must capture even when the coding model omits the tool.
+        const inspectRequiredPreview = async () => {
+          try {
+            return await checkProjectVisually(visualArgs);
+          } catch (e) {
+            const report = e instanceof Error ? e.message : "Screenshot check unavailable";
+            trace.log("preview.visual", { status: "error", message: report });
+            return { status: "unverified" as const, report };
+          }
+        };
+        let requiredVisualContext = "";
+        if (visualApproved && jobId) {
+          setProgress("Taking real preview screenshots before diagnosing the repair");
+          const before = await inspectRequiredPreview();
+          requiredVisualContext = `\n\n## Required preview screenshot evidence\nStatus: ${before.status}\n${before.report}\nThis preview repair requires real screenshots before and after edits. Use the captured evidence to repair the existing source. If unverified, report the exact blocker; never claim live capture is absent without a failed check, or claim a visual pass. After edits the runner will capture again and return visible problems for repair. Do not publish.`;
+        }
         const allTools = {
           ...createProjectFileTools(store, trace),
           ...visualCheckTools(visualArgs, !planMode && needsFileChange),
@@ -809,7 +825,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const skillContext = activeSkillSection(lastUserText, await loadBrainNotes());
         const systemPrompt =
           (planMode ? buildPlanSystemPrompt(proj.name, projectBrief) : buildSystemPrompt(proj.name, projectBrief)) +
-          sharedContext + assetContext + cloneContext + visualContext + adminVaultContext + skillContext + brainZipContext(brainReferences);
+          sharedContext + assetContext + cloneContext + visualContext + requiredVisualContext + adminVaultContext + skillContext + brainZipContext(brainReferences);
         const baseMessages = await convertToModelMessages(outgoingMessages as UIMessage[]);
         // Messages produced by finished steps of earlier (failed) attempts.
         let carried: any[] = [];
@@ -1098,6 +1114,24 @@ export const Route = createFileRoute("/api/public/chat")({
                     }
                   } else {
                     incompleteReason = null;
+                  }
+                  if (gate.ok && visualApproved && jobId) {
+                    setProgress("Taking real screenshots of the repaired preview");
+                    const after = await inspectRequiredPreview();
+                    if (after.status === "problems") {
+                      incompleteReason = "Screenshot inspection still found preview problems";
+                      if (gateRetries < MAX_GATE_RETRIES) {
+                        gateRetries += 1;
+                        if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+                        carried.push({ role: "user", content: `Actual rendered screenshot inspection found problems:\n${after.report}\nRepair these visible problems in the existing source, then stop for another screenshot check. Do not rewrite the project or claim the preview passed.` });
+                        recentCalls.length = 0;
+                        setProgress("Screenshot check found problems · returning the evidence for repair");
+                        finished = false;
+                        finalReason = undefined;
+                        attempt -= 1;
+                        continue;
+                      }
+                    }
                   }
                 }
                 break;
