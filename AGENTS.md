@@ -76,3 +76,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Site AI chat can run on the owner's Cloudflare pool via a per-project token (src/lib/project-ai-policy.ts rules, /api/public/sites/ai/chat); pool keys never leave Code Haven and the switch stops access instantly.
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
 - App installation uses manifest-only metadata and a root-scoped install-event provider with a home-menu control; preserve manifest identity and avoid service workers because offline support is not requested.
+- Screenshot capture tries every Cloudflare pool account (429 moves to the next), then falls back to the Microlink backup browser (optional MICROLINK_API_KEY); OpenRouter alone reads the images.
