@@ -34,6 +34,8 @@ export async function unpackZip(file: File): Promise<{ files: { path: string; co
   while (paths.length && paths.every((p) => p.includes("/"))) {
     const top = paths[0].split("/")[0];
     if (!paths.every((p) => p.startsWith(top + "/"))) break;
+    // Never strip a real project folder such as src/ — only a wrapper folder.
+    if (/^(src|public|app|assets|components|pages|lib|static)$/i.test(top)) break;
     paths = paths.map((p) => p.slice(top.length + 1));
     for (const k of Object.keys(entries)) {
       if (k.startsWith(top + "/")) entries[k.slice(top.length + 1)] = entries[k];
