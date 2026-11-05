@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Plan steady accurate working timers and agent screenshot→visual inspection→approved fix→recheck; awaiting plan approval before implementation.
+
 - [x] Unclutter mobile/desktop editor and sidebar chat; signed-in phone/PC previews remain in chat, switch/remove closes previous frame, attachment restores after reload; 28 regression tests pass and no console errors. Existing main-project update persistence preserved; no live model build run.
 
 - [x] Fix sidebar chat image paste and plus-menu upload, image-only sending, visible send control and saved image parts; signed-in phone/desktop checks captured actual image payload without inference; 16 tests pass. Live image answer remains approval-gated below.
