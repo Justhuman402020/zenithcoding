@@ -216,4 +216,12 @@ html.theme-black {
   --font-display: "Inter Tight", "Helvetica Neue", Arial, system-ui, sans-serif;
 }
 html.theme-black body { background-image: none; }
-html.theme-black h1, html.theme-black h2, html.theme-black h3 { letter-spacing: -0.02em; font-weight: 600; }
+html.theme-black h1, html.theme-black h2, html.theme-black h3 { letter-spacing: 0; font-weight: 600; }
+
+.project-transcript > * { width: 100%; max-width: 56rem; margin-inline: auto; }
+.project-composer > * { max-width: 56rem; margin-inline: auto; }
+.project-workspace header > * { min-width: 0; }
+@media (min-width: 1024px) {
+  .project-transcript { padding-block: 2rem; }
+  .project-composer { padding-inline: 2rem; }
+}

@@ -12,6 +12,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronLog } from "@/components/NeuronLog";
 import { WorkLogCard } from "@/components/WorkLogCard";
+import { AttachedProjectPreview } from "@/components/AttachedProjectPreview";
+import { attachedPreviewProject } from "@/lib/project-preview";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
@@ -49,6 +51,10 @@ function ChatPage() {
   const [attachments, setAttachments] = useState<Attach[]>([]);
   const [progress, setProgress] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openedPreview, setOpenedPreview] = useState<string | null>(null);
+  const [changingProject, setChangingProject] = useState(false);
+  const previewProject = attachedPreviewProject(data?.chat.projectId ?? null, openedPreview);
+  useEffect(() => { setOpenedPreview(null); }, [chatId, data?.chat.projectId]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const reload = useCallback(() => load({ data: { id: chatId } }).then(setData).catch((e) => toast.error(String(e?.message ?? e))), [chatId, load]);
@@ -122,6 +128,16 @@ function ChatPage() {
     setProgress((p) => ({ ...p, [editId]: "Stopping…" }));
   }
 
+  async function changeProject(projectId: string | null) {
+    if (changingProject) return;
+    setOpenedPreview(null); setChangingProject(true);
+    try {
+      await setup({ data: { id: chatId, projectId, initialize: false } });
+      await reload();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Could not change project"); }
+    finally { setChangingProject(false); }
+  }
+
   if (!data) return <div className="min-h-screen grid place-items-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const items = [
     ...data.messages.map((m) => ({ kind: "msg" as const, at: m.created_at, m })),
@@ -129,22 +145,33 @@ function ChatPage() {
   ].sort((a, b) => a.at.localeCompare(b.at));
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-background text-foreground">
-      <header className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+    <div className="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-background text-foreground">
+      <header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-3 py-2">
         <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/chats" })} aria-label="Back"><ArrowLeft className="h-5 w-5" /></Button>
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{data.chat.title}</div>
           <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+        {data.chat.projectId && <Button variant={previewProject ? "secondary" : "ghost"} size="icon" aria-label="Preview attached project" title="Preview attached project" disabled={changingProject} onClick={() => setOpenedPreview(previewProject ? null : data.chat.projectId)}><Eye className="h-4 w-4" /></Button>}
+        <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" aria-label="Chat settings" title="Chat settings"><KeyRound className="h-4 w-4" /></Button></PopoverTrigger>
+        <PopoverContent align="end" className="w-64 space-y-3">
         {data.chat.projectId && <div className="flex gap-1">
           <Button asChild variant="outline" size="sm" title="Scrolltide templates"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }} search={{ scrolltide: "1" }}><BookOpen className="h-4 w-4" /></Link></Button>
-          <Button asChild variant="outline" size="sm" title="Preview, test and fix"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }} search={{ tab: "preview" }}><Eye className="h-4 w-4" /></Link></Button>
           <Button asChild variant="outline" size="sm" title="Build and publish"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }}><Rocket className="h-4 w-4" /></Link></Button>
         </div>}
         <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
         <NeuronsBar />
+        </PopoverContent></Popover>
+        </div>
       </header>
-      <main data-work-chat-scroll className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      {data.chat.projectId && <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-2"><FolderKanban className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{data.chat.projectName}</span></span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Remove attached project" title="Remove project" disabled={changingProject} onClick={() => void changeProject(null)}><X className="h-3.5 w-3.5" /></Button>
+      </div>}
+      <div className="flex min-h-0 min-w-0 flex-1">
+      <div className={`${previewProject ? "hidden lg:flex lg:w-[42%] lg:max-w-xl lg:border-r" : "flex flex-1"} min-h-0 min-w-0 flex-col`}>
+      <main data-work-chat-scroll className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5">
         <div className="mx-auto max-w-2xl space-y-4">
           {items.length === 0 && <p className="text-center text-sm text-muted-foreground mt-10">Select a project to start.</p>}
           {items.map((it) => it.kind === "msg" ? (
@@ -188,7 +215,7 @@ function ChatPage() {
           <div ref={bottomRef} />
         </div>
       </main>
-      <footer className="shrink-0 border-t p-3">
+      <footer className="shrink-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-2xl flex flex-wrap gap-2 mb-2">
           <Button size="sm" variant={plan ? "default" : "outline"} onClick={() => { setPlan(!plan); setImages([]); }} aria-pressed={plan}><ClipboardList className="h-4 w-4 mr-1" />Plan</Button>
           <Button size="sm" variant="outline" title="Image message · selected OpenRouter VL model" aria-label="Attach image with OpenRouter" onClick={() => { setPlan(false); imageRef.current?.click(); }}><Zap className="h-4 w-4" /><ImagePlus className="h-4 w-4" /></Button>
@@ -204,7 +231,7 @@ function ChatPage() {
           </div>)}</div>}
           {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-1">{attachments.map((a, i) => <span key={i} className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">{a.name}<button aria-label="Remove" onClick={() => setAttachments((x) => x.filter((_, j) => j !== i))}><X className="h-3 w-3" /></button></span>)}</div>}
           <div className="flex items-end gap-2 rounded-2xl border bg-card p-2">
-            <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={async (id) => { await setup({ data: { id: chatId, projectId: id, initialize: false } }).catch((e) => toast.error(e.message)); void reload(); }} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} onImages={addImages} />
+            <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={(id) => void changeProject(id)} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} onImages={addImages} />
             <Textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => {
               const files = Array.from(e.clipboardData.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null && isChatImage(file));
               if (files.length) { e.preventDefault(); const caption = e.clipboardData.getData("text/plain"); if (caption) setText((current) => current + caption); void addImages(files); }
@@ -213,6 +240,9 @@ function ChatPage() {
           </div>
         </div>
       </footer>
+      </div>
+      {previewProject && <AttachedProjectPreview key={`${chatId}:${previewProject}`} projectId={previewProject} name={data.chat.projectName ?? "Project"} onClose={() => setOpenedPreview(null)} />}
+      </div>
       <OllamaSheet open={settingsOpen} onOpenChange={setSettingsOpen} chat={data.chat} onDone={reload} />
     </div>
   );
@@ -260,7 +290,7 @@ function PlusMenu({ chatId, projectId, onProject, onAttach, onImages }: { chatId
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setView("root"); }}>
       <PopoverTrigger asChild><Button size="icon" variant="outline" className="rounded-full shrink-0" aria-label="Add"><Plus className="h-4 w-4" /></Button></PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-80 p-0">
+      <PopoverContent align="start" side="top" className="w-80 max-w-[calc(100vw-1.5rem)] p-0">
         <div className="flex items-center gap-2 border-b px-3 py-2"><Search className="h-4 w-4 text-muted-foreground" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search..." className="h-8 border-0 p-0 focus-visible:ring-0" /></div>
         <div className="max-h-80 overflow-y-auto p-1">
           {view === "root" ? <>

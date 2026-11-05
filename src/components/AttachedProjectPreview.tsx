@@ -51,7 +51,7 @@ export function AttachedProjectPreview({ projectId, name, onClose }: { projectId
   }, [projectId, revision, load, loadEnv]);
   useEffect(() => {
     function navigate(event: MessageEvent) {
-      if (event.source !== document.querySelector('[data-attached-preview] iframe')?.contentWindow) return;
+      if (event.source !== document.querySelector<HTMLIFrameElement>('[data-attached-preview] iframe')?.contentWindow) return;
       const message = event.data;
       if (message?.type !== "forge-preview-navigate" || typeof message.path !== "string") return;
       const target = previewPath(message.path, path);
