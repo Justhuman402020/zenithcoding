@@ -24,3 +24,19 @@ describe("flattening guard", () => {
     expect(flattenedFramework([{ path: "index.html", content: '<script type="module" src="/src/main.tsx"></script>' }], ["package.json"])).toBeNull();
   });
 });
+
+describe("ZIP import saves the build setup", () => {
+  it("unpackZip stores the setup under .code-haven-build/scaffold/ and keeps user files unchanged", async () => {
+    const { zipSync, strToU8 } = await import("fflate");
+    const { unpackZip } = await import("@/lib/zip-import");
+    const bytes = zipSync({ "site/src/main.tsx": strToU8("console.log(1)"), "site/src/App.tsx": strToU8("x") });
+    const file = new File([bytes], "site.zip", { type: "application/zip" });
+    const { files } = await unpackZip(file);
+    expect(files.find((f) => f.path === "src/main.tsx")?.content).toBe("console.log(1)");
+    const paths = files.map((f) => f.path);
+    expect(paths).toContain(".code-haven-build/scaffold/index.html");
+    expect(paths).toContain(".code-haven-build/scaffold/vite.config.ts");
+    expect(paths).toContain(".code-haven-build/scaffold/package.json");
+    expect(paths).not.toContain("index.html");
+  });
+});
