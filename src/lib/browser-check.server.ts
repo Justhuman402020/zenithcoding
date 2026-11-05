@@ -80,6 +80,7 @@ export type CheckOutcome =
 
 export async function runCheck(opts: { userId: string; projectId: string; url: string; published: boolean }): Promise<CheckOutcome> {
   const started = Date.now();
+  if (["localhost", "127.0.0.1", "::1"].includes(new URL(opts.url).hostname)) return { ok: false, error: "The remote screenshot browser cannot open the local editor address. Publish this update, then run the screenshot check from your live Code Haven site.", missingPermission: [], durationMs: 0 };
   const accounts = await poolAccounts();
   const missing: string[] = [];
   if (!accounts.length) return { ok: false, error: "No Cloudflare accounts are saved yet.", missingPermission: [], durationMs: 0 };

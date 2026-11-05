@@ -1,6 +1,7 @@
 # Roadmap
 
-- [ ] Plan steady accurate working timers and agent screenshot→visual inspection→approved fix→recheck; awaiting plan approval before implementation.
+- [x] Implement shared steady job timers, saved execution/pause/end timing and separate action/step counts; screenshot agent tool, private visual briefs, saved reader snapshots and three-round cap; signed-in Timeline and phone/PC approval verified, 26 tests pass.
+- [ ] Verify a live visual overlap→image-reader diagnosis→approved repair→recheck flow and screen-off timer in a running job: remote browser cannot reach localhost; requires publishing this update and running the check on the live site. No visual pass claimed.
 
 - [x] Unclutter mobile/desktop editor and sidebar chat; signed-in phone/PC previews remain in chat, switch/remove closes previous frame, attachment restores after reload; 28 regression tests pass and no console errors. Existing main-project update persistence preserved; no live model build run.
 
