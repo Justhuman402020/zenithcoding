@@ -453,6 +453,8 @@ export type Database = {
           updated_at: string
           user_id: string
           visual_check_count: number
+          visual_reader_model: string | null
+          visual_reader_provider: string | null
           work_paused_at: string | null
           work_paused_ms: number
           work_started_at: string | null
@@ -486,6 +488,8 @@ export type Database = {
           updated_at?: string
           user_id: string
           visual_check_count?: number
+          visual_reader_model?: string | null
+          visual_reader_provider?: string | null
           work_paused_at?: string | null
           work_paused_ms?: number
           work_started_at?: string | null
@@ -519,6 +523,8 @@ export type Database = {
           updated_at?: string
           user_id?: string
           visual_check_count?: number
+          visual_reader_model?: string | null
+          visual_reader_provider?: string | null
           work_paused_at?: string | null
           work_paused_ms?: number
           work_started_at?: string | null
