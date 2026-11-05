@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canEnable, siteChatDecision, nextDayCount, cleanMessages, SITE_CHAT_DAILY_CAP } from "@/lib/project-ai-policy";
+import { canEnable, siteChatDecision, nextDayCount, cleanMessages, pickSiteChatModel, SITE_CHAT_DAILY_CAP } from "@/lib/project-ai-policy";
 
 describe("Use Cloudflare for this project", () => {
   it("won't turn on while the Cloudflare pool is off", () => {
@@ -23,5 +23,11 @@ describe("Use Cloudflare for this project", () => {
   it("rejects messages without a user turn", () => {
     expect(cleanMessages([{ role: "system", content: "hi" }])).toBeNull();
     expect(cleanMessages([{ role: "user", content: "hi" }])).toHaveLength(1);
+  });
+  it("uses the project's picked model, else the owner's selected model", () => {
+    expect(pickSiteChatModel("@cf/zai-org/glm-4.7", "@cf/qwen/qwen3.8-27b")).toBe("@cf/zai-org/glm-4.7");
+    expect(pickSiteChatModel(null, "@cf/qwen/qwen3.8-27b")).toBe("@cf/qwen/qwen3.8-27b");
+    expect(pickSiteChatModel("   ", "@cf/qwen/qwen3.8-27b")).toBe("@cf/qwen/qwen3.8-27b");
+    expect(pickSiteChatModel("x".repeat(121), "@cf/qwen/qwen3.8-27b")).toBe("@cf/qwen/qwen3.8-27b");
   });
 });
