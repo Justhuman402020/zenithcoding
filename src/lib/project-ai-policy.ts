@@ -36,7 +36,7 @@ export function cleanMessages(input: unknown): Array<{ role: "system" | "user" |
     out.push({ role: m.role as "system" | "user" | "assistant", content: m.content });
   }
   let total = out.reduce((t, m) => t + m.content.length, 0);
-  while (total > MAX_SITE_CHARS && out.length > 1) total -= out.shift()!.content.length;
+  while (total > MAX_SITE_CHARS && out.length > 1) { const removed=out.shift();if(removed)total-=removed.content.length; }
   if (!out.length || total > MAX_SITE_CHARS) return null;
   return out.some((m) => m.role === "user") ? out : null;
 }
@@ -53,6 +53,7 @@ export function rewirePrompt() {
     `Use import.meta.env.${AI_URL_KEY} and import.meta.env.${AI_TOKEN_KEY} (both already saved for this project).`,
     "Send POST to that URL with headers { 'content-type': 'application/json', authorization: 'Bearer ' + token } and body { messages: [{ role, content }], stream: true }.",
     "The reply is an OpenAI-style server-sent event stream (data: {choices:[{delta:{content}}]} … data: [DONE]); with stream:false it is JSON { reply }.",
+    "Generate a stable request_id for each user message and keep it on reconnect. Reuse the same request_id and identical messages to read the saved reply without generating twice. Handle terminal SSE error frames and keep partial text. The x-request-id header identifies the saved request; retry status arrives as SSE comments.",
     "Find the existing AI chat code and replace its provider call with this; keep the UI, routing and other files as they are. Never put any other API key in the code.",
     "If the project has no AI chat yet, add a simple chat panel that uses it. Show 'AI is off' if the response status is 403.",
   ].join("\n");

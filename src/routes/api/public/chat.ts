@@ -567,14 +567,18 @@ export const Route = createFileRoute("/api/public/chat")({
         const { brainZipContext } = await import("@/lib/brain-zip");
         const brainZipTools = createBrainZipTools(supabase, projectId, store, trace);
         const brainReferences = await listBrainZips(supabase, projectId);
-        const { visualCheckRequested } = await import("@/lib/visual-check-policy");
-        const visualApproved = !planMode && needsFileChange && visualCheckRequested(isResume ? body.messages.filter((m) => m.role === "user").map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.type === "text" ? p.text : "").join(" ")).join("\n") : lastUserText);
+        const { visualVerificationNeeded } = await import("@/lib/visual-check-policy");
+        const { data: visualJob } = jobId ? await supabaseAdmin.from("chat_jobs").select("visual_required").eq("id", jobId).maybeSingle() : { data: null };
+        const visualApproved = visualJob?.visual_required ?? visualVerificationNeeded(lastUserText, needsFileChange);
+        if (jobId && visualJob?.visual_required == null) await supabaseAdmin.from("chat_jobs").update({ visual_required: visualApproved }).eq("id", jobId);
         const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
         // Required preview repairs must capture even when the coding model omits the tool.
-        const inspectRequiredPreview = async () => {
+        let lastVisualResult: { status: string; report: string } | null = null;
+        const inspectRequiredPreview = async (phase: "before" | "after" | "recheck" = "after") => {
           try {
-            return await checkProjectVisually(visualArgs);
+            lastVisualResult = await checkProjectVisually({ ...visualArgs, phase });
+            return lastVisualResult;
           } catch (e) {
             const report = e instanceof Error ? e.message : "Screenshot check unavailable";
             trace.log("preview.visual", { status: "error", message: report });
@@ -584,12 +588,12 @@ export const Route = createFileRoute("/api/public/chat")({
         let requiredVisualContext = "";
         if (visualApproved && jobId) {
           await supabaseAdmin.from("chat_jobs").update({ progress: "Taking real preview screenshots before diagnosing the repair" }).eq("id", jobId);
-          const before = await inspectRequiredPreview();
+          const before = await inspectRequiredPreview("before");
           requiredVisualContext = `\n\n## Required preview screenshot evidence\nStatus: ${before.status}\n${before.report}\nThis preview repair requires real screenshots before and after edits. Use the captured evidence to repair the existing source. If unverified, report the exact blocker; never claim live capture is absent without a failed check, or claim a visual pass. After edits the runner will capture again and return visible problems for repair. Do not publish.`;
         }
         const allTools = {
           ...createProjectFileTools(store, trace),
-          ...visualCheckTools(visualArgs, !planMode && needsFileChange),
+          ...visualCheckTools(visualArgs, !!jobId),
           ...brainZipTools.readTools,
           copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
@@ -600,6 +604,7 @@ export const Route = createFileRoute("/api/public/chat")({
           ? ({
               list_files: allTools.list_files,
               read_file: allTools.read_file,
+              inspect_preview: allTools.inspect_preview,
               list_secrets: allTools.list_secrets,
               ...brainZipTools.readTools,
               web_search: integrationTools.web_search,
@@ -1278,9 +1283,8 @@ export const Route = createFileRoute("/api/public/chat")({
           if (outcome === "finished") {
             let visualSummary = "";
             if (visualApproved && jobId) {
-              await supabaseAdmin.from("chat_jobs").update({ progress: "Capturing and inspecting the finished preview" }).eq("id", jobId);
               try {
-                const result = await checkProjectVisually(visualArgs);
+                const result = lastVisualResult ?? await inspectRequiredPreview("after");
                 visualSummary = `\n\nVisual verification: ${result.status}.\n${result.report}`;
               } catch (e) {
                 visualSummary = `\n\nVisual verification: could not verify. ${e instanceof Error ? e.message : "Check unavailable"}`;

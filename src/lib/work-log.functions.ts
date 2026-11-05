@@ -169,10 +169,10 @@ export const getWorkDetails = createServerFn({ method: "POST" })
       .filter((t) => t.phase === "file.change" && t.detail?.change)
       .map((t) => sanitizeDetail(t.detail.change) as FileEvidence);
     const files = [...new Set<string>([...legacy.files, ...changes.map((c) => c.path)])];
-    const { data: checks } = job ? await db.from("browser_checks").select("id,visual_status,visual_report,screenshots,created_at").eq("job_id", job.id).eq("user_id", context.userId).order("created_at") : { data: [] };
+    const { data: checks } = job ? await db.from("browser_checks").select("id,visual_status,visual_report,screenshots,created_at,visual_phase,capture_status,inspection_status").eq("job_id", job.id).eq("user_id", context.userId).order("created_at") : { data: [] };
     const visualChecks = await Promise.all((checks ?? []).map(async (check) => {
       const shots = Array.isArray(check.screenshots) ? check.screenshots as Array<{ label: string; url: string }> : [];
-      return { id: check.id, status: check.visual_status, report: check.visual_report, shots: await Promise.all(shots.map(async (shot) => {
+      return { id: check.id, phase:check.visual_phase, captureStatus:check.capture_status, inspectionStatus:check.inspection_status, status: check.visual_status, report: check.visual_report, shots: await Promise.all(shots.map(async (shot) => {
         const { data: link } = await db.storage.from("browser-checks").createSignedUrl(shot.url, 3600);
         return { label: shot.label, url: link?.signedUrl ?? "" };
       })) };

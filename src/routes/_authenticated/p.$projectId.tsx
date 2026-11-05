@@ -2797,7 +2797,6 @@ function ProjectEditor() {
         )}
         {tab === "preview" && (
           <div className="flex shrink-0 justify-end border-b px-3 py-1"><Button variant="ghost" size="sm" className="h-8 text-xs" disabled={startingVisualCheck || isBusy} title="Uses browser and selected image-reader credit" onClick={async () => {
-            if (!(await requestApproval("openrouter-image", "Inspect phone and PC preview screenshots with your selected image reader? This uses browser and model credit. No files will be edited."))) return;
             setStartingVisualCheck(true);
             try { await startVisualCheckFn({ data: { projectId, html: previewDoc } }); toast.success("Screenshot inspection started. Results will be saved in your work log."); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not start visual check"); } finally { setStartingVisualCheck(false); }
           }}><Eye className="h-3.5 w-3.5" />Inspect screenshots</Button></div>

@@ -16,11 +16,10 @@ export const startVisualCheck = createServerFn({ method: "POST" }).middleware([r
     const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
     const { readWorkspaceAI } = await import("./workspace-ai.server");
     const selected = (await readWorkspaceAI()).image;
-    if (!selected) throw new Error("Choose your OpenRouter image reader in AI Models first.");
     const requestKey = crypto.randomUUID();
     const prompt = "[Visual check only] Take screenshots and inspect this preview. Do not edit files or publish. Return the visible problems and await approval for repairs.";
     const messages = [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: prompt }] }];
-    const { data: job, error } = await db.from("chat_jobs").insert({ project_id: data.projectId, user_id: context.userId, request_key: requestKey, status: "queued", prompt, visual_reader_provider: selected.provider, visual_reader_model: selected.model,
+    const { data: job, error } = await db.from("chat_jobs").insert({ project_id: data.projectId, user_id: context.userId, request_key: requestKey, status: "queued", prompt, visual_required:true, visual_reader_provider: selected?.provider ?? null, visual_reader_model: selected?.model ?? null,
       resume_payload: { messages, headers: { "x-forge-mode": "build", "x-forge-visual-only": "yes" }, visualHtml: data.html } }).select("id").single();
     if (error || !job) throw new Error("Could not save visual-check request.");
     const { error: dispatchError } = await db.rpc("dispatch_saved_build", { _job: job.id });
