@@ -238,10 +238,29 @@ export async function runProjectSql(projectId: string, sql: string) {
     body: JSON.stringify({ query: sql }),
   });
   const text = await res.text();
-  if (res.ok) return { ok: true, result: text.slice(0, 4000) };
+  if (res.ok) {
+    if (isBareOk(text) && returnsRows(sql)) return { ok: true, result: text, warning: "The query ran, but this database's exec_sql helper is the old version that only answers ok:true and hides the rows. Ask the user to run this once in their SQL editor, then retry:\n" + EXEC_SQL_HELPER };
+    return { ok: true, result: text.slice(0, 4000) };
+  }
   return {
     ok: false,
     error: `${res.status}: ${text.slice(0, 400)}`,
-    fix: "The database has no exec_sql helper. Ask the user for SUPABASE_ACCESS_TOKEN (request_secret), or to run once in their SQL editor: create or replace function public.exec_sql(query text) returns json language plpgsql security definer as $$ begin execute query; return json_build_object('ok', true); end $$; revoke all on function public.exec_sql(text) from public, anon, authenticated;",
+    fix: "The database has no exec_sql helper. Ask the user for SUPABASE_ACCESS_TOKEN (request_secret), or to run once in their SQL editor:\n" + EXEC_SQL_HELPER,
   };
 }
+
+/** Returns rows for SELECT/WITH/RETURNING queries; plain statements still answer ok. */
+export const EXEC_SQL_HELPER = `create or replace function public.exec_sql(query text) returns json language plpgsql security definer set search_path = public as $$
+declare result json;
+begin
+  if query ~* '^\\s*(select|with|values|table)\\b' then
+    execute format('select coalesce(json_agg(t), ''[]''::json) from (%s) t', regexp_replace(query, ';\\s*$', '')) into result;
+    return json_build_object('ok', true, 'rows', result);
+  end if;
+  execute query;
+  return json_build_object('ok', true);
+end $$;
+revoke all on function public.exec_sql(text) from public, anon, authenticated;`;
+
+export function isBareOk(text: string) { return /^\s*\{\s*"ok"\s*:\s*true\s*\}\s*$/.test(text); }
+export function returnsRows(sql: string) { return /^\s*(select|with|values|table)\b/i.test(sql) || /\breturning\b/i.test(sql); }
