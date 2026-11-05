@@ -39,6 +39,19 @@ export function ProjectCloudflareSwitch({ row, onChange }: { row: ProjectAiRow; 
     } finally { setBusy(""); }
   };
 
+  const pickModel = async (value: string) => {
+    setBusy("model");
+    try {
+      await saveModel({ data: { projectId: row.id, model: value || null } });
+      toast.success(value ? "This project now uses the model you picked" : "This project now follows your selected Cloudflare model");
+      onChange();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not change the model");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const test = async () => {
     setBusy("test");
     try {
