@@ -9,3 +9,9 @@ export function parseVisualReport(text: string): { status: "passed" | "problems"
   return { status, report: cleaned.slice(0, 12000) || "The image reader did not return a visual assessment." };
 }
 export function visualRoundAllowed(count: number) { return count < 3; }
+
+/** Task-scoped automatic inspection; conversation and invisible configuration do not spend capture credit. */
+export function visualVerificationNeeded(text: string, changesFiles: boolean) {
+  if (visualCheckRequested(text)) return true;
+  return changesFiles && /\b(page|site|website|layout|theme|style|css|image|photo|navigation|menu|button|form|mobile|desktop|zip|template|preview|ui|screen)\b/i.test(text);
+}
