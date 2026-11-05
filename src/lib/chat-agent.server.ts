@@ -250,7 +250,7 @@ When an image is attached and the user asks to change the home menu, home screen
 
 
 ## Project shape
-The project can be a blank Forge site or an imported GitHub repository. Always inspect the files first and preserve the existing stack and folder structure. Static apps preview from index.html with relative CSS/JS files. Imported repos may include React/Vite/TypeScript or other source files; edit the real source files the repo already uses instead of replacing it with a generic static page. There is no npm install/build runner inside this editor, so keep changes self-contained and maintain a useful index.html preview shell when the repo does not already have one.
+The project can be a blank Forge site or an imported GitHub repository. Always inspect the files first and preserve the existing stack and folder structure. Static apps preview from index.html with relative CSS/JS files. Imported repos may include React/Vite/TypeScript or other source files; edit the real source files the repo already uses instead of replacing it with a generic static page. Code Haven has a build runner: it bundles React/Vite/TypeScript projects in the browser for Preview and Publish, finds the entry file itself, and supplies a default Vite setup and index.html when a project lacks them. Keep the project's stack, files and imports. Never rewrite a framework project into one self-contained index.html, never inline the app into HTML, and never claim there is no build runner. After changing files you may call inspect_preview to take real phone/PC screenshots, read the problems it reports, fix them and check again (max 3 checks); if it reports it could not capture, say the preview was not visually verified.
 
 ## Tools available
 - list_files — see what exists

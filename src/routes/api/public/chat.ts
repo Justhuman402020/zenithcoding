@@ -573,7 +573,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
         const allTools = {
           ...createProjectFileTools(store, trace),
-          ...visualCheckTools(visualArgs, visualApproved),
+          ...visualCheckTools(visualArgs, !planMode && needsFileChange),
           ...brainZipTools.readTools,
           copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),

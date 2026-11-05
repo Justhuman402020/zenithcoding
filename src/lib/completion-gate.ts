@@ -74,6 +74,14 @@ export function completionGate(input: {
       };
     }
   }
+  const flat = flattenedFramework(input.changed, input.allPaths);
+  if (flat) {
+    return {
+      ok: false,
+      reason: `${flat} was rewritten as a self-contained page in a framework project`,
+      nudge: `Check failed: this is a React/Vite project and Code Haven builds it. Do not inline the app into ${flat}. Restore a small index.html that loads the entry (e.g. <script type="module" src="/src/main.tsx">) and put the code in the real source files, then end with the checklist.`,
+    };
+  }
   const left = leftoverWork(input.finalText);
   if (left) {
     return {
@@ -83,6 +91,18 @@ export function completionGate(input: {
     };
   }
   return { ok: true };
+}
+
+/** Path of an index.html that was turned into a big inline app inside a framework project, or null. */
+export function flattenedFramework(changed: ChangedFile[], allPaths: string[]): string | null {
+  const framework = allPaths.some((p) => p === "package.json" || /(^|\/)src\/(main|index|App)\.[jt]sx?$/.test(p));
+  if (!framework) return null;
+  for (const f of changed) {
+    if (f.content == null || !/(^|\/)index\.html?$/i.test(f.path)) continue;
+    const inline = [...f.content.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].reduce((n, m) => n + m[1].length, 0);
+    if (inline > 6000) return f.path;
+  }
+  return null;
 }
 
 /** Max extra rounds the gate can ask for before the build stops with the reason. */

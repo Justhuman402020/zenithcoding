@@ -77,8 +77,11 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
 }
 
 export function visualCheckTools(args: Parameters<typeof checkProjectVisually>[0], enabled: boolean) {
-  return { inspect_preview: tool({ description: "Take real phone/PC preview screenshots and inspect them with the selected image reader. Only for this approved visual-check task. Returns evidence and a repair brief, never claims code is visually verified without capture.", inputSchema: z.object({}), execute: async () => {
-    if (!enabled) return { status: "unverified", report: "Visual checks require an explicit screenshot/preview-check request included in the approved build." };
+  let used = 0;
+  return { inspect_preview: tool({ description: "Take real phone/PC preview screenshots and inspect them with the selected image reader. Use after changing files in this approved build to see the result, then fix reported problems (max 3 checks). Never claims the preview is visually verified without a capture.", inputSchema: z.object({}), execute: async () => {
+    if (!enabled) return { status: "unverified", report: "Screenshot checks run only inside an approved build that changes files." };
+    if (used >= 3) return { status: "unverified", report: "Screenshot check limit (3) reached for this build." };
+    used += 1;
     return checkProjectVisually(args);
   } }) };
 }
