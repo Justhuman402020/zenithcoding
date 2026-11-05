@@ -34,6 +34,8 @@ export async function unpackZip(file: File): Promise<{ files: { path: string; co
   while (paths.length && paths.every((p) => p.includes("/"))) {
     const top = paths[0].split("/")[0];
     if (!paths.every((p) => p.startsWith(top + "/"))) break;
+    // Never strip a real project folder such as src/ — only a wrapper folder.
+    if (/^(src|public|app|assets|components|pages|lib|static)$/i.test(top)) break;
     paths = paths.map((p) => p.slice(top.length + 1));
     for (const k of Object.keys(entries)) {
       if (k.startsWith(top + "/")) entries[k.slice(top.length + 1)] = entries[k];
@@ -55,5 +57,13 @@ export async function unpackZip(file: File): Promise<{ files: { path: string; co
     }
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
+  // Build runner: save the missing Vite/React setup once, under the hidden
+  // .code-haven-build/scaffold/ folder. The user's own files are never replaced.
+  const { scaffoldBuild } = await import("./zip-scaffold");
+  const userFiles = files.filter((f) => !f.path.startsWith(".code-haven-build/"));
+  for (const added of scaffoldBuild(userFiles).added) {
+    const i = files.findIndex((f) => f.path === added.path);
+    if (i >= 0) files[i] = added; else files.push(added);
+  }
   return { files, skipped };
 }
