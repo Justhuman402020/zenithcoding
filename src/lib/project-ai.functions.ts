@@ -3,15 +3,16 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertOwnsProject } from "./project-secrets.server";
 import { AI_TOKEN_KEY, AI_URL_KEY, canEnable, rewirePrompt } from "./project-ai-policy";
+import { BAD_CF_MODEL, FREE_CF_CODER } from "./model-controls.functions";
 
-/** Owner's projects with their "Use Cloudflare" switch and status. */
+/** Owner's projects with their "Use Cloudflare" switch, status and picked model. */
 export const listProjectAi = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data: projects } = await context.supabase.from("projects").select("id,name,updated_at").eq("user_id", context.userId).order("updated_at", { ascending: false }).limit(300);
-    const { data: settings } = await context.supabase.from("project_ai_settings").select("project_id,cloudflare_enabled,status,last_error,last_reply,last_checked_at,day_requests,usage_day");
+    const { data: settings } = await context.supabase.from("project_ai_settings").select("project_id,cloudflare_enabled,status,last_error,last_reply,last_checked_at,day_requests,usage_day,model");
     const by = new Map((settings ?? []).map((s) => [s.project_id, s]));
-    return (projects ?? []).map((p) => ({ id: p.id, name: p.name, ...(by.get(p.id) ?? { cloudflare_enabled: false, status: "off", last_error: null, last_reply: null, last_checked_at: null, day_requests: 0, usage_day: null }) }));
+    return (projects ?? []).map((p) => ({ id: p.id, name: p.name, ...(by.get(p.id) ?? { cloudflare_enabled: false, status: "off", last_error: null, last_reply: null, last_checked_at: null, day_requests: 0, usage_day: null, model: null }) }));
   });
 
 export const setProjectCloudflare = createServerFn({ method: "POST" })
