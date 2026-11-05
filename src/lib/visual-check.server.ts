@@ -7,14 +7,18 @@ import { parseVisualReport } from "./visual-check-policy";
 /** Runs within an approved durable build. Screenshots remain private; the coder gets a visual brief. */
 export async function checkProjectVisually(args: { projectId: string; userId: string; jobId: string; origin: string; trace?: TraceLogger; html?: string }) {
   const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
-  const { data: job } = await db.from("chat_jobs").select("id,status,visual_check_count,project_id,user_id").eq("id", args.jobId).eq("project_id", args.projectId).eq("user_id", args.userId).single();
+  const { data: job } = await db.from("chat_jobs").select("id,status,visual_check_count,project_id,user_id,visual_reader_provider,visual_reader_model").eq("id", args.jobId).eq("project_id", args.projectId).eq("user_id", args.userId).single();
   if (!job || job.status !== "running") throw new Error("This visual check needs a running approved build.");
   const { readWorkspaceAI } = await import("./workspace-ai.server");
   const { providers, keys } = await (await import("./model-router.server")).loadProviderRegistry();
-  const preferred = (await readWorkspaceAI()).image;
+  const preferred = job.visual_reader_provider && job.visual_reader_model ? { provider: job.visual_reader_provider, model: job.visual_reader_model } : (await readWorkspaceAI()).image;
   const provider = providers.find((p) => p.id === preferred?.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL));
   const key = preferred ? keys[preferred.provider] : undefined;
   if (!preferred || !provider || !key) throw new Error("Select your OpenRouter image reader in AI Models before visual verification.");
+  if (!job.visual_reader_model) {
+    const { error } = await db.from("chat_jobs").update({ visual_reader_provider: preferred.provider, visual_reader_model: preferred.model }).eq("id", job.id).is("visual_reader_model", null);
+    if (error) throw new Error("Could not save the chosen image reader.");
+  }
   let html = args.html;
   if (!html) {
     const { data: rows, error } = await db.from("files").select("path,content").eq("project_id", args.projectId).or("kind.is.null,kind.neq.build").order("path");

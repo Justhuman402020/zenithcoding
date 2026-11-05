@@ -547,7 +547,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const brainZipTools = createBrainZipTools(supabase, projectId, store, trace);
         const brainReferences = await listBrainZips(supabase, projectId);
         const { visualCheckRequested } = await import("@/lib/visual-check-policy");
-        const visualApproved = !planMode && needsFileChange && visualCheckRequested(lastUserText);
+        const visualApproved = !planMode && needsFileChange && body.messages.some((m) => m.role === "user" && visualCheckRequested(m.parts.filter((p) => p.type === "text").map((p) => p.type === "text" ? p.text : "").join(" ")));
         const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
         const allTools = {
