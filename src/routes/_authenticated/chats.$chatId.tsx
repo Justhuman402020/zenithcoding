@@ -204,7 +204,7 @@ function ChatPage() {
           </div>)}</div>}
           {attachments.length > 0 && <div className="mb-2 flex flex-wrap gap-1">{attachments.map((a, i) => <span key={i} className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">{a.name}<button aria-label="Remove" onClick={() => setAttachments((x) => x.filter((_, j) => j !== i))}><X className="h-3 w-3" /></button></span>)}</div>}
           <div className="flex items-end gap-2 rounded-2xl border bg-card p-2">
-            <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={async (id) => { await setup({ data: { id: chatId, projectId: id, initialize: false } }).catch((e) => toast.error(e.message)); void reload(); }} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} />
+            <PlusMenu chatId={chatId} projectId={data.chat.projectId} onProject={async (id) => { await setup({ data: { id: chatId, projectId: id, initialize: false } }).catch((e) => toast.error(e.message)); void reload(); }} onAttach={(a) => setAttachments((x) => [...x, a].slice(0, 5))} onImages={addImages} />
             <Textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => {
               const files = Array.from(e.clipboardData.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null && isChatImage(file));
               if (files.length) { e.preventDefault(); const caption = e.clipboardData.getData("text/plain"); if (caption) setText((current) => current + caption); void addImages(files); }
@@ -218,7 +218,7 @@ function ChatPage() {
   );
 }
 
-function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; projectId: string | null; onProject: (id: string) => void; onAttach: (a: Attach) => void }) {
+function PlusMenu({ chatId, projectId, onProject, onAttach, onImages }: { chatId: string; projectId: string | null; onProject: (id: string) => void; onAttach: (a: Attach) => void; onImages: (files: File[]) => Promise<void> }) {
   const projectsFn = useServerFn(listChatProjects);
   const chatsFn = useServerFn(listChats);
   const filesFn = useServerFn(listProjectFiles);
@@ -280,7 +280,9 @@ function PlusMenu({ chatId, projectId, onProject, onAttach }: { chatId: string; 
           </>}
         </div>
         <input ref={fileRef} type="file" multiple hidden onChange={async (e) => {
-          for (const f of Array.from(e.target.files ?? []).slice(0, 5)) {
+          const files = Array.from(e.target.files ?? []).slice(0, 5);
+          await onImages(files.filter(isChatImage));
+          for (const f of files.filter((file) => !isChatImage(file))) {
             const isText = f.type.startsWith("text") || /\.(tsx?|jsx?|css|html|json|md|txt)$/i.test(f.name);
             onAttach({ name: f.name, text: isText ? (await f.text()).slice(0, 20000) : `(${f.type || "file"}, ${Math.round(f.size / 1024)} KB — contents not readable as text)` });
           }
