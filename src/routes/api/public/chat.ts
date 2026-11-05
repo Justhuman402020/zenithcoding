@@ -716,7 +716,8 @@ export const Route = createFileRoute("/api/public/chat")({
                   .from("chat_jobs")
                   .update({ progress: progressText, updated_at: new Date().toISOString() })
                   .eq("id", jobId)
-                  .in("status", ["queued", "running"]);
+                  .in("status", ["queued", "running"])
+                  .then(() => undefined, () => undefined);
               }
             }, 2_000)
           : undefined;
@@ -735,7 +736,8 @@ export const Route = createFileRoute("/api/public/chat")({
               .from("chat_jobs")
               .update({ progress: text, updated_at: new Date().toISOString() })
               .eq("id", jobId)
-              .in("status", ["queued", "running"]);
+              .in("status", ["queued", "running"])
+              .then(() => undefined, () => undefined);
           }
         };
 
