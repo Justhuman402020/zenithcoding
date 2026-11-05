@@ -204,6 +204,13 @@
       "when": 1793855210880,
       "tag": "0028_site_ai_recovery_and_visual_phases",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793855428002,
+      "tag": "0029_site_ai_recovery_fencing",
+      "breakpoints": true
     }
   ]
 }
