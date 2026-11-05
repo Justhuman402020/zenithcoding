@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runInNewContext } from "node:vm";
 import { attachedPreviewProject, previewSourceFiles, projectPreviewDocument } from "../src/lib/project-preview";
 
 describe("sidebar chat project previews", () => {
@@ -20,5 +21,17 @@ describe("sidebar chat project previews", () => {
     expect(html).toContain("body{margin:0}");
     expect(html).toContain("window.loaded=true");
     expect(html).toContain("forge-preview-navigate");
+  });
+  it("keeps local navigation inside the attached preview without redirecting the chat", () => {
+    const html = projectPreviewDocument([{ path: "index.html", content: "<html><body></body></html>" }]);
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    if (!script) throw new Error("Missing preview navigation");
+    let click: ((event: unknown) => void) | undefined;
+    const sent: unknown[] = [];
+    runInNewContext(script, { document: { addEventListener: (_name: string, handler: typeof click) => { click = handler; } }, parent: { postMessage: (message: unknown) => sent.push(message) } });
+    let prevented = false;
+    click?.({ target: { closest: () => ({ getAttribute: () => "/about.html" }) }, preventDefault: () => { prevented = true; } });
+    expect(prevented).toBe(true);
+    expect(sent).toEqual([{ type: "forge-preview-navigate", path: "/about.html" }]);
   });
 });

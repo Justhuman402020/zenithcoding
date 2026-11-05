@@ -2527,7 +2527,7 @@ function ProjectEditor() {
               ) : null}
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="sm" className="h-7 min-w-0 gap-1.5 text-xs text-muted-foreground" aria-label="Model and usage settings"><Settings className="h-3.5 w-3.5 shrink-0" /><span className="truncate">Model & usage</span></Button></PopoverTrigger>
-                <PopoverContent align="start" side="top" className="w-80 max-w-[calc(100vw-1.5rem)]">
+                <PopoverContent align="start" side="top" className="w-80 max-w-[calc(100vw-1.5rem)] bg-popover text-popover-foreground">
                 <div className="flex flex-wrap items-center gap-3">
                 {isBusy && jobStartedAt ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 px-2.5 py-0.5 text-[11px] text-primary tabular-nums" title="Time this job has been running">
