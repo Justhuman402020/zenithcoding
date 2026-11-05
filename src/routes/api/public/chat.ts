@@ -914,7 +914,9 @@ export const Route = createFileRoute("/api/public/chat")({
                 attemptStepCount += 1;
                 attemptSteps = step?.response?.messages ?? attemptSteps;
                 const visible = stripThinking(String(step?.text ?? ""));
-                if (visible) replyTexts.push(visible);
+                // Retries/rounds re-summarize; keep each distinct text once so the
+                // final reply never repeats itself.
+                if (visible && !replyTexts.some((t) => t.trim() === visible.trim())) replyTexts.push(visible);
                 // Only successful writes/edits/deletes count as changed files; reads don't.
                 for (const p of changedPathsFromStep(step)) progressModel.files.add(p);
                 let last = "";
@@ -1249,7 +1251,7 @@ export const Route = createFileRoute("/api/public/chat")({
               }
             }
             const finalText =
-              (replyTexts.join("\n\n").trim() || (truncated ? "" : `Finished: ${counts}.`)) +
+              ((replyTexts[replyTexts.length - 1] ?? "").trim() || (truncated ? "" : `Finished: ${counts}.`)) +
               (truncated ? "\n\n[[FORGE_CONTINUE]]" : "") + visualSummary;
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({

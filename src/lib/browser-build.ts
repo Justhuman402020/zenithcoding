@@ -444,15 +444,24 @@ export async function buildInBrowser(
 }
 
 export function isBuildable(files: BuildFile[]): { buildable: boolean; reason?: string } {
+  // Vite config and build scripts are optional: the in-browser bundler finds the
+  // entry itself and synthesizes index.html, so a pasted ZIP works immediately.
+  const paths = new Set(files.map((f) => normalizePath(f.path)));
   const pkg = files.find((f) => normalizePath(f.path) === "package.json");
+  const hasEntry = ENTRY_CANDIDATES.some((c) => paths.has(c));
   const html = files.find((f) => normalizePath(f.path) === "index.html");
-  if (!pkg) return { buildable: false, reason: "no package.json" };
-  if (!html) return { buildable: false, reason: "no index.html" };
+  const htmlModule = !!html && /<script[^>]+type=["']module["'][^>]+src=["'][^"']+\.(tsx|jsx|ts)["']/i.test(html.content);
+  if (!pkg) {
+    if (hasEntry || htmlModule) return { buildable: true };
+    return { buildable: false, reason: "no package.json" };
+  }
   try {
     const p = JSON.parse(pkg.content);
-    const hasScript = p.scripts && (p.scripts.build || p.scripts.dev);
-    if (!hasScript) return { buildable: false, reason: "no build script" };
-    return { buildable: true };
+    const deps = { ...(p.dependencies ?? {}), ...(p.devDependencies ?? {}) };
+    const isFramework = ["react", "vue", "svelte", "preact", "solid-js", "vite"].some((d) => d in deps);
+    if (hasEntry || htmlModule || isFramework) return { buildable: true };
+    if (!html) return { buildable: false, reason: "no index.html" };
+    return { buildable: false, reason: "plain site" };
   } catch {
     return { buildable: false, reason: "invalid package.json" };
   }
