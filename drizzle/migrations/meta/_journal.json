@@ -190,6 +190,13 @@
       "when": 1793844097548,
       "tag": "0026_visual_reader_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793853487908,
+      "tag": "0027_project_ai_settings",
+      "breakpoints": true
     }
   ]
 }

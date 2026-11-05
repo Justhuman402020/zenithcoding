@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getMyRole } from "@/lib/admin-users.functions";
 import { getModelAccess } from "@/lib/admin-models.functions";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu, Globe, Database, KeyRound, Brain } from "lucide-react";
+import { ShieldCheck, Lock, Loader2, Users, ArrowLeft, Cpu, Globe, Database, KeyRound, Brain, Cloud } from "lucide-react";
 import { ForgeMark } from "@/components/ForgeMark";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -86,6 +86,9 @@ function AdminPage() {
             </Button>
             <Button variant="outline" onClick={() => navigate({ to: "/admin/brain" })} className="w-full gap-1.5">
               <Brain className="h-4 w-4" /> Brain &amp; credential vault
+            </Button>
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/cloudflare-projects" })} className="w-full gap-1.5">
+              <Cloud className="h-4 w-4" /> Projects with Cloudflare
             </Button>
             <Button variant="outline" onClick={() => navigate({ to: "/admin/settings" })} className="w-full gap-1.5"><Lock className="h-4 w-4" /> Settings → Security</Button>
           </div>

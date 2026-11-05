@@ -9,6 +9,7 @@ import { AiModelPanel } from "@/components/AiModelPanel";
 import { SecretsPanel } from "@/components/SecretsPanel";
 import { TracePanel } from "@/components/TracePanel";
 import { ShareLinksPanel } from "@/components/ShareLinksPanel";
+import { ProjectCloudflareCard } from "@/components/ProjectCloudflareCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,6 +144,8 @@ function SettingsPage() {
         <h1 className="text-2xl font-bold">Project settings</h1>
         <p className="text-sm text-muted-foreground">Publish {projectName || "this project"} and connect domains from Namecheap or any domain provider.</p>
       </div>
+
+      <ProjectCloudflareCard projectId={projectId} />
 
       <div className="rounded-xl border p-5 space-y-5 bg-card/50">
         <div className="flex items-start gap-3">

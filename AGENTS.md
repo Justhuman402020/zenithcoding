@@ -73,3 +73,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Sidebar project previews mount by chat/project identity and reuse the browser build/asset pipeline with owner-scoped reads; viewing never navigates to the editor, and switching attachments unmounts stale frames.
 - Work clocks use saved execution/pause/end timestamps with a local one-second display tick; counts only come from saved job statistics.
 - Approved visual checks persist screenshots, reader snapshot, briefs and round count per job; preview-error repairs require runner-enforced before/after capture and feed visible problems back to the coder, so skipped model tools cannot imply verification. Never silently switch models or publish.
+- Site AI chat can run on the owner's Cloudflare pool via a per-project token (src/lib/project-ai-policy.ts rules, /api/public/sites/ai/chat); pool keys never leave Code Haven and the switch stops access instantly.

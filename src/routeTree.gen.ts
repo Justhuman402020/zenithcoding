@@ -29,6 +29,7 @@ import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authe
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminBackendRouteImport } from './routes/_authenticated/admin.backend'
 import { Route as AuthenticatedAdminBrainRouteImport } from './routes/_authenticated/admin.brain'
+import { Route as AuthenticatedAdminCloudflareProjectsRouteImport } from './routes/_authenticated/admin.cloudflare-projects'
 import { Route as AuthenticatedAdminDomainsRouteImport } from './routes/_authenticated/admin.domains'
 import { Route as AuthenticatedAdminIntegrationsRouteImport } from './routes/_authenticated/admin.integrations'
 import { Route as AuthenticatedAdminModelsRouteImport } from './routes/_authenticated/admin.models'
@@ -49,6 +50,7 @@ import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/site
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicMcpScrolltideCallbackRouteImport } from './routes/api/public/mcp/scrolltide/callback'
+import { Route as ApiPublicSitesAiChatRouteImport } from './routes/api/public/sites.ai.chat'
 import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/sites.auth.me'
 import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
 import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
@@ -155,6 +157,12 @@ const AuthenticatedAdminBrainRoute = AuthenticatedAdminBrainRouteImport.update({
   path: '/admin/brain',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminCloudflareProjectsRoute =
+  AuthenticatedAdminCloudflareProjectsRouteImport.update({
+    id: '/admin/cloudflare-projects',
+    path: '/admin/cloudflare-projects',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminDomainsRoute =
   AuthenticatedAdminDomainsRouteImport.update({
     id: '/admin/domains',
@@ -263,6 +271,11 @@ const ApiPublicMcpScrolltideCallbackRoute =
     path: '/api/public/mcp/scrolltide/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicSitesAiChatRoute = ApiPublicSitesAiChatRouteImport.update({
+  id: '/api/public/sites/ai/chat',
+  path: '/api/public/sites/ai/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
   id: '/api/public/sites/auth/me',
   path: '/api/public/sites/auth/me',
@@ -300,6 +313,7 @@ export interface FileRoutesByFullPath {
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/admin/brain': typeof AuthenticatedAdminBrainRoute
+  '/admin/cloudflare-projects': typeof AuthenticatedAdminCloudflareProjectsRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
@@ -321,6 +335,7 @@ export interface FileRoutesByFullPath {
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
+  '/api/public/sites/ai/chat': typeof ApiPublicSitesAiChatRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -344,6 +359,7 @@ export interface FileRoutesByTo {
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/admin/brain': typeof AuthenticatedAdminBrainRoute
+  '/admin/cloudflare-projects': typeof AuthenticatedAdminCloudflareProjectsRoute
   '/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/admin/models': typeof AuthenticatedAdminModelsRoute
@@ -365,6 +381,7 @@ export interface FileRoutesByTo {
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
+  '/api/public/sites/ai/chat': typeof ApiPublicSitesAiChatRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -390,6 +407,7 @@ export interface FileRoutesById {
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
   '/_authenticated/admin/backend': typeof AuthenticatedAdminBackendRoute
   '/_authenticated/admin/brain': typeof AuthenticatedAdminBrainRoute
+  '/_authenticated/admin/cloudflare-projects': typeof AuthenticatedAdminCloudflareProjectsRoute
   '/_authenticated/admin/domains': typeof AuthenticatedAdminDomainsRoute
   '/_authenticated/admin/integrations': typeof AuthenticatedAdminIntegrationsRoute
   '/_authenticated/admin/models': typeof AuthenticatedAdminModelsRoute
@@ -411,6 +429,7 @@ export interface FileRoutesById {
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
+  '/api/public/sites/ai/chat': typeof ApiPublicSitesAiChatRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -436,6 +455,7 @@ export interface FileRouteTypes {
     | '/account/billing'
     | '/admin/backend'
     | '/admin/brain'
+    | '/admin/cloudflare-projects'
     | '/admin/domains'
     | '/admin/integrations'
     | '/admin/models'
@@ -457,6 +477,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/mcp/scrolltide/callback'
+    | '/api/public/sites/ai/chat'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -480,6 +501,7 @@ export interface FileRouteTypes {
     | '/account/billing'
     | '/admin/backend'
     | '/admin/brain'
+    | '/admin/cloudflare-projects'
     | '/admin/domains'
     | '/admin/integrations'
     | '/admin/models'
@@ -501,6 +523,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/mcp/scrolltide/callback'
+    | '/api/public/sites/ai/chat'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -525,6 +548,7 @@ export interface FileRouteTypes {
     | '/_authenticated/account/billing'
     | '/_authenticated/admin/backend'
     | '/_authenticated/admin/brain'
+    | '/_authenticated/admin/cloudflare-projects'
     | '/_authenticated/admin/domains'
     | '/_authenticated/admin/integrations'
     | '/_authenticated/admin/models'
@@ -546,6 +570,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/mcp/scrolltide/callback'
+    | '/api/public/sites/ai/chat'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -576,6 +601,7 @@ export interface RootRouteChildren {
   ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
   ApiPublicMcpScrolltideCallbackRoute: typeof ApiPublicMcpScrolltideCallbackRoute
+  ApiPublicSitesAiChatRoute: typeof ApiPublicSitesAiChatRoute
   ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
   ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
   ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
@@ -723,6 +749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminBrainRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/cloudflare-projects': {
+      id: '/_authenticated/admin/cloudflare-projects'
+      path: '/admin/cloudflare-projects'
+      fullPath: '/admin/cloudflare-projects'
+      preLoaderRoute: typeof AuthenticatedAdminCloudflareProjectsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/domains': {
       id: '/_authenticated/admin/domains'
       path: '/admin/domains'
@@ -863,6 +896,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMcpScrolltideCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sites/ai/chat': {
+      id: '/api/public/sites/ai/chat'
+      path: '/api/public/sites/ai/chat'
+      fullPath: '/api/public/sites/ai/chat'
+      preLoaderRoute: typeof ApiPublicSitesAiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sites/auth/me': {
       id: '/api/public/sites/auth/me'
       path: '/api/public/sites/auth/me'
@@ -907,6 +947,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountBillingRoute: typeof AuthenticatedAccountBillingRoute
   AuthenticatedAdminBackendRoute: typeof AuthenticatedAdminBackendRoute
   AuthenticatedAdminBrainRoute: typeof AuthenticatedAdminBrainRoute
+  AuthenticatedAdminCloudflareProjectsRoute: typeof AuthenticatedAdminCloudflareProjectsRoute
   AuthenticatedAdminDomainsRoute: typeof AuthenticatedAdminDomainsRoute
   AuthenticatedAdminIntegrationsRoute: typeof AuthenticatedAdminIntegrationsRoute
   AuthenticatedAdminModelsRoute: typeof AuthenticatedAdminModelsRoute
@@ -925,6 +966,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountBillingRoute: AuthenticatedAccountBillingRoute,
   AuthenticatedAdminBackendRoute: AuthenticatedAdminBackendRoute,
   AuthenticatedAdminBrainRoute: AuthenticatedAdminBrainRoute,
+  AuthenticatedAdminCloudflareProjectsRoute:
+    AuthenticatedAdminCloudflareProjectsRoute,
   AuthenticatedAdminDomainsRoute: AuthenticatedAdminDomainsRoute,
   AuthenticatedAdminIntegrationsRoute: AuthenticatedAdminIntegrationsRoute,
   AuthenticatedAdminModelsRoute: AuthenticatedAdminModelsRoute,
@@ -966,6 +1009,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
   ApiPublicMcpScrolltideCallbackRoute: ApiPublicMcpScrolltideCallbackRoute,
+  ApiPublicSitesAiChatRoute: ApiPublicSitesAiChatRoute,
   ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
   ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
   ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,
