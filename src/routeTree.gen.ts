@@ -23,6 +23,7 @@ import { Route as LiveProjectIdRouteImport } from './routes/live.$projectId'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as TransfersTokenRouteImport } from './routes/transfers.$token'
+import { Route as VisualPreviewTokenRouteImport } from './routes/visual-preview.$token'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AuthenticatedAccountBillingRouteImport } from './routes/_authenticated/account.billing'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
@@ -120,6 +121,11 @@ const ShareTokenRoute = ShareTokenRouteImport.update({
 const TransfersTokenRoute = TransfersTokenRouteImport.update({
   id: '/transfers/$token',
   path: '/transfers/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VisualPreviewTokenRoute = VisualPreviewTokenRouteImport.update({
+  id: '/visual-preview/$token',
+  path: '/visual-preview/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
@@ -289,6 +295,7 @@ export interface FileRoutesByFullPath {
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
+  '/visual-preview/$token': typeof VisualPreviewTokenRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
   '/admin/backend': typeof AuthenticatedAdminBackendRoute
@@ -331,6 +338,7 @@ export interface FileRoutesByTo {
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
+  '/visual-preview/$token': typeof VisualPreviewTokenRoute
   '/': typeof AuthenticatedIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/account/billing': typeof AuthenticatedAccountBillingRoute
@@ -376,6 +384,7 @@ export interface FileRoutesById {
   '/s/$slug': typeof SSlugRoute
   '/share/$token': typeof ShareTokenRoute
   '/transfers/$token': typeof TransfersTokenRoute
+  '/visual-preview/$token': typeof VisualPreviewTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/_authenticated/account/billing': typeof AuthenticatedAccountBillingRoute
@@ -422,6 +431,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
+    | '/visual-preview/$token'
     | '/.lovable/oauth/consent'
     | '/account/billing'
     | '/admin/backend'
@@ -464,6 +474,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
+    | '/visual-preview/$token'
     | '/'
     | '/.lovable/oauth/consent'
     | '/account/billing'
@@ -508,6 +519,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/share/$token'
     | '/transfers/$token'
+    | '/visual-preview/$token'
     | '/_authenticated/'
     | '/.lovable/oauth/consent'
     | '/_authenticated/account/billing'
@@ -552,6 +564,7 @@ export interface RootRouteChildren {
   SSlugRoute: typeof SSlugRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TransfersTokenRoute: typeof TransfersTokenRoute
+  VisualPreviewTokenRoute: typeof VisualPreviewTokenRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicPushStreamRoute: typeof ApiPublicPushStreamRoute
@@ -666,6 +679,13 @@ declare module '@tanstack/react-router' {
       path: '/transfers/$token'
       fullPath: '/transfers/$token'
       preLoaderRoute: typeof TransfersTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/visual-preview/$token': {
+      id: '/visual-preview/$token'
+      path: '/visual-preview/$token'
+      fullPath: '/visual-preview/$token'
+      preLoaderRoute: typeof VisualPreviewTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.lovable/oauth/consent': {
@@ -934,6 +954,7 @@ const rootRouteChildren: RootRouteChildren = {
   SSlugRoute: SSlugRoute,
   ShareTokenRoute: ShareTokenRoute,
   TransfersTokenRoute: TransfersTokenRoute,
+  VisualPreviewTokenRoute: VisualPreviewTokenRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicPushStreamRoute: ApiPublicPushStreamRoute,
