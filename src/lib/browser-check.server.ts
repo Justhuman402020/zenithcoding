@@ -43,6 +43,14 @@ export async function createPreviewToken(userId: string, projectId: string, html
   return raw;
 }
 
+export async function createSourcePreviewToken(userId: string, projectId: string, files: Array<{ path: string; content: string }>) {
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+  const raw = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const { error } = await db.from("preview_tokens").insert({ token_hash: await sha256(raw), user_id: userId, project_id: projectId, html: JSON.stringify({ files }), expires_at: new Date(Date.now() + PREVIEW_TOKEN_TTL_MS).toISOString() });
+  if (error) throw new Error("Could not prepare private source preview");
+  return raw;
+}
+
 class PermissionError extends Error {}
 
 async function cf(acct: Account, endpoint: "screenshot" | "scrape", body: unknown) {

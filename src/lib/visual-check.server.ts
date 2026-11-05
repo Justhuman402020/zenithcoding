@@ -20,13 +20,14 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
     if (error) throw new Error("Could not save the chosen image reader.");
   }
   let html = args.html;
+  let frameworkFiles: Array<{ path: string; content: string }> | null = null;
   if (!html) {
     const { data: rows, error } = await db.from("files").select("path,content").eq("project_id", args.projectId).or("kind.is.null,kind.neq.build").order("path");
     if (error) throw new Error("Could not read current preview files.");
     const source = (rows ?? []).filter((f) => !f.path.startsWith(".code-haven-build/"));
     const framework = source.some((f) => /(?:src\/main\.[jt]sx?|src\/App\.[jt]sx?)$/.test(f.path));
-    if (framework) throw new Error("This source preview needs a browser build first. Open Preview and use Test to supply the current bundled preview; visual verification is not complete.");
-    html = (await import("./project-preview")).projectPreviewDocument(source);
+    if (framework) frameworkFiles = source;
+    html = framework ? JSON.stringify(source) : (await import("./project-preview")).projectPreviewDocument(source);
   }
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
   const fingerprint = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, "0")).join("");
@@ -39,8 +40,8 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
   const log = (message: string, status: "ok" | "error" = "ok") => args.trace?.log("preview.visual", { message, status, detail: { checkId: saved.id } });
   try {
     log("Taking phone, scrolled-phone and PC screenshots"); await args.trace?.flush();
-    const { createPreviewToken, runCheck } = await import("./browser-check.server");
-    const url = `${args.origin}/api/public/preview/${await createPreviewToken(args.userId, args.projectId, html)}`;
+    const { createPreviewToken, createSourcePreviewToken, runCheck } = await import("./browser-check.server");
+    const url = frameworkFiles ? `${args.origin}/visual-preview/${await createSourcePreviewToken(args.userId, args.projectId, frameworkFiles)}` : `${args.origin}/api/public/preview/${await createPreviewToken(args.userId, args.projectId, html)}`;
     const capture = await runCheck({ userId: args.userId, projectId: args.projectId, url, published: false });
     if (!capture.ok) throw new Error(capture.error);
     const { error: captureError } = await db.from("browser_checks").update({ screenshots: capture.shots, findings: capture.findings, duration_ms: capture.durationMs, visual_status: "inspecting" }).eq("id", saved.id);
