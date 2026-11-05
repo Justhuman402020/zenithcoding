@@ -49,6 +49,7 @@ import { Route as ApiPublicSitesDataRouteImport } from './routes/api/public/site
 import { Route as ApiPublicSitesEnvRouteImport } from './routes/api/public/sites.env'
 import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe.webhook'
 import { Route as ApiPublicMcpScrolltideCallbackRouteImport } from './routes/api/public/mcp/scrolltide/callback'
+import { Route as ApiPublicSitesAiChatRouteImport } from './routes/api/public/sites.ai.chat'
 import { Route as ApiPublicSitesAuthMeRouteImport } from './routes/api/public/sites.auth.me'
 import { Route as ApiPublicSitesAuthSigninRouteImport } from './routes/api/public/sites.auth.signin'
 import { Route as ApiPublicSitesAuthSignupRouteImport } from './routes/api/public/sites.auth.signup'
@@ -263,6 +264,11 @@ const ApiPublicMcpScrolltideCallbackRoute =
     path: '/api/public/mcp/scrolltide/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicSitesAiChatRoute = ApiPublicSitesAiChatRouteImport.update({
+  id: '/api/public/sites/ai/chat',
+  path: '/api/public/sites/ai/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSitesAuthMeRoute = ApiPublicSitesAuthMeRouteImport.update({
   id: '/api/public/sites/auth/me',
   path: '/api/public/sites/auth/me',
@@ -321,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
+  '/api/public/sites/ai/chat': typeof ApiPublicSitesAiChatRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -365,6 +372,7 @@ export interface FileRoutesByTo {
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
+  '/api/public/sites/ai/chat': typeof ApiPublicSitesAiChatRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -411,6 +419,7 @@ export interface FileRoutesById {
   '/api/public/sites/env': typeof ApiPublicSitesEnvRoute
   '/api/public/stripe/webhook': typeof ApiPublicStripeWebhookRoute
   '/api/public/mcp/scrolltide/callback': typeof ApiPublicMcpScrolltideCallbackRoute
+  '/api/public/sites/ai/chat': typeof ApiPublicSitesAiChatRoute
   '/api/public/sites/auth/me': typeof ApiPublicSitesAuthMeRoute
   '/api/public/sites/auth/signin': typeof ApiPublicSitesAuthSigninRoute
   '/api/public/sites/auth/signup': typeof ApiPublicSitesAuthSignupRoute
@@ -457,6 +466,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/mcp/scrolltide/callback'
+    | '/api/public/sites/ai/chat'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -501,6 +511,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/mcp/scrolltide/callback'
+    | '/api/public/sites/ai/chat'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -546,6 +557,7 @@ export interface FileRouteTypes {
     | '/api/public/sites/env'
     | '/api/public/stripe/webhook'
     | '/api/public/mcp/scrolltide/callback'
+    | '/api/public/sites/ai/chat'
     | '/api/public/sites/auth/me'
     | '/api/public/sites/auth/signin'
     | '/api/public/sites/auth/signup'
@@ -576,6 +588,7 @@ export interface RootRouteChildren {
   ApiPublicSitesEnvRoute: typeof ApiPublicSitesEnvRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
   ApiPublicMcpScrolltideCallbackRoute: typeof ApiPublicMcpScrolltideCallbackRoute
+  ApiPublicSitesAiChatRoute: typeof ApiPublicSitesAiChatRoute
   ApiPublicSitesAuthMeRoute: typeof ApiPublicSitesAuthMeRoute
   ApiPublicSitesAuthSigninRoute: typeof ApiPublicSitesAuthSigninRoute
   ApiPublicSitesAuthSignupRoute: typeof ApiPublicSitesAuthSignupRoute
@@ -863,6 +876,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMcpScrolltideCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sites/ai/chat': {
+      id: '/api/public/sites/ai/chat'
+      path: '/api/public/sites/ai/chat'
+      fullPath: '/api/public/sites/ai/chat'
+      preLoaderRoute: typeof ApiPublicSitesAiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/sites/auth/me': {
       id: '/api/public/sites/auth/me'
       path: '/api/public/sites/auth/me'
@@ -966,6 +986,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicSitesEnvRoute: ApiPublicSitesEnvRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
   ApiPublicMcpScrolltideCallbackRoute: ApiPublicMcpScrolltideCallbackRoute,
+  ApiPublicSitesAiChatRoute: ApiPublicSitesAiChatRoute,
   ApiPublicSitesAuthMeRoute: ApiPublicSitesAuthMeRoute,
   ApiPublicSitesAuthSigninRoute: ApiPublicSitesAuthSigninRoute,
   ApiPublicSitesAuthSignupRoute: ApiPublicSitesAuthSignupRoute,
