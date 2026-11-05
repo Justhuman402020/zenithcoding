@@ -52,7 +52,7 @@ async function cf(acct: Account, endpoint: "screenshot" | "scrape", body: unknow
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
   });
-  if (res.status === 401 || res.status === 403) throw new PermissionError(`${res.status}`);
+  if (res.status === 401 || res.status === 403) throw new PermissionError("Cloudflare needs Account → Browser Rendering → Edit on this account; check the token's account access.");
   if (!res.ok) throw new Error(`Browser test failed (${res.status}): ${redactSecrets((await res.text()).slice(0, 200))}`);
   return res;
 }
@@ -91,7 +91,8 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
         const res = await cf(acct, "screenshot", body);
         const bytes = new Uint8Array(await res.arrayBuffer());
         const path = `${opts.userId}/${opts.projectId}/${Date.now()}-${shots.length}.jpg`;
-        await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+        const { error: uploadError } = await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+        if (uploadError) throw new Error("Could not save the private screenshot.");
         shots.push({ label: s.label, url: path });
       }
       const scrape = await cf(acct, "scrape", { ...common(opts.url, opts.published), viewport: PHONE, elements: [{ selector: "#__ch_report" }] });
@@ -105,5 +106,5 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
       return { ok: false, error: e instanceof Error ? e.message : "Browser test failed", missingPermission: missing, durationMs: Date.now() - started };
     }
   }
-  return { ok: false, error: "None of your Cloudflare accounts allow Browser Rendering yet.", missingPermission: missing, durationMs: Date.now() - started };
+  return { ok: false, error: "Browser capture needs Account → Browser Rendering → Edit, with access to the selected Cloudflare account.", missingPermission: missing, durationMs: Date.now() - started };
 }

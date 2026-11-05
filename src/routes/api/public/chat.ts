@@ -546,8 +546,13 @@ export const Route = createFileRoute("/api/public/chat")({
         const { brainZipContext } = await import("@/lib/brain-zip");
         const brainZipTools = createBrainZipTools(supabase, projectId, store, trace);
         const brainReferences = await listBrainZips(supabase, projectId);
+        const { visualCheckRequested } = await import("@/lib/visual-check-policy");
+        const visualApproved = !planMode && needsFileChange && visualCheckRequested(lastUserText);
+        const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
+        const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
         const allTools = {
           ...createProjectFileTools(store, trace),
+          ...visualCheckTools(visualArgs, visualApproved),
           ...brainZipTools.readTools,
           copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
           ...createSecretTools(createSupabaseSecretStore(supabase, projectId), trace),
@@ -1212,9 +1217,19 @@ export const Route = createFileRoute("/api/public/chat")({
             pool_run: false, pool_ledger: ledger.length ? ledger : null, paused_at_key: pausedAtKey,
           } as any;
           if (outcome === "finished") {
+            let visualSummary = "";
+            if (visualApproved && jobId) {
+              await supabaseAdmin.from("chat_jobs").update({ progress: "Capturing and inspecting the finished preview" }).eq("id", jobId);
+              try {
+                const result = await checkProjectVisually(visualArgs);
+                visualSummary = `\n\nVisual verification: ${result.status}.\n${result.report}`;
+              } catch (e) {
+                visualSummary = `\n\nVisual verification: could not verify. ${e instanceof Error ? e.message : "Check unavailable"}`;
+              }
+            }
             const finalText =
               (replyTexts.join("\n\n").trim() || (truncated ? "" : `Finished: ${counts}.`)) +
-              (truncated ? "\n\n[[FORGE_CONTINUE]]" : "");
+              (truncated ? "\n\n[[FORGE_CONTINUE]]" : "") + visualSummary;
             if (jobId) {
               await supabaseAdmin.from("chat_jobs").update({
                 ...jobStats,

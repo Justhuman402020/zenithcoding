@@ -59,7 +59,7 @@ export function findingsMessage(f: Findings): string {
 }
 
 /** Runs inside the tested page; writes a JSON report into #__ch_report. */
-export const REPORTER_SCRIPT = `(()=>{var R={pageErrors:[],failedLoads:[]};var s=new URLSearchParams(location.search).get('__scroll');try{history.replaceState(null,'','/')}catch(e){}
+export const REPORTER_SCRIPT = `(()=>{var R={pageErrors:[],failedLoads:[]};var s=new URLSearchParams(location.search).get('__scroll');
 addEventListener('error',function(e){var t=e.target;if(t&&t!==window&&(t.src||t.href)){R.failedLoads.push(String(t.src||t.href).slice(0,200))}else{R.pageErrors.push(String(e.message||e.error||'error').slice(0,300))}},true);
 addEventListener('unhandledrejection',function(e){R.pageErrors.push('Unhandled: '+String(e.reason&&e.reason.message||e.reason).slice(0,280))});
 function out(){var im=[].slice.call(document.images);var b=im.filter(function(i){return i.complete&&i.naturalWidth===0}).map(function(i){return (i.getAttribute('src')||'').slice(0,120)});
