@@ -77,4 +77,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
 - App install: manifest + root install provider + home-menu control; no service workers.
 - Screenshots: only the owner-enabled ScreenshotOne Brain key; OpenRouter reads.
-- Finished React/Vite edits pass src/lib/build-check.ts (Worker-safe link check; esbuild can't run server-side), max 3 repairs.
+- Finished React/Vite edits pass build-check.ts links then real tsc in E2B (agent-tools.server.ts), max 3 repairs.

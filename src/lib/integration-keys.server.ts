@@ -89,13 +89,13 @@ export async function neonCreateDatabase(name: string) {
 }
 
 /** Runs code in a short-lived E2B cloud sandbox (Code Interpreter template). */
-export async function e2bRunCode(code: string, language: "python" | "js" = "python") {
+export async function e2bRunCode(code: string, language: "python" | "js" = "python", opts: { timeoutSec?: number; maxOut?: number } = {}) {
   const key = await getIntegrationKey("e2b", "apiKey");
   if (!key) return { ok: false as const, error: "E2B key not saved in Admin → Integrations." };
   const create = await fetch("https://api.e2b.dev/sandboxes", {
     method: "POST",
     headers: { "X-API-Key": key, "content-type": "application/json" },
-    body: JSON.stringify({ templateID: "code-interpreter-v1", timeout: 120 }),
+    body: JSON.stringify({ templateID: "code-interpreter-v1", timeout: opts.timeoutSec ?? 120 }),
   });
   if (!create.ok) return { ok: false as const, error: `E2B ${create.status}: ${(await create.text()).slice(0, 200)}` };
   const sb = (await create.json()) as any;
@@ -109,6 +109,7 @@ export async function e2bRunCode(code: string, language: "python" | "js" = "pyth
         ...(sb.envdAccessToken ? { "X-Access-Token": sb.envdAccessToken } : {}),
       },
       body: JSON.stringify({ code, language }),
+      signal: AbortSignal.timeout(((opts.timeoutSec ?? 120) + 15) * 1000),
     });
     const raw = await res.text();
     if (!res.ok) return { ok: false as const, error: `E2B run ${res.status}: ${raw.slice(0, 200)}` };
@@ -125,7 +126,7 @@ export async function e2bRunCode(code: string, language: "python" | "js" = "pyth
         out.push(line);
       }
     }
-    return { ok: true as const, stdout: out.join("").slice(0, 8000), stderr: errs.join("").slice(0, 4000) };
+    return { ok: true as const, stdout: out.join("").slice(-(opts.maxOut ?? 8000)), stderr: errs.join("").slice(0, 4000) };
   } finally {
     void fetch(`https://api.e2b.dev/sandboxes/${id}`, { method: "DELETE", headers: { "X-API-Key": key } }).catch(() => {});
   }

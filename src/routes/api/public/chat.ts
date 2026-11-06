@@ -3,6 +3,7 @@ import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/l
 import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, trimCarried } from "@/lib/completion-gate";
 import { createFileRoute } from "@tanstack/react-router";
 import { lookOnlyAction, LOOK_ONLY_NOTE, LOOK_ONLY_STOP } from "@/lib/edit-budget-policy";
+import { createStallTracker, STALL_NOTE } from "@/lib/agent-tools-policy";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, tool, type UIMessage } from "ai";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
@@ -574,6 +575,9 @@ export const Route = createFileRoute("/api/public/chat")({
         const visualApproved = visualJob?.visual_required ?? visualVerificationNeeded(lastUserText, needsFileChange);
         if (jobId && visualJob?.visual_required == null) await supabaseAdmin.from("chat_jobs").update({ visual_required: visualApproved }).eq("id", jobId);
         const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
+        const { createAgentTools, withKeepAlive } = await import("@/lib/agent-tools.server");
+        // Long sandbox tools ping this so the step watchdog doesn't abort them.
+        const alive = { ping: () => {} };
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
         // Required preview repairs must capture even when the coding model omits the tool.
         let lastVisualResult: { status: string; report: string } | null = null;
@@ -596,16 +600,22 @@ export const Route = createFileRoute("/api/public/chat")({
         const allTools = {
           ...createProjectFileTools(store, trace),
           check_build: tool({
-            description: "Run the same link check Publish's bundler needs: finds missing files and missing named exports with file:line. Run after editing React/Vite/TypeScript files; fix every error and run again before saying done.",
+            description: "Run the link check Publish's bundler needs (missing files/exports) and then the real TypeScript compiler, with file:line errors. Run after editing React/Vite/TypeScript files; fix every error and run again before saying done.",
             inputSchema: z.object({}),
             execute: async () => {
               const { data } = await supabaseAdmin.from("files").select("path,content").eq("project_id", projectId);
               const { checkProjectBuild, formatBuildIssues } = await import("@/lib/build-check");
               const r = checkProjectBuild((data ?? []) as any);
               trace.log("tool.check_build", { status: r.ok ? "ok" : "error", detail: { issues: r.issues.length } });
-              return { ok: r.ok, report: formatBuildIssues(r) };
+              if (!r.ok) return { ok: false, report: formatBuildIssues(r) };
+              const { runTypecheck } = await import("@/lib/agent-tools.server");
+              const t = await withKeepAlive(() => alive.ping(), () => runTypecheck((data ?? []) as any));
+              trace.log("tool.typecheck", { status: t.result ? (t.result.ok ? "ok" : "error") : "warn", detail: { issues: t.result?.issues.length ?? 0 } });
+              if (t.result && !t.result.ok) return { ok: false, report: formatBuildIssues(t.result).replace("Build check", "Type check") };
+              return { ok: true, report: `${formatBuildIssues(r)}\n${t.note}` };
             },
           }),
+          ...createAgentTools({ projectId, origin: visualArgs.origin, trace, keepAlive: () => alive.ping() }),
           ...visualCheckTools(visualArgs, !!jobId),
           ...brainZipTools.readTools,
           copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
@@ -622,6 +632,7 @@ export const Route = createFileRoute("/api/public/chat")({
               ...brainZipTools.readTools,
               web_search: integrationTools.web_search,
               search_images: integrationTools.search_images,
+              ...createAgentTools({ projectId, origin: visualArgs.origin, trace, readOnly: true, keepAlive: () => alive.ping() }),
             } as typeof allTools)
           : allTools;
 
@@ -919,6 +930,8 @@ export const Route = createFileRoute("/api/public/chat")({
             let attemptStepCount = 0;
             let loopHit = false;
             let stepsWithoutEdit = 0;
+            const stall = createStallTracker();
+            let stalled = false;
             let lookOnlyHit = false;
             let watchdog: ReturnType<typeof setTimeout> | undefined;
             // Reasoning models on OpenRouter can think silently for a while; give them longer.
@@ -931,6 +944,7 @@ export const Route = createFileRoute("/api/public/chat")({
               }, stepTimeout);
             };
             kick();
+            alive.ping = kick;
             const model = createGroqProvider(current.apiKey, current.baseURL)(current.ref.model);
             trace.log("attempt.start", { detail: { attempt, provider: current.ref.provider, model: current.ref.model, carried: carried.length } });
 
@@ -986,13 +1000,19 @@ export const Route = createFileRoute("/api/public/chat")({
                     messageMetadata: { neurons: { key: current.ref.provider, keyNo: keyNo(current.ref.provider), start: Math.round(baseNeurons), used: Math.round(attemptNeurons), step: stepCosts[stepCosts.length - 1] ?? 0, cap: cfPool.SOFT_CAP_NEURONS, log: replyLog.slice(-20) } },
                   });
                 }
+                for (const tr of (step?.toolResults ?? []) as any[]) {
+                  const out = tr?.output ?? tr?.result;
+                  const failed = !!out && typeof out === "object" && (out.ok === false || "error" in out && !!out.error);
+                  if (stall.record(`${tr?.toolName}:${JSON.stringify(tr?.input ?? tr?.args ?? {}).slice(0, 300)}`, failed)) { stalled = true; trace.log("budget.stall", { detail: { tool: tr?.toolName } }); }
+                }
                 if (recentCalls.length > 12) recentCalls.splice(0, recentCalls.length - 12);
                 const neuronNote = cfPool ? ` · ${(Math.round(baseNeurons + attemptNeurons) / 1000).toFixed(1)}k/9k Neurons` : "";
                 setProgress(`Step ${stepNo}${last ? ` · ${last}` : " · thinking"} · ${progressModel.files.size} file(s) changed${neuronNote}`);
               },
               prepareStep: (opts: any) => {
                 createPrepareStep(needsFileChange, trace)(opts);
-                const editNote = lookOnlyAction(stepsWithoutEdit, needsFileChange) === "nudge" ? `\n\n${LOOK_ONLY_NOTE}` : "";
+                const editNote = (lookOnlyAction(stepsWithoutEdit, needsFileChange) === "nudge" ? `\n\n${LOOK_ONLY_NOTE}` : "") + (stalled ? `\n\n${STALL_NOTE}` : "");
+                stalled = false;
                 if (!cfPool) return editNote ? { system: systemPrompt + editNote } : undefined;
                 const total = Math.round(baseNeurons + attemptNeurons);
                 // Preflight guard: never send a call whose worst case could pass 9,500.
@@ -1148,7 +1168,16 @@ export const Route = createFileRoute("/api/public/chat")({
                     const { checkProjectBuild, formatBuildIssues, isBundledProject } = await import("@/lib/build-check");
                     const rows = (allRows ?? []) as Array<{ path: string; content: string }>;
                     if (isBundledProject(rows.map((r) => r.path))) {
-                      const bc = checkProjectBuild(rows);
+                      let bc = checkProjectBuild(rows);
+                      let typeNote = "";
+                      if (bc.ok) {
+                        setProgress("Running the TypeScript check");
+                        const { runTypecheck } = await import("@/lib/agent-tools.server");
+                        const t = await runTypecheck(rows);
+                        trace.log("gate.typecheck", { status: t.result ? (t.result.ok ? "ok" : "error") : "warn", message: t.note.slice(0, 300) });
+                        if (t.result && !t.result.ok) bc = t.result;
+                        typeNote = t.note;
+                      }
                       const report = formatBuildIssues(bc);
                       trace.log("gate.build_check", { status: bc.ok ? "ok" : "error", message: report.slice(0, 500) });
                       setProgress(bc.ok ? "Build check passed" : `Build check: ${bc.issues.length} error(s)`);
@@ -1157,7 +1186,7 @@ export const Route = createFileRoute("/api/public/chat")({
                         if (buildCheckRounds < 3) {
                           buildCheckRounds += 1;
                           if (attemptSteps.length) carried = [...carried, ...attemptSteps];
-                          carried.push({ role: "user", content: `${report}\nPublish will fail until these are fixed. Fix each error in the existing files (add the missing export or correct the import), then stop for another build check. Do not say done while it fails.` });
+                          carried.push({ role: "user", content: `${report}\nPublish will fail until these are fixed. Fix each error in the existing files (missing export, wrong import, or the type mistake named), then stop for another build check. Do not say done while it fails.` });
                           recentCalls.length = 0;
                           finished = false;
                           finalReason = undefined;
@@ -1166,7 +1195,7 @@ export const Route = createFileRoute("/api/public/chat")({
                         }
                         replyTexts.push(`Not done: the build still fails after 3 repair rounds.\n${report}`);
                       } else {
-                        replyTexts.push(report);
+                        replyTexts.push(typeNote ? `${report}\n${typeNote}` : report);
                       }
                     }
                   }
