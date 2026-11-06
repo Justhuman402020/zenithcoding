@@ -264,7 +264,7 @@ export async function runProjectSql(projectId: string, sql: string) {
 export const EXEC_SQL_HELPER = `create or replace function public.exec_sql(query text) returns json language plpgsql security definer set search_path = public as $$
 declare result json;
 begin
-  if query ~* '^\\s*(select|with|values|table)\\b' then
+  if query ~* '^\\s*(select|with|values|table)\\y' or query ~* '\\yreturning\\y' then
     execute format('select coalesce(json_agg(t), ''[]''::json) from (%s) t', regexp_replace(query, ';\\s*$', '')) into result;
     return json_build_object('ok', true, 'rows', result);
   end if;
