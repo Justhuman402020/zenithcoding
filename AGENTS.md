@@ -63,7 +63,7 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Retain ZIP media and upload it in size-capped, timed, retried upserts (src/lib/zip-upload.ts) so slow networks show progress, never hang; post-import ZIP errors auto-fix via OpenRouter build, max 3 rounds. Namespace builds under .code-haven-build/.
 - Subdirectories have their own AGENTS.md (e.g. src/lib/runtime-mcp/ for Scrolltide); read it before changing files there.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
-- Browser tests use hashed short-lived preview tokens; test-found fixes use normal chat approval.
+- Browser tests use hashed short-lived preview tokens; fixes need normal chat approval.
 - Project Brain ZIPs stay in private owner/project-scoped storage; agents read references on demand and copy only new files so saving a design cannot overwrite the site.
 - Work details use stable job/message/edit routes with owner-scoped reads; compact cards share this surface, and file-store wrappers persist sanitized patch evidence in traces so history survives browser disconnects without a separate log store.
 - Declare Admin chat-key RPCs directly with createServerFn, not a local factory alias, so compilation preserves authenticated middleware context.
@@ -75,6 +75,6 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Necessary visual checks use persisted task-scoped eligibility independent of edit approval, save actual capture/inspection phases and private thumbnails, and feed post-edit problems to bounded repairs; inspection never grants edit/publish permission or changes the reader model.
 - Site AI chat can run on the owner's Cloudflare pool via a per-project token (src/lib/project-ai-policy.ts rules, /api/public/sites/ai/chat); pool keys never leave Code Haven and the switch stops access instantly.
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
-- App install: manifest-only plus a root install-event provider and home-menu control; no service workers (offline not requested).
-- Screenshots: Microlink Brain vault keys in save order (quota/refusal → next); OpenRouter reads images.
+- App install: manifest + root install provider + home-menu control; no service workers.
+- Screenshots: Microlink Brain keys in save order (refusal → next); OpenRouter reads them.
 - Finished React/Vite edits pass src/lib/build-check.ts (Worker-safe link check; esbuild can't run server-side), max 3 repairs.
