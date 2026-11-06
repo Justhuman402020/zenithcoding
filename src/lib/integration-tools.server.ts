@@ -241,8 +241,15 @@ export async function runProjectSql(projectId: string, sql: string) {
   let text = await res.text();
   if (res.ok && isBareOk(text) && returnsRows(sql)) {
     // The old helper hides rows. It still runs any statement, so let it replace itself, then ask again.
-    const upgrade = await call(EXEC_SQL_HELPER);
-    if (upgrade.ok) { res = await call(sql); text = await res.text(); }
+    // Old helpers often return void/jsonb, so "create or replace" alone fails; drop first and reload the API cache.
+    const upgrade = await call(EXEC_SQL_UPGRADE);
+    if (upgrade.ok) {
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        res = await call(sql); text = await res.text();
+        if (!(res.ok && isBareOk(text))) break;
+      }
+    }
     if (res.ok && isBareOk(text)) return { ok: true, result: text, warning: "The query ran, but this database's exec_sql helper only answers ok:true and could not be upgraded automatically. Ask the user to run this once in their SQL editor, then retry:\n" + EXEC_SQL_HELPER };
   }
   if (res.ok) return { ok: true, result: text.slice(0, 4000) };
@@ -265,6 +272,14 @@ begin
   return json_build_object('ok', true);
 end $$;
 revoke all on function public.exec_sql(text) from public, anon, authenticated;`;
+
+/** Sent through the old helper itself: one statement block so it runs even when the helper only does `execute query`. */
+export const EXEC_SQL_UPGRADE = `do $up$ begin
+  drop function if exists public.exec_sql(text);
+  execute $fn$${EXEC_SQL_HELPER.split("\nrevoke")[0]}$fn$;
+  revoke all on function public.exec_sql(text) from public, anon, authenticated;
+  perform pg_notify('pgrst', 'reload schema');
+end $up$;`;
 
 export function isBareOk(text: string) { return /^\s*\{\s*"ok"\s*:\s*true\s*\}\s*$/.test(text); }
 export function returnsRows(sql: string) { return /^\s*(select|with|values|table)\b/i.test(sql) || /\breturning\b/i.test(sql); }
