@@ -387,8 +387,8 @@ export const Route = createFileRoute("/api/public/chat")({
         const editorEngine = !imageBuild && !hasImages && request.headers.get("x-forge-engine") === "cloudflare" ? "cloudflare" : null;
         const selection = await workspacePick(planMode ? "plan" : "build", (existingJob?.build_engine as "openrouter" | "cloudflare" | null) ?? editorEngine, hasImages);
         const editorAuto = selection.engine === "cloudflare";
-        // Owner's Ollama build switch: text builds only, never Plan or image builds.
-        const ollamaBuild = !editorAuto && !planMode && !imageBuild && !hasImages && request.headers.get("x-forge-build-provider") === "ollama";
+        // Owner's Ollama build switch: Build and Image build (pictures go straight to the Ollama model); never Plan.
+        const ollamaBuild = !editorAuto && !planMode && request.headers.get("x-forge-build-provider") === "ollama";
         let ollamaPick: { ok: true; ref: ModelRef; apiKey: string; baseURL: string } | null = null;
         if (editorAuto) {
           const approvalId = request.headers.get("x-forge-approval");
@@ -485,7 +485,7 @@ export const Route = createFileRoute("/api/public/chat")({
         const { readAiGatewaySetting } = await import("@/lib/model-router.server");
         const gateway = await readAiGatewaySetting();
         let visualBrief = "";
-        if (hasImages && !planMode && needsFileChange) {
+        if (hasImages && !planMode && needsFileChange && !ollamaBuild) {
           const selectedVision = parseModelKey(request.headers.get("x-forge-vision-model"));
           const { data: poolSettings } = await supabaseAdmin
             .from("ai_pool_settings")
@@ -689,7 +689,8 @@ export const Route = createFileRoute("/api/public/chat")({
         // A text-only model would 400 on image parts — drop them rather than fail.
         const { listProviderModels: listPickedModels } = await import("@/lib/model-discovery.server");
         const pickedProvider = providerRegistry.find((p) => p.id === pick.ref.provider);
-        const visionOk = hasImages && pickedProvider && /^https:\/\/openrouter\.ai\/api\/v1/.test(pickedProvider.baseURL)
+        // Ollama: the owner chose this model for pictures; send them as they are.
+        const visionOk = ollamaBuild ? hasImages : hasImages && pickedProvider && /^https:\/\/openrouter\.ai\/api\/v1/.test(pickedProvider.baseURL)
           ? (await listPickedModels(pick.ref.provider, pick.apiKey, pickedProvider)).find((m) => m.id === pick.ref.model)?.vision === true
           : modelSupportsVision(pick.ref);
         if (hasImages && !planMode && !visualBrief && !visionOk) return fail(424, "The selected model does not declare image input. Choose an image-capable OpenRouter model.");

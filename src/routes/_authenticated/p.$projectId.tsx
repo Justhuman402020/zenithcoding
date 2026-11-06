@@ -930,13 +930,13 @@ function ProjectEditor() {
           headers["x-forge-mode"] = choice.mode;
           headers["x-forge-engine"] = choice.engine;
           if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
-          const useOllama = ollamaBuildRef.current && choice.mode === "build" && choice.engine === "openrouter" && !choice.imageBuild;
+          const useOllama = ollamaBuildRef.current && choice.mode === "build" && choice.engine === "openrouter";
           if (useOllama) headers["x-forge-build-provider"] = "ollama";
           const zipAutoApproved = zipAutoApproveRef.current && choice.engine === "openrouter" && !choice.imageBuild;
           zipAutoApproveRef.current = false;
           if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
           else if (zipAutoApproved) { /* Owner asked ZIP errors to be fixed immediately with the OpenRouter build model. */ }
-          else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : useOllama ? "Send this build to your Ollama model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
+          else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : useOllama ? (choice.imageBuild ? "Send the image and text to your Ollama model?" : "Send this build to your Ollama model?") : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
           headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
           if (poolFromRef.current) {
