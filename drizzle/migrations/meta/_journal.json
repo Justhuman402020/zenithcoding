@@ -211,6 +211,20 @@
       "when": 1793855428002,
       "tag": "0029_site_ai_recovery_fencing",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793957805190,
+      "tag": "0030_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793957831748,
+      "tag": "0031_migration",
+      "breakpoints": true
     }
   ]
 }
