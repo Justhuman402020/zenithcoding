@@ -82,7 +82,7 @@ export function visualCheckTools(args: Parameters<typeof checkProjectVisually>[0
   let used = 0;
   return { inspect_preview: tool({ description: "Take real phone/PC preview screenshots and inspect them with the selected image reader. Use after changing files in this approved build to see the result, then fix reported problems (max 3 checks). Never claims the preview is visually verified without a capture.", inputSchema: z.object({}), execute: async () => {
     if (!enabled) return { status: "unverified", report: "No active owner task is available for this screenshot check." };
-    if (used >= 1) return { status: "unverified", report: "The runner reserves the remaining screenshot rounds for final verification." };
+    if (used >= 3) return { status: "unverified", report: "This task already used its 3 screenshot rounds. Report the latest captured result instead of asking the owner to check." };
     used += 1;
     return checkProjectVisually(args);
   } }) };
