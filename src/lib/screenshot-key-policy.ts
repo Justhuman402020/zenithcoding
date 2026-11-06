@@ -17,7 +17,9 @@ export function screenshotOneUrl(accessKey: string, url: string, vp: { width: nu
     access_key: accessKey, url, format: "jpg", image_quality: "80",
     viewport_width: String(vp.width), viewport_height: String(vp.height),
     viewport_mobile: String(mobile), device_scale_factor: "1", full_page: String(fullPage),
-    block_cookie_banners: "true", block_ads: "true", wait_until: "networkidle0", delay: "2", timeout: "60", cache: "false",
+    block_cookie_banners: "true", block_ads: "true", wait_until: "networkidle0", delay: "2", timeout: "90", cache: "false",
   });
+  // Source previews build in the page first ("Preparing preview…"); wait for the built frame, then let it paint.
+  if (url.includes("/visual-preview/")) { q.set("wait_for_selector", 'iframe[title="Private project visual preview"]'); q.set("delay", "5"); }
   return `${SCREENSHOTONE_BASE_URL}/take?${q}`;
 }

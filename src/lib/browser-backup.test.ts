@@ -61,3 +61,13 @@ describe("ScreenshotOne screenshot browser", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+import { screenshotOneUrl as shotUrl } from "./screenshot-key-policy";
+import { describe as d2, it as i2, expect as e2 } from "vitest";
+d2("source preview capture waits", () => {
+  i2("waits for the built preview frame before shooting", () => {
+    const u = new URL(shotUrl("k", "https://boostallsocial.org/visual-preview/abc", { width: 390, height: 844 }, true));
+    e2(u.searchParams.get("wait_for_selector")).toBe('iframe[title="Private project visual preview"]');
+    e2(u.searchParams.get("delay")).toBe("5");
+  });
+});
