@@ -3,7 +3,8 @@ import { countCall as countCallSync, preflightAllowed, PREFLIGHT_MAX } from "@/l
 import { changedPathsFromStep, completionGate, MAX_GATE_RETRIES, stripThinking, trimCarried } from "@/lib/completion-gate";
 import { createFileRoute } from "@tanstack/react-router";
 import { lookOnlyAction, LOOK_ONLY_NOTE, LOOK_ONLY_STOP } from "@/lib/edit-budget-policy";
-import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, type UIMessage } from "ai";
+import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, streamText, stepCountIs, tool, type UIMessage } from "ai";
+import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { recoveryHeaders } from "@/lib/build-recovery";
 import { debit, ensureWelcomeGrant, hasUnlimitedCredits } from "@/lib/credits.server";
@@ -594,6 +595,17 @@ export const Route = createFileRoute("/api/public/chat")({
         }
         const allTools = {
           ...createProjectFileTools(store, trace),
+          check_build: tool({
+            description: "Run the same link check Publish's bundler needs: finds missing files and missing named exports with file:line. Run after editing React/Vite/TypeScript files; fix every error and run again before saying done.",
+            inputSchema: z.object({}),
+            execute: async () => {
+              const { data } = await supabaseAdmin.from("files").select("path,content").eq("project_id", projectId);
+              const { checkProjectBuild, formatBuildIssues } = await import("@/lib/build-check");
+              const r = checkProjectBuild((data ?? []) as any);
+              trace.log("tool.check_build", { status: r.ok ? "ok" : "error", detail: { issues: r.issues.length } });
+              return { ok: r.ok, report: formatBuildIssues(r) };
+            },
+          }),
           ...visualCheckTools(visualArgs, !!jobId),
           ...brainZipTools.readTools,
           copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
@@ -866,6 +878,7 @@ export const Route = createFileRoute("/api/public/chat")({
           let stopCause = "";
           let outOfKeys = false;
           let gateRetries = 0;
+          let buildCheckRounds = 0;
           let incompleteReason: string | null = null;
           let baton = emptyBaton();
           const replyLog: string[] = [];
@@ -1130,7 +1143,34 @@ export const Route = createFileRoute("/api/public/chat")({
                   } else {
                     incompleteReason = null;
                   }
-                  if (gate.ok && visualApproved && jobId) {
+                  if (gate.ok && changedList.length) {
+                    const { data: allRows } = await supabaseAdmin.from("files").select("path,content").eq("project_id", projectId);
+                    const { checkProjectBuild, formatBuildIssues, isBundledProject } = await import("@/lib/build-check");
+                    const rows = (allRows ?? []) as Array<{ path: string; content: string }>;
+                    if (isBundledProject(rows.map((r) => r.path))) {
+                      const bc = checkProjectBuild(rows);
+                      const report = formatBuildIssues(bc);
+                      trace.log("gate.build_check", { status: bc.ok ? "ok" : "error", message: report.slice(0, 500) });
+                      setProgress(bc.ok ? "Build check passed" : `Build check: ${bc.issues.length} error(s)`);
+                      if (!bc.ok) {
+                        incompleteReason = `Build check failed: ${bc.issues[0]?.file}:${bc.issues[0]?.line} ${bc.issues[0]?.message}`;
+                        if (buildCheckRounds < 3) {
+                          buildCheckRounds += 1;
+                          if (attemptSteps.length) carried = [...carried, ...attemptSteps];
+                          carried.push({ role: "user", content: `${report}\nPublish will fail until these are fixed. Fix each error in the existing files (add the missing export or correct the import), then stop for another build check. Do not say done while it fails.` });
+                          recentCalls.length = 0;
+                          finished = false;
+                          finalReason = undefined;
+                          attempt -= 1;
+                          continue;
+                        }
+                        replyTexts.push(`Not done: the build still fails after 3 repair rounds.\n${report}`);
+                      } else {
+                        replyTexts.push(report);
+                      }
+                    }
+                  }
+                  if (gate.ok && !incompleteReason && visualApproved && jobId) {
                     setProgress("Taking real screenshots of the repaired preview");
                     const after = await inspectRequiredPreview();
                     if (after.status === "problems") {

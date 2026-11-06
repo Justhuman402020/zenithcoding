@@ -362,7 +362,8 @@ export async function buildInBrowser(
       bundle: true,
       write: false,
       format: "esm",
-      target: ["es2020"],
+      // Safari 14.1+ covers iPhones still in use; older targets make esbuild refuse common code.
+      target: ["es2020", "safari14.1", "chrome87", "firefox78", "edge88"],
       platform: "browser",
       minify: true,
       sourcemap: false,
