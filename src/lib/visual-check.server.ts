@@ -91,7 +91,11 @@ export function visualCheckTools(args: Parameters<typeof checkProjectVisually>[0
 export function publicCaptureOrigin(origin: string) {
   const configured = process.env["PUBLIC_APP_ORIGIN"];
   if (configured) return configured.replace(/\/$/, "");
-  return /^https:\/\/(project--|id-preview--)[^.]+\.lovable\.app$/i.test(origin) ? "https://boostallsocial.org" : origin;
+  // The published Worker sees its own request as http://localhost; outside browsers must use the public domain.
+  let host = "";
+  try { host = new URL(origin).hostname; } catch { return "https://boostallsocial.org"; }
+  const internal = ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(host) || host.endsWith(".internal") || host.endsWith(".local") || /^(project--|id-preview--)[^.]+\.lovable\.app$/i.test(host) || !origin.startsWith("https://");
+  return internal ? "https://boostallsocial.org" : origin;
 }
 
 /** Screenshot services return PNG or JPEG; a wrong label makes some readers reply empty. */
