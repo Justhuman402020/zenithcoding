@@ -1,6 +1,6 @@
-// Microlink captures real browser screenshots; OpenRouter inspects the saved images.
+// ScreenshotOne captures real browser screenshots; OpenRouter inspects the saved images.
 import { cleanFindings, injectReporter, PREVIEW_TOKEN_TTL_MS, type CheckShot, type Findings } from "./browser-check-policy";
-import { isScreenshotKey, nextScreenshotKey } from "./screenshot-key-policy";
+import { ACTIVE_SCREENSHOT_ROW, isScreenshotKey, pickActiveKey, screenshotOneUrl } from "./screenshot-key-policy";
 
 async function sha256(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -8,23 +8,19 @@ async function sha256(text: string) {
 }
 export const hashToken = sha256;
 
-async function screenshotKeys(): Promise<Array<{ label: string; key: string }>> {
+/** Only the one ScreenshotOne key the owner turned on in Admin Brain. */
+async function activeScreenshotKey(): Promise<{ label: string; key: string } | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { decryptSecret } = await import("./secrets-crypto.server");
-  const { data, error } = await supabaseAdmin
-    .from("admin_credentials")
-    .select("id, label, base_url, key_encrypted")
-    .order("created_at", { ascending: true });
+  const [{ data, error }, { data: active }] = await Promise.all([
+    supabaseAdmin.from("admin_credentials").select("id, label, base_url, key_encrypted").order("created_at", { ascending: true }),
+    supabaseAdmin.from("admin_brain").select("content").eq("id", ACTIVE_SCREENSHOT_ROW).maybeSingle(),
+  ]);
   if (error) throw new Error("Could not load screenshot keys from Admin Brain.");
-  const rows = (data ?? []).filter(isScreenshotKey);
-  const out: Array<{ label: string; key: string }> = [];
-  for (const r of rows) {
-    try {
-      out.push({ label: r.label, key: await decryptSecret(r.key_encrypted) });
-    } catch { /* skip unreadable key */ }
-  }
-  if (rows.length && !out.length) throw new Error("Saved screenshot keys could not be unlocked. Replace a key in Admin Brain.");
-  return out;
+  const row = pickActiveKey((data ?? []).filter(isScreenshotKey), (active as any)?.content ?? null);
+  if (!row) return null;
+  try { return { label: row.label, key: await decryptSecret(row.key_encrypted) }; }
+  catch { throw new Error("The screenshot key that is on could not be unlocked. Replace it in Admin Brain."); }
 }
 
 export async function createPreviewToken(userId: string, projectId: string, html: string) {
@@ -57,51 +53,31 @@ export type CheckOutcome =
 export async function runCheck(opts: { userId: string; projectId: string; url: string; published: boolean }): Promise<CheckOutcome> {
   const started = Date.now();
   if (["localhost", "127.0.0.1", "::1"].includes(new URL(opts.url).hostname)) return { ok: false, error: "The remote screenshot browser cannot open the local editor address. Publish this update, then run the screenshot check from your live Code Haven site.", missingPermission: [], durationMs: 0 };
-  try { return await runMicrolinkBrowser(opts, started); }
-  catch { return { ok: false, error: "Microlink capture could not finish. Check your saved screenshot keys in Admin Brain and try again.", missingPermission: [], durationMs: Date.now() - started }; }
+  try { return await runScreenshotOne(opts, started); }
+  catch (e) { return { ok: false, error: e instanceof Error && e.message.includes("Admin Brain") ? e.message : "ScreenshotOne capture could not finish. Check the screenshot key that is on in Admin Brain.", missingPermission: [], durationMs: Date.now() - started }; }
 }
 
-async function runMicrolinkBrowser(opts: { userId: string; projectId: string; url: string }, started: number): Promise<CheckOutcome> {
+async function runScreenshotOne(opts: { userId: string; projectId: string; url: string }, started: number): Promise<CheckOutcome> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const saved = await screenshotKeys();
-  const fallback = process.env.MICROLINK_API_KEY;
-  const keys = saved.length ? saved : [{ label: fallback ? "Microlink project key" : "Microlink free", key: fallback ?? "" }];
-  let keyIndex = 0;
+  const selected = await activeScreenshotKey();
+  if (!selected) return { ok: false, error: "No screenshot key is turned on. Turn one on in Admin Brain → Screenshot keys.", missingPermission: [], durationMs: Date.now() - started };
   const sep = opts.url.includes("?") ? "&" : "?";
   const specs = [
-    { label: "Phone", url: opts.url, viewport: PHONE, mobile: true },
-    { label: "Phone, full page", url: `${opts.url}${sep}__scroll=0`, viewport: PHONE, mobile: true },
-    { label: "Desktop", url: opts.url, viewport: DESKTOP, mobile: false },
+    { label: "Phone", url: opts.url, viewport: PHONE, mobile: true, full: false },
+    { label: "Phone, full page", url: `${opts.url}${sep}__scroll=0`, viewport: PHONE, mobile: true, full: true },
+    { label: "Desktop", url: opts.url, viewport: DESKTOP, mobile: false, full: false },
   ];
   const shots: CheckShot[] = [];
   for (const s of specs) {
-    let res: Response | undefined;
-    while (keyIndex < keys.length) {
-      const selected = keys[keyIndex];
-      res = await fetch(microlinkScreenshotUrl(s.url, s.viewport, s.mobile, !!selected.key, s.label.includes("full page")), {
-        headers: selected.key ? { "x-api-key": selected.key } : {},
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!nextScreenshotKey(res.status)) break;
-      keyIndex++;
-    }
-    if (!res || keyIndex >= keys.length) return { ok: false, error: "All Microlink screenshot keys are exhausted or refused. Add or replace a screenshot key in Admin Brain.", missingPermission: [], durationMs: Date.now() - started };
+    const res = await fetch(screenshotOneUrl(selected.key, s.url, s.viewport, s.mobile, s.full), { signal: AbortSignal.timeout(75_000) });
+    if (res.status === 401 || res.status === 403 || res.status === 429 || res.status === 402) return { ok: false, error: `The screenshot key "${selected.label}" is used up or refused (${res.status}). Turn on another key in Admin Brain.`, missingPermission: [], durationMs: Date.now() - started };
     const type = res.headers.get("content-type") ?? "";
-    if (!res.ok || !type.startsWith("image/")) return { ok: false, error: `Microlink did not return a screenshot (${res.status}).`, missingPermission: [], durationMs: Date.now() - started };
+    if (!res.ok || !type.startsWith("image/")) return { ok: false, error: `ScreenshotOne did not return a screenshot (${res.status}).`, missingPermission: [], durationMs: Date.now() - started };
     const bytes = new Uint8Array(await res.arrayBuffer());
     const path = `${opts.userId}/${opts.projectId}/${Date.now()}-${shots.length}.jpg`;
     const { error } = await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: type, upsert: true });
     if (error) throw new Error("could not save the private screenshot.");
     shots.push({ label: s.label, url: path });
   }
-  return { ok: true, findings: cleanFindings({}), shots, accountLabel: `Microlink · ${keys[keyIndex]?.label ?? "saved key"}`, durationMs: Date.now() - started, missingPermission: [] };
-}
-
-export function microlinkScreenshotUrl(url: string, vp: { width: number; height: number }, mobile: boolean, pro: boolean, fullPage = false) {
-  const q = new URLSearchParams({
-    url, screenshot: "true", meta: "false", embed: "screenshot.url", type: "jpeg",
-    "viewport.width": String(vp.width), "viewport.height": String(vp.height),
-    "viewport.isMobile": String(mobile), "screenshot.fullPage": String(fullPage), waitForTimeout: "2500", waitUntil: "networkidle0", force: "true",
-  });
-  return `https://${pro ? "pro" : "api"}.microlink.io/?${q}`;
+  return { ok: true, findings: cleanFindings({}), shots, accountLabel: `ScreenshotOne · ${selected.label}`, durationMs: Date.now() - started, missingPermission: [] };
 }

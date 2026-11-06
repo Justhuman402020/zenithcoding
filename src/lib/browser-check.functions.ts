@@ -9,7 +9,7 @@ const Input = z.object({
   html: z.string().max(12_000_000).optional(),
 });
 
-/** Opens the project in Microlink's real browser and saves screenshots. */
+/** Opens the project in ScreenshotOne's real browser and saves screenshots. */
 export const runBrowserCheck = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => Input.parse(d))
@@ -32,7 +32,7 @@ export const runBrowserCheck = createServerFn({ method: "POST" })
     const out = await runCheck({ userId: context.userId, projectId: data.projectId, url, published: data.target === "published" });
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { recordModelCall } = await import("./workspace-ai.server");
-    await recordModelCall({ user_id: context.userId, project_id: data.projectId, provider: "microlink", model: "Screenshot capture", section: "browser_test", started_at: started, status: out.ok ? "ok" : "failed", error: out.ok ? null : out.error });
+    await recordModelCall({ user_id: context.userId, project_id: data.projectId, provider: "screenshotone", model: "Screenshot capture", section: "browser_test", started_at: started, status: out.ok ? "ok" : "failed", error: out.ok ? null : out.error });
     const { data: row } = await supabaseAdmin.from("browser_checks" as any).insert({
       user_id: context.userId, project_id: data.projectId, target: data.target, ok: out.ok,
       findings: out.ok ? out.findings : {}, screenshots: out.ok ? out.shots : [],
