@@ -5,7 +5,7 @@ export function visualCheckRequested(text: string) {
 }
 export function parseVisualReport(text: string): { status: "passed" | "problems" | "unverified"; report: string } {
   const cleaned = text.trim();
-  const head = cleaned.replace(/^[\s#*_>`:-]+/, "");
+  const head = cleaned.replace(/^[\s#*_>`:-]+/, "").replace(/^(?:overall|verdict|result|status)\s*[*_]*\s*[:\-–]\s*[*_]*\s*/i, "");
   const status = /^PASS(?:ED)?\b/i.test(head) ? "passed" : /^PROBLEMS?\b/i.test(head) ? "problems" : "unverified";
   return { status, report: cleaned.slice(0, 12000) || "The image reader did not return a visual assessment." };
 }
