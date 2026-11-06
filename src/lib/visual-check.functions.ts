@@ -11,8 +11,8 @@ export const startVisualCheck = createServerFn({ method: "POST" }).middleware([r
     if (!allowed) throw new Error("Not available");
     const { data: project } = await context.supabase.from("projects").select("id").eq("id", data.projectId).eq("user_id", context.userId).maybeSingle();
     if (!project) throw new Error("Project not available");
-    const origin = new URL(getRequest().url).origin;
-    if (["localhost", "127.0.0.1", "::1"].includes(new URL(origin).hostname)) throw new Error("Publish this update and start screenshot inspection from your live Code Haven site; the remote browser cannot reach this local editor.");
+    const { publicCaptureOrigin } = await import("./visual-check.server");
+    const origin = publicCaptureOrigin(new URL(getRequest().url).origin);
     const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
     const { readWorkspaceAI } = await import("./workspace-ai.server");
     const selected = (await readWorkspaceAI()).image;

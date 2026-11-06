@@ -18,7 +18,8 @@ export const runBrowserCheck = createServerFn({ method: "POST" })
     if (!allowed) throw new Error("Not available");
     const { data: project } = await context.supabase.from("projects").select("id, slug, published").eq("id", data.projectId).maybeSingle();
     if (!project) throw new Error("Project not found");
-    const origin = new URL(getRequest().url).origin;
+    const { publicCaptureOrigin } = await import("./visual-check.server");
+    const origin = publicCaptureOrigin(new URL(getRequest().url).origin);
     const { createPreviewToken, runCheck } = await import("./browser-check.server");
     let url: string;
     if (data.target === "published") {
