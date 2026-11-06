@@ -453,6 +453,9 @@ function ProjectEditor() {
   // Plan first (think + approve) or build straight away.
   const [mode, setMode] = useState<EditorBuildMode>("build");
   const modeRef = useRef<EditorBuildMode>("build");
+  const [ollamaBuild, setOllamaBuild] = useState(false);
+  const ollamaBuildRef = useRef(false);
+  useEffect(() => { const on = window.localStorage.getItem("forge.build.ollama") === "on"; setOllamaBuild(on); ollamaBuildRef.current = on; }, []);
   const requestModeRef = useRef<EditorBuildMode | null>(null);
   // One-shot pre-approval for the automatic ZIP error fix (OpenRouter build model only).
   const zipAutoApproveRef = useRef(false);
@@ -927,11 +930,13 @@ function ProjectEditor() {
           headers["x-forge-mode"] = choice.mode;
           headers["x-forge-engine"] = choice.engine;
           if (choice.imageBuild) headers["x-forge-image-build"] = "yes";
+          const useOllama = ollamaBuildRef.current && choice.mode === "build" && choice.engine === "openrouter" && !choice.imageBuild;
+          if (useOllama) headers["x-forge-build-provider"] = "ollama";
           const zipAutoApproved = zipAutoApproveRef.current && choice.engine === "openrouter" && !choice.imageBuild;
           zipAutoApproveRef.current = false;
           if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
           else if (zipAutoApproved) { /* Owner asked ZIP errors to be fixed immediately with the OpenRouter build model. */ }
-          else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
+          else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : useOllama ? "Send this build to your Ollama model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
           headers["x-forge-auto"] = choice.engine === "cloudflare" ? "on" : "off";
           if (poolFromRef.current) {
@@ -2617,7 +2622,8 @@ function ProjectEditor() {
                   ))}
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-0.5">
+              <div className="flex items-center gap-1">
+              <div className="grid flex-1 grid-cols-3 gap-1 rounded-lg border border-border p-0.5">
                 {([
                   { key: "plan" as const, label: "Plan", icon: Lightbulb, hint: "Think, ask questions, propose a plan first" },
                   { key: "build" as const, label: "Build", icon: HammerIcon, hint: "Build it straight away" },
@@ -2640,6 +2646,18 @@ function ProjectEditor() {
                     {option.label}
                   </Button>
                 ))}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="Build with Ollama"
+                aria-pressed={ollamaBuild}
+                title={ollamaBuild ? "Builds use your Ollama model (tap to go back to OpenRouter)" : "Use your Ollama model for builds"}
+                onClick={() => { const next = !ollamaBuild; setOllamaBuild(next); ollamaBuildRef.current = next; window.localStorage.setItem("forge.build.ollama", next ? "on" : "off"); toast.success(next ? "Builds now use your Ollama model" : "Builds back on OpenRouter"); }}
+                className={`h-9 w-9 shrink-0 rounded-lg p-0 text-sm ${ollamaBuild ? "bg-primary/15 text-primary border border-primary/40" : "border border-border text-muted-foreground hover:text-primary"}`}
+              >
+                🦙
+              </Button>
               </div>
               {!isStreaming && !remoteWorking && (
                 <details className="text-xs text-muted-foreground"><summary className="cursor-pointer py-1">Suggestions</summary><div className="flex gap-2 overflow-x-auto py-2">

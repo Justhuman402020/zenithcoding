@@ -387,6 +387,9 @@ export const Route = createFileRoute("/api/public/chat")({
         const editorEngine = !imageBuild && !hasImages && request.headers.get("x-forge-engine") === "cloudflare" ? "cloudflare" : null;
         const selection = await workspacePick(planMode ? "plan" : "build", (existingJob?.build_engine as "openrouter" | "cloudflare" | null) ?? editorEngine, hasImages);
         const editorAuto = selection.engine === "cloudflare";
+        // Owner's Ollama build switch: text builds only, never Plan or image builds.
+        const ollamaBuild = !editorAuto && !planMode && !imageBuild && !hasImages && request.headers.get("x-forge-build-provider") === "ollama";
+        let ollamaPick: { ok: true; ref: ModelRef; apiKey: string; baseURL: string } | null = null;
         if (editorAuto) {
           const approvalId = request.headers.get("x-forge-approval");
           const { data: approval } = approvalId ? await supabaseAdmin.from("assistant_edit_requests").select("id").eq("id", approvalId).eq("user_id", userId).eq("project_id", projectId).eq("request_key", requestKey).eq("status", "running").maybeSingle() : { data: null };
@@ -413,6 +416,14 @@ export const Route = createFileRoute("/api/public/chat")({
           // Skip keys already at the 9k hand-off line so a restart never lands back on a spent key.
           chain = fullPool.filter((k) => k.position >= from && k.used < 9000 && providerKeys[k.id]).map((k) => ({ provider: k.id, model: codingModel }));
           if (!chain.length) return fail(424, JSON.stringify({ error: "pool_empty", message: `No saved Cloudflare key from #${from} onward.` }), "application/json");
+        } else if (ollamaBuild) {
+          const { loadOllamaBuild } = await import("@/lib/ollama-build.server");
+          const ob = await loadOllamaBuild(userId);
+          if (!ob.ok) return fail(424, JSON.stringify({ error: "ollama_offline", message: ob.message }), "application/json");
+          (providerRegistry as any[]).push({ id: ob.providerId, label: ob.label, envKey: "", baseURL: ob.baseURL, docs: "", models: [] });
+          (providerKeys as Record<string, string>)[ob.providerId] = ob.apiKey;
+          ollamaPick = { ok: true, ref: { provider: ob.providerId, model: ob.model }, apiKey: ob.apiKey, baseURL: ob.baseURL };
+          chain = [ollamaPick.ref];
         } else {
           const { withoutCloudflare } = await import("@/lib/cf-pool-routing");
           const allowed = new Set(withoutCloudflare(providerRegistry).map((p) => p.id));
@@ -507,7 +518,8 @@ export const Route = createFileRoute("/api/public/chat")({
           });
           trace.log("vision.plan", { detail: { provider: visualPlan.ref.provider, model: visualPlan.ref.model, failed: visualPlan.failed.length } });
         }
-        const pick = await trace.time("model.pick", () =>
+        // Ollama was already checked online; skip the ping (slow laptop models take a minute to answer).
+        const pick = ollamaPick ?? await trace.time("model.pick", () =>
           pickAvailableModel(chain, providerKeys, providerRegistry, gateway),
         );
         if (!pick.ok) {
