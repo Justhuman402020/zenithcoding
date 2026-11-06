@@ -77,4 +77,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
 - App install: manifest-only plus a root install-event provider and home-menu control; no service workers (offline not requested).
 - Screenshots: Microlink Brain vault keys in save order (quota/refusal → next); OpenRouter reads images.
-- The chat runner gates finished React/Vite edits on src/lib/build-check.ts (pure, Worker-safe link check: missing files/exports) with up to 3 repair rounds; esbuild cannot run in the Worker, so this mirrors Publish's link errors without bundling.
+- Finished React/Vite edits pass src/lib/build-check.ts (Worker-safe link check; esbuild can't run server-side), max 3 repairs.
