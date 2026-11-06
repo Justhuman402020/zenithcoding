@@ -31,7 +31,7 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
   const fingerprint = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, "0")).join("");
   const { data: previous } = await db.from("browser_checks").select("id,visual_status,visual_report,findings").eq("job_id", args.jobId).eq("source_fingerprint", fingerprint).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (previous?.visual_status === "passed" || previous?.visual_status === "problems") return { status: previous.visual_status, report: "Reused screenshot evidence for unchanged files.\n" + (previous.visual_report ?? ""), checkId: previous.id };
+  if (previous?.visual_status === "passed" || previous?.visual_status === "problems") return { status: previous.visual_status, report: "Files are unchanged since these screenshots, so this result is still current. Fix the problems listed below now, then check again.\n" + (previous.visual_report ?? ""), checkId: previous.id };
   const { data: claimed, error: claimError } = await db.from("chat_jobs").update({ visual_check_count: job.visual_check_count + 1 }).eq("id", args.jobId).eq("status", "running").eq("visual_check_count", job.visual_check_count).lt("visual_check_count", 3).select("id");
   if (claimError || !claimed?.length) throw new Error("Stopped after three visual-check rounds, or another check is already starting.");
   const { data: saved, error: saveError } = await db.from("browser_checks").insert({ user_id: args.userId, project_id: args.projectId, job_id: args.jobId, trace_id: args.trace?.traceId, target: "preview", ok: false, source_fingerprint: fingerprint, visual_status: "capturing", visual_model: preferred?.model ?? null, visual_phase: args.phase ?? "inspection", capture_status: "capturing" }).select("id").single();
@@ -84,7 +84,10 @@ export function visualCheckTools(args: Parameters<typeof checkProjectVisually>[0
     if (!enabled) return { status: "unverified", report: "No active owner task is available for this screenshot check." };
     if (used >= 3) return { status: "unverified", report: "This task already used its 3 screenshot rounds. Report the latest captured result instead of asking the owner to check." };
     used += 1;
-    return checkProjectVisually(args);
+    const result = await checkProjectVisually(args);
+    if (result.status === "problems") return { ...result, instruction: "These screenshots are for YOU. Fix every problem listed in the report by editing files now, then call inspect_preview again to confirm. Do not ask the owner to look at the site." };
+    if (result.status === "unverified") return { ...result, instruction: "Capture failed. Say the exact reason in one line, keep fixing from code, and try inspect_preview once more after your edits. Do not ask the owner to check the site." };
+    return result;
   } }) };
 }
 /** Background builds run on an internal host that refuses outside browsers (403); screenshots must open the public site. */

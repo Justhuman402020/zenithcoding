@@ -54,7 +54,7 @@ export async function runCheck(opts: { userId: string; projectId: string; url: s
   const started = Date.now();
   if (["localhost", "127.0.0.1", "::1"].includes(new URL(opts.url).hostname)) return { ok: false, error: "The remote screenshot browser cannot open the local editor address. Publish this update, then run the screenshot check from your live Code Haven site.", missingPermission: [], durationMs: 0 };
   try { return await runScreenshotOne(opts, started); }
-  catch (e) { return { ok: false, error: e instanceof Error && e.message.includes("Admin Brain") ? e.message : "ScreenshotOne capture could not finish. Check the screenshot key that is on in Admin Brain.", missingPermission: [], durationMs: Date.now() - started }; }
+  catch (e) { return { ok: false, error: `ScreenshotOne capture could not finish: ${e instanceof Error ? e.message.slice(0, 200) : "unknown error"}`, missingPermission: [], durationMs: Date.now() - started }; }
 }
 
 async function runScreenshotOne(opts: { userId: string; projectId: string; url: string }, started: number): Promise<CheckOutcome> {
@@ -69,10 +69,18 @@ async function runScreenshotOne(opts: { userId: string; projectId: string; url: 
   ];
   const shots: CheckShot[] = [];
   for (const s of specs) {
-    const res = await fetch(screenshotOneUrl(selected.key, s.url, s.viewport, s.mobile, s.full), { signal: AbortSignal.timeout(75_000) });
+    let res: Response | null = null; let lastError = "";
+    for (let attempt = 0; attempt < 2 && !res; attempt++) {
+      try {
+        const r = await fetch(screenshotOneUrl(selected.key, s.url, s.viewport, s.mobile, s.full), { signal: AbortSignal.timeout(110_000) });
+        if (r.status >= 500 || r.status === 408) { lastError = `ScreenshotOne ${r.status}: ${(await r.text()).slice(0, 160)}`; continue; }
+        res = r;
+      } catch (e) { lastError = e instanceof Error ? e.message : String(e); }
+    }
+    if (!res) return { ok: false, error: `The ${s.label} screenshot did not finish after 2 tries (${lastError.slice(0, 200)}). The key is fine; the page was slow to load.`, missingPermission: [], durationMs: Date.now() - started };
     if (res.status === 401 || res.status === 403 || res.status === 429 || res.status === 402) return { ok: false, error: `The screenshot key "${selected.label}" is used up or refused (${res.status}). Turn on another key in Admin Brain.`, missingPermission: [], durationMs: Date.now() - started };
     const type = res.headers.get("content-type") ?? "";
-    if (!res.ok || !type.startsWith("image/")) return { ok: false, error: `ScreenshotOne did not return a screenshot (${res.status}).`, missingPermission: [], durationMs: Date.now() - started };
+    if (!res.ok || !type.startsWith("image/")) return { ok: false, error: `ScreenshotOne did not return a screenshot (${res.status}): ${(await res.text()).slice(0, 200)}`, missingPermission: [], durationMs: Date.now() - started };
     const bytes = new Uint8Array(await res.arrayBuffer());
     const path = `${opts.userId}/${opts.projectId}/${Date.now()}-${shots.length}.jpg`;
     const { error } = await supabaseAdmin.storage.from("browser-checks").upload(path, bytes, { contentType: type, upsert: true });
