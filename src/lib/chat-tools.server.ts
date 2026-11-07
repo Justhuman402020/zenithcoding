@@ -22,11 +22,12 @@ export function normalizePath(path: string) {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
 }
 
-export function createGroqProvider(apiKey: string, baseURL = "https://api.groq.com/openai/v1") {
+export function createGroqProvider(apiKey: string, baseURL = "https://api.groq.com/openai/v1", fetchImpl?: typeof fetch) {
   return createOpenAICompatible({
     name: "groq",
     baseURL,
     headers: { Authorization: `Bearer ${apiKey}` },
+    ...(fetchImpl ? { fetch: fetchImpl } : {}),
     transformRequestBody: (body) => ({
       ...body,
       messages: Array.isArray(body.messages)

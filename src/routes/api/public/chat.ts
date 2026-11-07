@@ -957,7 +957,9 @@ export const Route = createFileRoute("/api/public/chat")({
             let lookOnlyHit = false;
             let watchdog: ReturnType<typeof setTimeout> | undefined;
             // Reasoning models on OpenRouter can think silently for a while; give them longer.
-            const stepTimeout = isCf ? STEP_TIMEOUT_MS : 90_000;
+            // Ollama on a home PC reads slowly; its connector pings `kick` while it works.
+            const isOllama = /^ollama-/.test(current.ref.provider);
+            const stepTimeout = isCf ? STEP_TIMEOUT_MS : isOllama ? 180_000 : 90_000;
             const kick = () => {
               if (watchdog) clearTimeout(watchdog);
               watchdog = setTimeout(() => {
@@ -967,7 +969,17 @@ export const Route = createFileRoute("/api/public/chat")({
             };
             kick();
             alive.ping = kick;
-            const model = createGroqProvider(current.apiKey, current.baseURL)(current.ref.model);
+            const ollamaFetch = isOllama
+              ? (await import("@/lib/ollama-native")).createOllamaNativeFetch({
+                  base: current.baseURL,
+                  onProgress: (p) => {
+                    kick();
+                    if (p.stage) progressModel.name = `${current.ref.model} (your PC is reading the request: part ${p.stage} of ${p.stages})`;
+                    else if (p.phase === "streaming") progressModel.name = `${current.ref.model} (${current.ref.provider})`;
+                  },
+                })
+              : undefined;
+            const model = createGroqProvider(current.apiKey, current.baseURL, ollamaFetch)(current.ref.model);
             trace.log("attempt.start", { detail: { attempt, provider: current.ref.provider, model: current.ref.model, carried: carried.length } });
 
             const callStarted = Date.now();

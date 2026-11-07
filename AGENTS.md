@@ -78,3 +78,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - App install: manifest + root install provider + home-menu control; no service workers.
 - Visual checks: ScreenshotOne Brain key only; agent browser: one warm E2B Playwright per task.
 - Finished React/Vite edits pass build-check.ts links then real tsc in E2B (agent-tools.server.ts), max 3 repairs.
+- Ollama builds go through src/lib/ollama-native.ts (native /api/chat with num_ctx and sliced prompt warm-up); Ollama's /v1 cannot raise its 4k default context and tunnels drop silent waits after ~100s.
