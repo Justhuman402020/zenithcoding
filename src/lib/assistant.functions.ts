@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, type EditStatus } from "./assistant-policy";
+import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, HELPER_TOOLS, HELPER_TOOL_ROUNDS, runHelperTool, formatHelperErrors, type EditStatus, type HelperFile, type HelperErrors } from "./assistant-policy";
 
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
@@ -17,41 +17,54 @@ async function keyFor(ctx: Ctx, keyId: string) {
   return { base, apiKey: await decryptSecret(data.key_encrypted) };
 }
 
-async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Array<{ role: string; content: string }>) {
+type Look = { files: HelperFile[]; errors: HelperErrors };
+
+async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Array<{ role: string; content: any }>, look?: Look) {
   const { base, apiKey } = await keyFor(ctx, keyId);
   // Self-hosted models are slow; keep the request small, and stream so long answers are never cut off.
-  const trimmed = [
+  const convo: any[] = [
     // The system message already puts the attached project first (see buildContext).
     ...messages.filter((m) => m.role === "system").map((m) => ({ ...m, content: String(m.content).slice(0, HELPER_CONTEXT_LIMIT.ollama) })),
     ...messages.filter((m) => m.role !== "system").slice(-8).map((m) => ({ ...m, content: typeof m.content === "string" ? m.content.slice(0, 2500) : m.content })),
   ];
-  const res = await fetch(`${base}/v1/chat/completions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages: trimmed, stream: true, reasoning_effort: "none", max_tokens: 8000 }),
-  });
-  if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 530 && /trycloudflare\.com$/i.test(new URL(base).hostname)) {
-      throw new Error("Your Ollama tunnel has expired or is offline. On your computer, stop the tunnel and start it again, copy the new trycloudflare.com address, and save it as the Base URL in Admin → AI Models → Chat helper keys. Your key is unchanged.");
-    }
-    if (res.status === 524) throw new Error("Your Ollama model didn't start answering in time and the tunnel gave up. Make sure Ollama is running and the laptop is awake");
-    throw new Error(`Ollama said ${res.status}: ${text.slice(0, 300)}`);
-  }
   const { readChatStream } = await import("./sse-chat");
-  const { text, complete } = await readChatStream(res.body);
-  if (!text && !complete) throw new Error("Your Ollama model stopped before answering. Make sure the laptop is awake and the tunnel window is open");
-  return complete ? text : `${text}\n\n_(The answer was cut off because the connection dropped.)_`;
+  let useTools = !!look;
+  for (let round = 0; ; round++) {
+    const withTools = useTools && round < HELPER_TOOL_ROUNDS;
+    const res = await fetch(`${base}/v1/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, messages: convo, stream: true, reasoning_effort: "none", max_tokens: 8000, ...(withTools ? { tools: HELPER_TOOLS } : {}) }),
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "");
+      // Some PC models can't use tools: answer from the attached files in the note instead.
+      if (withTools && res.status === 400 && /tool/i.test(text)) { useTools = false; continue; }
+      if (res.status === 530 && /trycloudflare\.com$/i.test(new URL(base).hostname)) {
+        throw new Error("Your Ollama tunnel has expired or is offline. On your computer, stop the tunnel and start it again, copy the new trycloudflare.com address, and save it as the Base URL in Admin → AI Models → Chat helper keys. Your key is unchanged.");
+      }
+      if (res.status === 524) throw new Error("Your Ollama model didn't start answering in time and the tunnel gave up. Make sure Ollama is running and the laptop is awake");
+      throw new Error(`Ollama said ${res.status}: ${text.slice(0, 300)}`);
+    }
+    const { text, complete, toolCalls } = await readChatStream(res.body);
+    if (withTools && look && toolCalls.length) {
+      convo.push({ role: "assistant", content: text || "", tool_calls: toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) });
+      for (const c of toolCalls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(c.name, c.arguments, look.files, look.errors, 6000) });
+      continue;
+    }
+    if (!text && !complete) throw new Error("Your Ollama model stopped before answering. Make sure the laptop is awake and the tunnel window is open");
+    return complete ? text : `${text}\n\n_(The answer was cut off because the connection dropped.)_`;
+  }
 }
 
-async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false) {
+async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false, look?: Look) {
   const { readWorkspaceAI, recordModelCall } = await import("./workspace-ai.server");
   const settings = await readWorkspaceAI();
   const ollama = settings.chatEngine === "ollama" && !images;
   const ref = ollama ? { provider: "ollama", model: model ?? "unknown" } : (images ? settings.image : settings.text) ?? { provider: "openrouter", model: "unknown" };
   const started = Date.now();
   try {
-    const out = await helperChatInner(ctx, keyId, model, messages, images, settings);
+    const out = await helperChatInner(ctx, keyId, model, messages, images, settings, look);
     await recordModelCall({ user_id: ctx.userId, provider: ref.provider, model: ref.model, section: "assistant", started_at: started, status: "ok" });
     return out;
   } catch (e: any) {
@@ -60,10 +73,10 @@ async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, 
   }
 }
 
-async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images: boolean, settings: Awaited<ReturnType<typeof import("./workspace-ai.server").readWorkspaceAI>>) {
+async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images: boolean, settings: Awaited<ReturnType<typeof import("./workspace-ai.server").readWorkspaceAI>>, look?: Look) {
   if (settings.chatEngine === "ollama" && !images) {
     if (!keyId || !model) throw new Error("Select your previous Ollama model");
-    return ollamaChat(ctx, keyId, model, messages);
+    return ollamaChat(ctx, keyId, model, messages, look);
   }
   const ref = images ? settings.image : settings.text;
   if (!ref) throw new Error("Select your OpenRouter model in Admin → AI Models");
@@ -71,10 +84,25 @@ async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | n
   const { providers, keys } = await loadProviderRegistry();
   const provider = providers.find((p) => p.id === ref.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL));
   if (!provider || !keys[ref.provider]) throw new Error("Saved OpenRouter key is not active");
-  const response = await fetch(`${provider.baseURL}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${keys[ref.provider]}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: ref.model, messages, stream: false, max_tokens: 2000 }) });
-  if (!response.ok) throw new Error(`OpenRouter could not answer (${response.status})`);
-  const json: any = await response.json();
-  return String(json?.choices?.[0]?.message?.content ?? "");
+  const convo: any[] = [...messages];
+  let useTools = !!look;
+  for (let round = 0; ; round++) {
+    const withTools = useTools && round < HELPER_TOOL_ROUNDS;
+    const response = await fetch(`${provider.baseURL}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${keys[ref.provider]}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: ref.model, messages: convo, stream: false, max_tokens: 2000, ...(withTools ? { tools: HELPER_TOOLS } : {}) }) });
+    if (!response.ok) {
+      if (withTools && (response.status === 400 || response.status === 404)) { useTools = false; continue; }
+      throw new Error(`OpenRouter could not answer (${response.status})`);
+    }
+    const json: any = await response.json();
+    const msg = json?.choices?.[0]?.message;
+    const calls: any[] = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+    if (withTools && look && calls.length) {
+      convo.push({ role: "assistant", content: msg?.content ?? "", tool_calls: calls });
+      for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(String(c.function?.name ?? ""), String(c.function?.arguments ?? ""), look.files, look.errors) });
+      continue;
+    }
+    return String(msg?.content ?? "");
+  }
 }
 
 /** One readable work-log line from a build trace row. */
@@ -90,12 +118,31 @@ async function isAdmin(ctx: Ctx) {
   return !!data;
 }
 
+/** Loads every file and every known problem of the attached project (read only). */
+async function loadProjectLook(ctx: Ctx, projectId: string): Promise<Look> {
+  const files: HelperFile[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: page } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).order("path").range(from, from + 999);
+    files.push(...((page ?? []) as any[]).map((f) => ({ path: String(f.path), content: String(f.content ?? "") })));
+    if (!page || page.length < 1000) break;
+  }
+  const { checkProjectBuild, formatBuildIssues } = await import("./build-check");
+  let build = "not checked";
+  try { const r = checkProjectBuild(files); build = r.ok ? `passed (${r.checked} files checked)` : formatBuildIssues(r, 15); } catch { build = "could not run"; }
+  const { data: failed } = await ctx.supabase.from("chat_jobs").select("prompt,error,created_at").eq("project_id", projectId).eq("status", "failed").order("created_at", { ascending: false }).limit(5);
+  const jobs = ((failed ?? []) as any[]).map((j) => `${String(j.created_at).slice(0, 16)} "${String(j.prompt).slice(0, 60)}" → ${String(j.error ?? "no reason saved").slice(0, 200)}`);
+  const { data: checks } = await ctx.supabase.from("browser_checks").select("visual_status,visual_report,created_at").eq("project_id", projectId).eq("user_id", ctx.userId).order("created_at", { ascending: false }).limit(2);
+  const preview = ((checks ?? []) as any[]).filter((c) => c.visual_report).map((c) => `${String(c.created_at).slice(0, 16)} [${c.visual_status}] ${String(c.visual_report).slice(0, 700)}`);
+  return { files, errors: { build, jobs, preview } };
+}
+
 /** Read-only context about Code Haven + the selected project. */
-async function buildContext(ctx: Ctx, projectId: string | null, engine: "ollama" | "openrouter") {
+async function buildContext(ctx: Ctx, projectId: string | null, engine: "ollama" | "openrouter", look: Look | null) {
   const core: string[] = [
-    "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable): projects with files, a live preview, a Cloudflare pool for approved planning (9k handoffs), and manually selected OpenRouter text/image models for approved builds, a Brain with global rules and skills, and an Admin vault of saved keys.",
-    "You can READ only. You can never write files, change Admin, or delete anything. You discuss, explain and plan.",
-    "When the owner asks for a change to the project, explain briefly, then put ONE precise instruction for the selected coding agent inside <edit>...</edit>. The owner must approve before it runs. Never claim the edit is done yourself.",
+    "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable): projects with files, a live preview, Cloudflare for approved planning, and a separate build model that edits files after approval.",
+    "You can LOOK AT EVERYTHING in the attached project: every file, build problems, failed builds and preview screenshot findings. Project files are given to you as plain text below and through your tools; read them, never say you cannot see them or that they are images.",
+    "Tools (read only): list_files, read_file(path), search_files(query), project_errors. Use them whenever you need a file or error that is not shown below. Help the owner understand problems, find the cause, and explain the fix.",
+    "You can NEVER edit, create or delete files, change Admin, or run builds yourself. When something should change, explain briefly, then put ONE precise instruction for the build model inside <edit>...</edit> (name the files, the problem and the exact fix). The owner taps Yes and the build model does the work. Never claim the change is done yourself.",
     "Be concise and friendly; the owner is not technical.",
   ];
   const project: string[] = [];
@@ -103,15 +150,15 @@ async function buildContext(ctx: Ctx, projectId: string | null, engine: "ollama"
   const fileBudget = HELPER_FILE_BUDGET[engine];
   if (projectId) {
     const { data: proj } = await ctx.supabase.from("projects").select("name,description").eq("id", projectId).eq("user_id", ctx.userId).maybeSingle();
-    if (proj) {
-      project.push(`ATTACHED PROJECT: "${proj.name}"${proj.description ? ` — ${proj.description}` : ""}. The owner attached this project to the chat and you CAN see its files below. Answer from these files. Never ask the owner to upload, paste or attach the project or a file; it is already here.`);
-      const { data: files } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).order("path");
-      const list = files ?? [];
-      project.push(`Files in "${proj.name}" (${list.length}): ${list.map((f: any) => f.path).join(", ")}`);
+    if (proj && look) {
+      project.push(`ATTACHED PROJECT: "${proj.name}"${proj.description ? ` — ${proj.description}` : ""}. The owner attached this project to the chat and you CAN see its files. Never ask the owner to upload, paste or attach the project or a file; it is already here.`);
+      const list = look.files;
+      project.push(`Files in "${proj.name}" (${list.length}): ${list.map((f) => f.path).join(", ")}`);
+      project.push(`Known problems:\n${formatHelperErrors(look.errors).slice(0, engine === "ollama" ? 1500 : 6000)}`);
       let budget: number = fileBudget.total;
       for (const f of list) {
         if (budget <= 0) break;
-        const chunk = (isEnvFile(f.path) ? redactEnv(String(f.content)) : String(f.content)).slice(0, Math.min(fileBudget.perFile, budget));
+        const chunk = (isEnvFile(f.path) ? redactEnv(f.content) : f.content).slice(0, Math.min(fileBudget.perFile, budget));
         budget -= chunk.length;
         project.push(`--- ${f.path}\n${chunk}`);
       }
@@ -262,11 +309,12 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at", { ascending: false }).limit(60);
     const { readWorkspaceAI } = await import("./workspace-ai.server");
     const engine = (await readWorkspaceAI()).chatEngine === "ollama" && !data.images?.length ? "ollama" : "openrouter";
-    const ctxText = await buildContext(context as Ctx, chat.project_id, engine);
+    const look = chat.project_id ? await loadProjectLook(context as Ctx, chat.project_id) : null;
+    const ctxText = await buildContext(context as Ctx, chat.project_id, engine, look);
     let reply: string;
     try {
       const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
-      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length);
+      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look ?? undefined);
     } catch (e) {
       reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
