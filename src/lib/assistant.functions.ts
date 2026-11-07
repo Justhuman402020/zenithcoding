@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, type EditStatus } from "./assistant-policy";
+import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, type EditStatus } from "./assistant-policy";
 
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
@@ -21,8 +21,9 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
   const { base, apiKey } = await keyFor(ctx, keyId);
   // Self-hosted models are slow; keep the request small, and stream so long answers are never cut off.
   const trimmed = [
-    ...messages.filter((m) => m.role === "system").map((m) => ({ ...m, content: String(m.content).slice(0, 4000) })),
-    ...messages.filter((m) => m.role !== "system").slice(-10),
+    // The system message already puts the attached project first (see buildContext).
+    ...messages.filter((m) => m.role === "system").map((m) => ({ ...m, content: String(m.content).slice(0, HELPER_CONTEXT_LIMIT.ollama) })),
+    ...messages.filter((m) => m.role !== "system").slice(-8).map((m) => ({ ...m, content: typeof m.content === "string" ? m.content.slice(0, 2500) : m.content })),
   ];
   const res = await fetch(`${base}/v1/chat/completions`, {
     method: "POST",
@@ -90,49 +91,54 @@ async function isAdmin(ctx: Ctx) {
 }
 
 /** Read-only context about Code Haven + the selected project. */
-async function buildContext(ctx: Ctx, projectId: string | null) {
-  const parts: string[] = [
+async function buildContext(ctx: Ctx, projectId: string | null, engine: "ollama" | "openrouter") {
+  const core: string[] = [
     "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable): projects with files, a live preview, a Cloudflare pool for approved planning (9k handoffs), and manually selected OpenRouter text/image models for approved builds, a Brain with global rules and skills, and an Admin vault of saved keys.",
     "You can READ only. You can never write files, change Admin, or delete anything. You discuss, explain and plan.",
     "When the owner asks for a change to the project, explain briefly, then put ONE precise instruction for the selected coding agent inside <edit>...</edit>. The owner must approve before it runs. Never claim the edit is done yourself.",
     "Be concise and friendly; the owner is not technical.",
   ];
-  const { data: projects } = await ctx.supabase.from("projects").select("id,name,description").eq("user_id", ctx.userId).order("updated_at", { ascending: false }).limit(40);
-  parts.push(`Owner's projects: ${(projects ?? []).map((p: any) => p.name).join(", ")}`);
-  if (await isAdmin(ctx)) {
-    const { loadAdminBrain, listVault } = await import("./admin-vault.server");
-    const brain = await loadAdminBrain();
-    if (brain) parts.push(`Brain rules:\n${brain.slice(0, 3000)}`);
-    const vault = await listVault();
-    parts.push(`Saved key names in the Admin vault (values hidden): ${vault.map((v) => v.label).join(", ") || "none"}`);
-    const { readWorkspaceAI } = await import("./workspace-ai.server");
-    const ai = await readWorkspaceAI();
-    parts.push(`Admin AI Models (read only): planning=Cloudflare; build engine=${ai.engine}; text=${ai.text?.model ?? "not selected"}; image=${ai.image?.model ?? "not selected"}; chat=${ai.chatEngine}. Never change these settings.`);
-  }
+  const project: string[] = [];
+  const extra: string[] = [];
+  const fileBudget = HELPER_FILE_BUDGET[engine];
   if (projectId) {
     const { data: proj } = await ctx.supabase.from("projects").select("name,description").eq("id", projectId).eq("user_id", ctx.userId).maybeSingle();
     if (proj) {
-      parts.push(`Selected project: ${proj.name}${proj.description ? ` — ${proj.description}` : ""}`);
+      project.push(`ATTACHED PROJECT: "${proj.name}"${proj.description ? ` — ${proj.description}` : ""}. The owner attached this project to the chat and you CAN see its files below. Answer from these files. Never ask the owner to upload, paste or attach the project or a file; it is already here.`);
+      const { data: files } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).order("path");
+      const list = files ?? [];
+      project.push(`Files in "${proj.name}" (${list.length}): ${list.map((f: any) => f.path).join(", ")}`);
+      let budget: number = fileBudget.total;
+      for (const f of list) {
+        if (budget <= 0) break;
+        const chunk = (isEnvFile(f.path) ? redactEnv(String(f.content)) : String(f.content)).slice(0, Math.min(fileBudget.perFile, budget));
+        budget -= chunk.length;
+        project.push(`--- ${f.path}\n${chunk}`);
+      }
+      const { data: jobs } = await ctx.supabase.from("chat_jobs").select("prompt,status,outcome,files_changed,created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(5);
+      project.push(`Recent builds: ${(jobs ?? []).map((j: any) => `[${j.status}/${j.outcome ?? "-"}] ${String(j.prompt).slice(0, 80)}`).join(" | ") || "none"}`);
       const { listBrainZips } = await import("./brain-zip.server");
       const { brainZipContext } = await import("./brain-zip");
       const references = await listBrainZips(ctx.supabase, projectId);
-      parts.push(brainZipContext(references));
-      if (references.length) parts.push("You cannot call reference tools yourself. Include the requested ZIP name and referenceId in the <edit> instruction so the approved coding agent reads it. Preserve existing navigation and functionality during a redesign.");
-      const { data: files } = await ctx.supabase.from("files").select("path,content").eq("project_id", projectId).order("path");
-      const list = files ?? [];
-      parts.push(`Files (${list.length}): ${list.map((f: any) => f.path).join(", ")}`);
-      let budget = 24000;
-      for (const f of list) {
-        if (budget <= 0) break;
-        const chunk = (isEnvFile(f.path) ? redactEnv(String(f.content)) : String(f.content)).slice(0, Math.min(4000, budget));
-        budget -= chunk.length;
-        parts.push(`--- ${f.path}\n${chunk}`);
-      }
-      const { data: jobs } = await ctx.supabase.from("chat_jobs").select("prompt,status,outcome,files_changed,created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(5);
-      parts.push(`Recent builds: ${(jobs ?? []).map((j: any) => `[${j.status}/${j.outcome ?? "-"}] ${String(j.prompt).slice(0, 80)}`).join(" | ") || "none"}`);
+      extra.push(brainZipContext(references));
+      if (references.length) extra.push("You cannot call reference tools yourself. Include the requested ZIP name and referenceId in the <edit> instruction so the approved coding agent reads it. Preserve existing navigation and functionality during a redesign.");
     }
+  } else {
+    core.push("No project is attached to this chat. If the owner asks about a project, tell them to tap the project button at the top of this chat to attach it.");
   }
-  return parts.join("\n\n");
+  const { data: projects } = await ctx.supabase.from("projects").select("id,name,description").eq("user_id", ctx.userId).order("updated_at", { ascending: false }).limit(40);
+  extra.push(`Owner's other projects (not attached): ${(projects ?? []).map((p: any) => p.name).join(", ")}`);
+  if (await isAdmin(ctx)) {
+    const { loadAdminBrain, listVault } = await import("./admin-vault.server");
+    const brain = await loadAdminBrain();
+    if (brain) extra.push(`Brain rules:\n${brain.slice(0, 3000)}`);
+    const vault = await listVault();
+    extra.push(`Saved key names in the Admin vault (values hidden): ${vault.map((v) => v.label).join(", ") || "none"}`);
+    const { readWorkspaceAI } = await import("./workspace-ai.server");
+    const ai = await readWorkspaceAI();
+    extra.push(`Admin AI Models (read only): planning=Cloudflare; build engine=${ai.engine}; text=${ai.text?.model ?? "not selected"}; image=${ai.image?.model ?? "not selected"}; chat=${ai.chatEngine}. Never change these settings.`);
+  }
+  return fitHelperContext({ core, project, extra }, HELPER_CONTEXT_LIMIT[engine]);
 }
 
 
@@ -254,7 +260,9 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
     const { error: saveError } = await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText, parts: { images: data.images ?? [] } });
     if (saveError) throw new Error("Could not save your message. Please try again.");
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at", { ascending: false }).limit(60);
-    const ctxText = await buildContext(context as Ctx, chat.project_id);
+    const { readWorkspaceAI } = await import("./workspace-ai.server");
+    const engine = (await readWorkspaceAI()).chatEngine === "ollama" && !data.images?.length ? "ollama" : "openrouter";
+    const ctxText = await buildContext(context as Ctx, chat.project_id, engine);
     let reply: string;
     try {
       const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));

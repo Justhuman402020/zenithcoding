@@ -45,6 +45,21 @@ export function ollamaBase(url: string): string {
   return url.replace(/\/+$/, "").replace(/\/(v1|api)$/, "");
 }
 
+/**
+ * Builds the chat helper's system message. The attached project goes first so a
+ * small character limit (slow self-hosted models) cuts Brain/vault notes, never the project.
+ */
+export function fitHelperContext(sections: { core: string[]; project: string[]; extra: string[] }, limit: number): string {
+  const head = [...sections.core, ...sections.project].join("\n\n");
+  const full = [head, ...sections.extra].filter(Boolean).join("\n\n");
+  return full.slice(0, Math.max(0, limit));
+}
+
+/** Character limits for the chat helper's system message per engine. */
+export const HELPER_CONTEXT_LIMIT = { ollama: 9000, openrouter: 60000 } as const;
+/** Per-file and total file-content budgets per engine. */
+export const HELPER_FILE_BUDGET = { ollama: { perFile: 1500, total: 5000 }, openrouter: { perFile: 4000, total: 24000 } } as const;
+
 /** True for .env-style files whose values must never reach the chat. */
 export function isEnvFile(path: string): boolean {
   return /(^|\/)\.env(\.|$)/i.test(path) || /(^|\/)\.dev\.vars$/i.test(path);
