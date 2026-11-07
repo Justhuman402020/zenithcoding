@@ -21,12 +21,9 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
   let html = args.html;
   let frameworkFiles: Array<{ path: string; content: string }> | null = null;
   if (!html) {
-    const { data: rows, error } = await db.from("files").select("path,content").eq("project_id", args.projectId).or("kind.is.null,kind.neq.build").order("path");
-    if (error) throw new Error("Could not read current preview files.");
-    const source = (rows ?? []).filter((f) => !f.path.startsWith(".code-haven-build/") && !/(^|\/)(\.env(?:\..*)?|.*\.(pem|key|p12)|credentials(?:\..*)?)$/i.test(f.path));
-    const framework = source.some((f) => /(?:src\/main\.[jt]sx?|src\/App\.[jt]sx?)$/.test(f.path));
-    if (framework) frameworkFiles = source;
-    html = framework ? JSON.stringify(source) : (await import("./project-preview")).projectPreviewDocument(source);
+    const src = await loadPreviewSource(args.projectId);
+    frameworkFiles = src.frameworkFiles;
+    html = src.html;
   }
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
   const fingerprint = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, "0")).join("");
@@ -76,6 +73,27 @@ export async function checkProjectVisually(args: { projectId: string; userId: st
     log(report, "error"); await args.trace?.flush();
     return { status: "unverified", report, checkId: saved.id };
   }
+}
+
+/** The project's current files, ready for a private preview (framework projects build in the browser). */
+export async function loadPreviewSource(projectId: string) {
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+  const { data: rows, error } = await db.from("files").select("path,content").eq("project_id", projectId).or("kind.is.null,kind.neq.build").order("path");
+  if (error) throw new Error("Could not read current preview files.");
+  const source = (rows ?? []).filter((f) => !f.path.startsWith(".code-haven-build/") && !/(^|\/)(\.env(?:\..*)?|.*\.(pem|key|p12)|credentials(?:\..*)?)$/i.test(f.path));
+  const framework = source.some((f) => /(?:src\/main\.[jt]sx?|src\/App\.[jt]sx?)$/.test(f.path));
+  const html = framework ? JSON.stringify(source) : (await import("./project-preview")).projectPreviewDocument(source);
+  return { html, frameworkFiles: framework ? source : null };
+}
+
+/** A fresh private one-time address showing the project's newest files. */
+export async function mintPreviewUrl(args: { projectId: string; userId: string; origin: string }) {
+  const { createPreviewToken, createSourcePreviewToken } = await import("./browser-check.server");
+  const src = await loadPreviewSource(args.projectId);
+  const origin = publicCaptureOrigin(args.origin);
+  return src.frameworkFiles
+    ? { url: `${origin}/visual-preview/${await createSourcePreviewToken(args.userId, args.projectId, src.frameworkFiles)}`, framework: true }
+    : { url: `${origin}/api/public/preview/${await createPreviewToken(args.userId, args.projectId, src.html)}`, framework: false };
 }
 
 export function visualCheckTools(args: Parameters<typeof checkProjectVisually>[0], enabled: boolean) {

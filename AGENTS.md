@@ -76,5 +76,5 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Site AI chat can run on the owner's Cloudflare pool via a per-project token (src/lib/project-ai-policy.ts rules, /api/public/sites/ai/chat); pool keys never leave Code Haven and the switch stops access instantly.
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
 - App install: manifest + root install provider + home-menu control; no service workers.
-- Screenshots: only the owner-enabled ScreenshotOne Brain key; OpenRouter reads.
+- Visual checks: ScreenshotOne Brain key only; agent browser: one warm E2B Playwright per task.
 - Finished React/Vite edits pass build-check.ts links then real tsc in E2B (agent-tools.server.ts), max 3 repairs.

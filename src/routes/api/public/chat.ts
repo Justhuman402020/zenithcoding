@@ -588,6 +588,12 @@ export const Route = createFileRoute("/api/public/chat")({
         if (jobId && visualJob?.visual_required == null) await supabaseAdmin.from("chat_jobs").update({ visual_required: visualApproved }).eq("id", jobId);
         const { visualCheckTools, checkProjectVisually } = await import("@/lib/visual-check.server");
         const { createAgentTools, withKeepAlive } = await import("@/lib/agent-tools.server");
+        // One warm Playwright browser for this whole Build / Image build / Ollama build task.
+        const { createBrowserSession } = await import("@/lib/browser-session.server");
+        const browserSession = createBrowserSession();
+        let browserReaderRef: Promise<import("@/lib/browser-vision.server").ReaderRef | null> | null = null;
+        const browserReader = () => (browserReaderRef ??= import("@/lib/browser-vision.server").then((m) =>
+          m.resolveScreenshotReader({ provider: pick.ref.provider, model: pick.ref.model, baseURL: pick.baseURL, apiKey: pick.apiKey }, ollamaBuild)));
         // Long sandbox tools ping this so the step watchdog doesn't abort them.
         const alive = { ping: () => {} };
         const visualArgs = { projectId, userId, jobId: jobId ?? "", origin: new URL(request.url).origin, trace };
@@ -627,7 +633,10 @@ export const Route = createFileRoute("/api/public/chat")({
               return { ok: true, report: `${formatBuildIssues(r)}\n${t.note}` };
             },
           }),
-          ...createAgentTools({ projectId, origin: visualArgs.origin, trace, keepAlive: () => alive.ping() }),
+          ...createAgentTools({
+            projectId, origin: visualArgs.origin, trace, keepAlive: () => alive.ping(),
+            browser: { session: browserSession, userId, jobId, goal: lastUserText.slice(0, 300), reader: browserReader },
+          }),
           ...visualCheckTools(visualArgs, !!jobId),
           ...brainZipTools.readTools,
           copy_brain_zip_file: brainZipTools.copy_brain_zip_file,
@@ -1433,6 +1442,7 @@ export const Route = createFileRoute("/api/public/chat")({
             if (!userStopped && writer) writer.write({ type: "error", errorText: reason });
           }
           if (writer) writer.write({ type: "finish" });
+          void browserSession.close();
           await trace.flush();
         };
 

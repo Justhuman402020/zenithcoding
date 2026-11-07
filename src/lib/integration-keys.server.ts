@@ -88,6 +88,63 @@ export async function neonCreateDatabase(name: string) {
   return { ok: true as const, neonProjectId: j.project?.id as string, connectionUri: uri };
 }
 
+export type E2BSandbox = { id: string; host: string; token?: string; key: string };
+
+/** Starts a reusable E2B sandbox that shuts itself down after `timeoutSec` without an extension. */
+export async function e2bCreateSandbox(timeoutSec = 600): Promise<{ ok: true; sandbox: E2BSandbox } | { ok: false; error: string }> {
+  const key = await getIntegrationKey("e2b", "apiKey");
+  if (!key) return { ok: false, error: "E2B key not saved in Admin → Integrations." };
+  const create = await fetch("https://api.e2b.dev/sandboxes", {
+    method: "POST",
+    headers: { "X-API-Key": key, "content-type": "application/json" },
+    body: JSON.stringify({ templateID: "code-interpreter-v1", timeout: timeoutSec }),
+  });
+  if (!create.ok) return { ok: false, error: `E2B ${create.status}: ${(await create.text()).slice(0, 200)}` };
+  const sb = (await create.json()) as any;
+  return { ok: true, sandbox: { id: sb.sandboxID, host: `https://49999-${sb.sandboxID}.${sb.domain ?? "e2b.app"}`, token: sb.envdAccessToken, key } };
+}
+
+/** Pushes the sandbox's self-shutdown time out again; false when it is already gone. */
+export async function e2bExtend(sb: E2BSandbox, timeoutSec = 600): Promise<boolean> {
+  try {
+    const r = await fetch(`https://api.e2b.dev/sandboxes/${sb.id}/timeout`, { method: "POST", headers: { "X-API-Key": sb.key, "content-type": "application/json" }, body: JSON.stringify({ timeout: timeoutSec }), signal: AbortSignal.timeout(15_000) });
+    return r.ok;
+  } catch { return false; }
+}
+
+export async function e2bKill(sb: E2BSandbox) {
+  await fetch(`https://api.e2b.dev/sandboxes/${sb.id}`, { method: "DELETE", headers: { "X-API-Key": sb.key } }).catch(() => {});
+}
+
+/** Runs code in an existing sandbox's kernel. `gone` means the sandbox no longer answers. */
+export async function e2bExecute(sb: E2BSandbox, code: string, opts: { timeoutSec?: number; maxOut?: number } = {}) {
+  let res: Response;
+  try {
+    res = await fetch(`${sb.host}/execute`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(sb.token ? { "X-Access-Token": sb.token } : {}) },
+      body: JSON.stringify({ code, language: "python" }),
+      signal: AbortSignal.timeout(((opts.timeoutSec ?? 120) + 15) * 1000),
+    });
+  } catch (e) {
+    return { ok: false as const, gone: false, error: e instanceof Error ? e.message : "sandbox did not answer" };
+  }
+  const raw = await res.text();
+  if (!res.ok) return { ok: false as const, gone: res.status === 502 || res.status === 404, error: `E2B run ${res.status}: ${raw.slice(0, 200)}` };
+  const out: string[] = [];
+  const errs: string[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.type === "stdout" || ev.type === "result") out.push(String(ev.text ?? ""));
+      else if (ev.type === "stderr") errs.push(String(ev.text ?? ""));
+      else if (ev.type === "error") errs.push(`${ev.name}: ${ev.value}`);
+    } catch { out.push(line); }
+  }
+  return { ok: true as const, stdout: out.join("").slice(-(opts.maxOut ?? 8000)), stderr: errs.join("").slice(0, 4000) };
+}
+
 /** Runs code in a short-lived E2B cloud sandbox (Code Interpreter template). */
 export async function e2bRunCode(code: string, language: "python" | "js" = "python", opts: { timeoutSec?: number; maxOut?: number } = {}) {
   const key = await getIntegrationKey("e2b", "apiKey");
