@@ -5,6 +5,7 @@ import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase
 
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
+import type { RunClock } from "./run-clock";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -268,10 +269,17 @@ export const getChat = createServerFn({ method: "POST" }).middleware([requireSup
     if (!chat) throw new Error("Chat not found");
     const { data: messages } = await (context.supabase as any).from("assistant_messages").select("id,role,content,parts,created_at").eq("chat_id", data.id).order("created_at");
     const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at,kind").eq("chat_id", data.id).order("created_at");
+    // Saved work clocks so finished jobs keep showing how long they worked.
+    const keys = ((edits ?? []) as any[]).map((e) => e.request_key).filter(Boolean);
+    const { data: jobs } = keys.length
+      ? await (context.supabase as any).from("chat_jobs").select("request_key,status,outcome,work_started_at,work_paused_at,work_paused_ms,completed_at").in("request_key", keys)
+      : { data: [] };
+    const clocks = new Map<string, RunClock>(((jobs ?? []) as any[]).map((j) => [j.request_key, { status: j.status, outcome: j.outcome, work_started_at: j.work_started_at, work_paused_at: j.work_paused_at, work_paused_ms: j.work_paused_ms, completed_at: j.completed_at }]));
+    for (const e of (edits ?? []) as any[]) e.clock = e.request_key ? clocks.get(e.request_key) ?? null : null;
     return {
       chat: { id: chat.id as string, title: chat.title as string, projectId: chat.project_id as string | null, projectName: ((chat as any).projects?.name ?? null) as string | null, keyId: chat.ollama_key_id as string | null, model: chat.model as string | null, initialized: !!chat.initialized_at },
       messages: (messages ?? []) as Array<{ id: string; role: string; content: string; parts: any; created_at: string }>,
-      edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; kind: string; request_key: string | null; report: any; created_at: string }>,
+      edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; kind: string; request_key: string | null; report: any; created_at: string; clock: RunClock | null }>,
     };
   });
 
@@ -315,6 +323,7 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
     const look = chat.project_id ? await loadProjectLook(context as Ctx, chat.project_id) : null;
     const ctxText = await buildContext(context as Ctx, chat.project_id, engine, look);
     let reply: string;
+    const askedAt = Date.now();
     try {
       const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
       reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look ?? undefined);
@@ -322,7 +331,7 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
       reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
     const { text, edit } = parseEditProposal(reply);
-    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send." });
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send.", parts: { reply_ms: Date.now() - askedAt } });
     if (edit && chat.project_id) {
       await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit, images: data.images ?? [] });
     }

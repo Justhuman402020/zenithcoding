@@ -77,3 +77,6 @@
 - [x] Agent browser test (Test button, "test my site", after-build test, Checks tab) — live run needs Browser Rendering permission on Cloudflare tokens
 - [x] Agent real typecheck (E2B tsc) + search_code, fetch_url, probe_url, read_site_logs, run_tests, stall guard
 - [ ] Live screenshots still ran old Microlink code at 09:29 — publish the ScreenshotOne version
+- [x] Agent real Playwright browser for Build / Image build / Ollama build
+- [x] Side chat: show model reply time and work time
+- [x] Side chat: message queue (edit/remove queued, auto-send when previous finishes)
