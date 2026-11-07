@@ -46,7 +46,6 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Route image attachments through a dedicated vision-planner pass, persist its brief per project, then let the selected coding model edit files from that brief; this keeps image interpretation separate from code execution.
 - Store the global Cloudflare coding model in the database so every pool key follows one admin-selected working free-tier model.
 - Global agent rules and admin credentials live in service-role-only tables; the agent sees vault names only and copies values into project secrets via a tool, so raw keys never enter prompts.
-- Cloudflare pool rules live as pure functions in src/lib/cf-pool-policy.ts; chat.ts only calls them, so rules stay unit-testable.
 - Site themes are pure data in src/lib/themes.ts (SVG doodles + CSS vars applied on <html>); the saved choice lives in user_settings so it follows the owner across devices.
 - Chat-approved Cloudflare edits are started by the database (pg_net via public.start_build_job) with the resume token, so the build is held open server-side and never depends on the phone staying online.
 - Owner access is revalidated in app function middleware and restrictive session policies; never gate public published sites or signed provider callbacks with workspace access.
@@ -60,8 +59,7 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Before build inference, await durable recovery payload/timer registration and persist the actual model snapshot with all media; restart claims refresh the heartbeat and never reclaim finished or paused runs.
 - Editor builds dispatch persisted input through a service-role-only database starter before returning to the viewer; the independent connection and existing recovery timer survive a phone disconnect.
 - Auth event invalidation compares user identities so repeated same-user SIGNED_IN events on wake do not rerun the generated admission guard.
-- Retain ZIP media and upload it in size-capped, timed, retried upserts (src/lib/zip-upload.ts) so slow networks show progress, never hang; post-import ZIP errors auto-fix via OpenRouter build, max 3 rounds. Namespace builds under .code-haven-build/.
-- Subdirectories have their own AGENTS.md (e.g. src/lib/runtime-mcp/ for Scrolltide); read it before changing files there.
+- Subdirectories have their own AGENTS.md (e.g. src/lib/, src/lib/runtime-mcp/ for Scrolltide); read it before changing files there.
 - Bound Vite discovery; prebundle browser CommonJS to prevent cold-start stalls and editor import failures.
 - Browser tests use hashed short-lived preview tokens; fixes need normal chat approval.
 - Project Brain ZIPs stay in private owner/project-scoped storage; agents read references on demand and copy only new files so saving a design cannot overwrite the site.
@@ -73,9 +71,6 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Sidebar project previews mount by chat/project identity and reuse the browser build/asset pipeline with owner-scoped reads; viewing never navigates to the editor, and switching attachments unmounts stale frames.
 - Work clocks use saved execution/pause/end timestamps with a local one-second display tick; counts only come from saved job statistics.
 - Necessary visual checks use persisted task-scoped eligibility independent of edit approval, save actual capture/inspection phases and private thumbnails, and feed post-edit problems to bounded repairs; inspection never grants edit/publish permission or changes the reader model.
-- Site AI chat can run on the owner's Cloudflare pool via a per-project token (src/lib/project-ai-policy.ts rules, /api/public/sites/ai/chat); pool keys never leave Code Haven and the switch stops access instantly.
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
 - App install: manifest + root install provider + home-menu control; no service workers.
 - Visual checks: ScreenshotOne Brain key only; agent browser: one warm E2B Playwright per task.
-- Finished React/Vite edits pass build-check.ts links then real tsc in E2B (agent-tools.server.ts), max 3 repairs.
-- Ollama builds go through src/lib/ollama-native.ts (native /api/chat with num_ctx and sliced prompt warm-up); Ollama's /v1 cannot raise its 4k default context and tunnels drop silent waits after ~100s.
