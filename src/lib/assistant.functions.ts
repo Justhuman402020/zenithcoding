@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, HELPER_TOOLS, HELPER_TOOL_ROUNDS, runHelperTool, formatHelperErrors, type EditStatus, type HelperFile, type HelperErrors } from "./assistant-policy";
+import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, HELPER_TOOLS, HELPER_TOOL_ROUNDS, HELPER_TOOL_OUTPUT, shouldRetryTunnel, runHelperTool, formatHelperErrors, type EditStatus, type HelperFile, type HelperErrors } from "./assistant-policy";
 
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
@@ -29,6 +29,7 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
   ];
   const { readChatStream } = await import("./sse-chat");
   let useTools = !!look;
+  let tunnelRetries = 0;
   for (let round = 0; ; round++) {
     const withTools = useTools && round < HELPER_TOOL_ROUNDS;
     const res = await fetch(`${base}/v1/chat/completions`, {
@@ -40,16 +41,18 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
       const text = await res.text().catch(() => "");
       // Some PC models can't use tools: answer from the attached files in the note instead.
       if (withTools && res.status === 400 && /tool/i.test(text)) { useTools = false; continue; }
+      // Tunnel gave up while the PC was still reading: ask the same step again.
+      if (shouldRetryTunnel(res.status, tunnelRetries)) { tunnelRetries++; round--; continue; }
       if (res.status === 530 && /trycloudflare\.com$/i.test(new URL(base).hostname)) {
         throw new Error("Your Ollama tunnel has expired or is offline. On your computer, stop the tunnel and start it again, copy the new trycloudflare.com address, and save it as the Base URL in Admin → AI Models → Chat helper keys. Your key is unchanged.");
       }
-      if (res.status === 524) throw new Error("Your Ollama model didn't start answering in time and the tunnel gave up. Make sure Ollama is running and the laptop is awake");
+      if (res.status === 524) throw new Error("Your Ollama model took too long to start answering, even after 3 tries. Your laptop may be busy or asleep. Ask a shorter question, or pick a smaller model and try again");
       throw new Error(`Ollama said ${res.status}: ${text.slice(0, 300)}`);
     }
     const { text, complete, toolCalls } = await readChatStream(res.body);
     if (withTools && look && toolCalls.length) {
       convo.push({ role: "assistant", content: text || "", tool_calls: toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) });
-      for (const c of toolCalls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(c.name, c.arguments, look.files, look.errors, 6000) });
+      for (const c of toolCalls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(c.name, c.arguments, look.files, look.errors, HELPER_TOOL_OUTPUT.ollama) });
       continue;
     }
     if (!text && !complete) throw new Error("Your Ollama model stopped before answering. Make sure the laptop is awake and the tunnel window is open");

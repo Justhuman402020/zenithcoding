@@ -29,3 +29,19 @@ describe("chat helper tools are look-only", () => {
     expect(runHelperTool("write_file", '{"path":"index.html"}', files, errors)).toMatch(/cannot edit/);
   });
 });
+
+import { shouldRetryTunnel, HELPER_TOOL_OUTPUT } from "./assistant-policy";
+describe("PC model tunnel retries", () => {
+  it("asks again twice when the tunnel gives up (524), then stops", () => {
+    expect(shouldRetryTunnel(524, 0)).toBe(true);
+    expect(shouldRetryTunnel(524, 1)).toBe(true);
+    expect(shouldRetryTunnel(524, 2)).toBe(false);
+  });
+  it("does not retry real errors like a wrong key", () => {
+    expect(shouldRetryTunnel(401, 0)).toBe(false);
+    expect(shouldRetryTunnel(530, 0)).toBe(false);
+  });
+  it("sends PC models shorter tool answers than OpenRouter", () => {
+    expect(HELPER_TOOL_OUTPUT.ollama).toBeLessThan(HELPER_TOOL_OUTPUT.openrouter);
+  });
+});

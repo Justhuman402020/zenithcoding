@@ -79,6 +79,17 @@ export type HelperErrors = { build: string; jobs: string[]; preview: string[] };
 /** Every tool the chat helper may call. None of them write anything. */
 export const HELPER_TOOL_NAMES = ["list_files", "read_file", "search_files", "project_errors"] as const;
 export const HELPER_TOOL_ROUNDS = 6;
+/** Max characters of one tool answer per engine; PC models read slowly, so keep theirs short. */
+export const HELPER_TOOL_OUTPUT = { ollama: 3500, openrouter: 6000 } as const;
+
+/**
+ * Tunnels (Cloudflare) give up when a PC model takes over 100s to start replying (status 524).
+ * The PC keeps what it already read, so asking again usually starts quickly. Retry twice, then stop.
+ */
+export const OLLAMA_TUNNEL_RETRIES = 2;
+export function shouldRetryTunnel(status: number, retriesSoFar: number): boolean {
+  return (status === 524 || status === 522 || status === 504) && retriesSoFar < OLLAMA_TUNNEL_RETRIES;
+}
 
 export const HELPER_TOOLS = [
   { type: "function", function: { name: "list_files", description: "List every file path in the attached project.", parameters: { type: "object", properties: {} } } },
