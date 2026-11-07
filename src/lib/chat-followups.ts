@@ -1,11 +1,11 @@
 const API_KEY_INTENT =
-  /\b(?:paste|add|save|store|enter|connect|use|update|replace)\b[\s\S]{0,50}\b(?:api[\s_-]*key|secret|token)\b|\b(?:api[\s_-]*key|secret|token)\b[\s\S]{0,50}\b(?:paste|add|save|store|enter|connect|use|update|replace)\b/i;
+  /\b(?:paste|add|save|store|enter|connect|use|update|replace)\b[\s\S]{0,50}\b(?:(?:api[\s_-]*)?key|secret|token)\b|\b(?:(?:api[\s_-]*)?key|secret|token)\b[\s\S]{0,50}\b(?:paste|add|save|store|enter|connect|use|update|replace)\b/i;
 
 const PROVIDER_KEYS: Array<[RegExp, string]> = [
   [/\bgroq\b/i, "GROQ_API_KEY"],
   [/\bopen\s*router\b/i, "OPENROUTER_API_KEY"],
   [/\bdeep\s*infra\b/i, "DEEPINFRA_API_KEY"],
-  [/\bgoogle(?:\s+ai(?:\s+studio)?)?|\bgemini\b/i, "GOOGLE_AI_STUDIO_API_KEY"],
+  [/\b(?:google(?:\s+ai(?:\s+studio)?)?|gemini)\b/i, "GOOGLE_AI_STUDIO_API_KEY"],
   [/\bmistral\b/i, "MISTRAL_API_KEY"],
   [/\bcerebras\b/i, "CEREBRAS_API_KEY"],
   [/\bopen\s*ai\b/i, "OPENAI_API_KEY"],
@@ -83,4 +83,21 @@ export function buildFollowUpSuggestion(prompt: string, changedPaths: string[]):
   if (target) return `Now polish ${target} for mobile and verify every interaction`;
   if (lower.trim()) return `Now continue from "${prompt.trim().slice(0, 60)}" and improve the next most important part`;
   return "Now test this build on mobile and improve the next most important screen";
+}
+
+/** 2-3 short, distinct next-step chips based on the request and changed files. */
+export function buildFollowUpSuggestions(prompt: string, changedPaths: string[]): string[] {
+  const lower = prompt.toLowerCase();
+  const chips: string[] = [];
+  const add = (c: string) => { if (!chips.includes(c)) chips.push(c); };
+  if (/sign\s*up|signup|login|auth/.test(lower)) { add("Add password reset"); add("Show errors under each field"); }
+  if (/home|menu|nav/.test(lower)) { add("Make the menu work on mobile"); add("Highlight the active page"); }
+  if (/form|contact/.test(lower)) add("Save form entries to the backend");
+  if (/image|photo|design|style|color/.test(lower)) add("Match the design more closely");
+  if (/fix|broken|error|fail|blank/.test(lower)) { add("Test the fixed flow end to end"); add("Check for other errors"); }
+  const page = changedPaths.find((p) => /\.html$/i.test(p));
+  if (page) add(`Polish ${page.split("/").pop()} for mobile`);
+  add("Add smooth animations");
+  add("Improve spacing and typography");
+  return chips.slice(0, 3);
 }

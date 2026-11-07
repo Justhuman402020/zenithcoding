@@ -69,5 +69,8 @@ export const remixTemplate = createServerFn({ method: "POST" })
         if (fErr) throw new Error(fErr.message);
       }
     }
+    const { seedPlatformBackend } = await import("./platform-backend.server");
+    await seedPlatformBackend(project.id, userId);
+
     return { projectId: project.id };
   });

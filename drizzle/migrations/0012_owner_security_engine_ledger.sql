@@ -1,0 +1,37 @@
+CREATE OR REPLACE FUNCTION public.workspace_session_allowed() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$ SELECT EXISTS (SELECT 1 FROM auth.users u JOIN auth.sessions s ON s.user_id=u.id WHERE u.id=auth.uid() AND lower(u.email)='justsamsung99@gmail.com' AND u.email_confirmed_at IS NOT NULL AND s.id::text=auth.jwt()->>'session_id'); $$;
+REVOKE ALL ON FUNCTION public.workspace_session_allowed() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.workspace_session_allowed() TO authenticated, service_role;
+CREATE TABLE public.workspace_ai_settings (id text PRIMARY KEY DEFAULT 'global', build_engine text NOT NULL DEFAULT 'openrouter' CHECK (build_engine IN ('openrouter','cloudflare')), text_provider text, text_model text, image_provider text, image_model text, updated_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT ON public.workspace_ai_settings TO authenticated;
+GRANT ALL ON public.workspace_ai_settings TO service_role;
+ALTER TABLE public.workspace_ai_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY owner_read_settings ON public.workspace_ai_settings FOR SELECT TO authenticated USING (public.workspace_session_allowed());
+CREATE TABLE public.neuron_call_ledger (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), created_at timestamptz NOT NULL DEFAULT now(), user_id uuid, project_id uuid, chat_id uuid, request_key text, section text NOT NULL CHECK (section IN ('chat','plan','build')), provider_id text NOT NULL, key_number integer, model text NOT NULL, step integer NOT NULL DEFAULT 0, input_tokens integer, output_tokens integer, neurons integer NOT NULL DEFAULT 0, source text NOT NULL DEFAULT 'estimate', action text NOT NULL DEFAULT '', status text NOT NULL DEFAULT 'ok');
+GRANT SELECT ON public.neuron_call_ledger TO authenticated;
+GRANT ALL ON public.neuron_call_ledger TO service_role;
+ALTER TABLE public.neuron_call_ledger ENABLE ROW LEVEL SECURITY;
+CREATE POLICY owner_read_neuron_ledger ON public.neuron_call_ledger FOR SELECT TO authenticated USING (public.workspace_session_allowed());
+CREATE INDEX neuron_ledger_day ON public.neuron_call_ledger(created_at, provider_id);
+ALTER TABLE public.chat_jobs ADD COLUMN IF NOT EXISTS build_engine text, ADD COLUMN IF NOT EXISTS engine_provider text, ADD COLUMN IF NOT EXISTS engine_model text;
+ALTER TABLE public.assistant_edit_requests ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'build', ADD COLUMN IF NOT EXISTS images jsonb NOT NULL DEFAULT '[]'::jsonb;
+DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['projects','files','chat_messages','chat_jobs','assistant_chats','assistant_messages','assistant_edit_requests','ollama_keys','user_settings','project_secrets','user_roles','profiles'] LOOP IF to_regclass('public.'||t) IS NOT NULL THEN EXECUTE format('CREATE POLICY workspace_owner_only ON public.%I AS RESTRICTIVE FOR ALL TO authenticated USING (public.workspace_session_allowed()) WITH CHECK (public.workspace_session_allowed())',t); END IF; END LOOP; END $$;
+CREATE OR REPLACE FUNCTION public.start_approved_workspace_job(_edit uuid) RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public, net AS $$
+DECLARE e public.assistant_edit_requests; tok text; rid bigint; engine text; provider text; model text; parts jsonb;
+BEGIN
+SELECT * INTO e FROM public.assistant_edit_requests WHERE id=_edit AND status='running';
+IF e.id IS NULL OR e.request_key IS NULL THEN RAISE EXCEPTION 'Approval required'; END IF;
+IF NOT EXISTS(SELECT 1 FROM auth.users WHERE id=e.user_id AND lower(email)='justsamsung99@gmail.com' AND email_confirmed_at IS NOT NULL) THEN RAISE EXCEPTION 'Not available'; END IF;
+SELECT token INTO tok FROM public.job_resume_config WHERE id='default';
+IF tok IS NULL THEN RAISE EXCEPTION 'Resume configuration missing'; END IF;
+SELECT CASE WHEN e.kind='plan' THEN 'cloudflare' ELSE build_engine END, CASE WHEN jsonb_array_length(e.images)>0 THEN image_provider ELSE text_provider END, CASE WHEN jsonb_array_length(e.images)>0 THEN image_model ELSE text_model END INTO engine,provider,model FROM public.workspace_ai_settings WHERE id='global';
+engine:=CASE WHEN e.kind='plan' THEN 'cloudflare' ELSE coalesce(engine,'openrouter') END;
+IF e.kind<>'plan' AND jsonb_array_length(e.images)>0 THEN engine:='openrouter'; END IF;
+IF engine='openrouter' AND (provider IS NULL OR model IS NULL) THEN RAISE EXCEPTION 'Select your OpenRouter model in AI Models first'; END IF;
+parts:=jsonb_build_array(jsonb_build_object('type','text','text',e.prompt));
+IF e.kind<>'plan' THEN parts:=parts||e.images; END IF;
+INSERT INTO public.chat_jobs(project_id,user_id,request_key,prompt,status,progress,build_engine,engine_provider,engine_model) VALUES(e.project_id,e.user_id,e.request_key,e.prompt,'queued','Starting',engine,provider,model) ON CONFLICT DO NOTHING;
+SELECT net.http_post(url:='https://project--4cd30b31-2a37-4c66-9cee-ab3d574ad805.lovable.app/api/public/chat',headers:=jsonb_build_object('Content-Type','application/json','x-project-id',e.project_id::text,'x-forge-mode',e.kind,'x-forge-engine',engine,'x-forge-model',coalesce(provider||':'||model,''),'x-forge-approval',e.id::text,'x-forge-request-key',e.request_key,'x-forge-resume-user',e.user_id::text,'x-forge-resume-token',tok),body:=jsonb_build_object('messages',jsonb_build_array(jsonb_build_object('id',gen_random_uuid()::text,'role','user','parts',parts))),timeout_milliseconds:=600000) INTO rid;
+RETURN rid;
+END $$;
+REVOKE ALL ON FUNCTION public.start_approved_workspace_job(uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.start_approved_workspace_job(uuid) TO service_role;

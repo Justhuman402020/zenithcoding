@@ -87,6 +87,9 @@ export const importLovableProject = createServerFn({ method: "POST" })
       content: starter,
     });
 
+    const { seedPlatformBackend } = await import("./platform-backend.server");
+    await seedPlatformBackend(project.id, userId);
+
     return { projectId: project.id, resumed: false };
   });
 

@@ -1,61 +1,44 @@
-## In-browser build pipeline for Forge
+# Give Build, Image build and Ollama build a real Playwright browser
 
-Add a client-side build step that runs before Publish and before Push-to-GitHub, so imported source repos (Vite/React/Vue/Svelte/TS/Tailwind) actually produce a working `dist/` instead of shipping raw source.
+## What you'll get
+Your build agents get their own real browser they can use whenever they want during a task, the same way I test your app:
+- Open the project's **latest unsaved version** (not just the published site) or any public https page.
+- Click buttons, type into forms, press keys, scroll, switch between phone and PC size, go to other pages.
+- Read what's on the screen (text, buttons, links), console errors, crashes and failed requests.
+- Take screenshots at any step. You'll see them in the work log like the ScreenshotOne ones.
+- Fix what they find, then open the browser again to confirm.
 
-### Approach
+Works the same for **Build**, **Image build** and **Build with 🦙 Ollama on**. Plan and the side chat are not changed.
 
-Build runs in the user's browser using **`@bhwd/esbuild-wasm`** (esbuild compiled to WASM) as the bundler, plus a lightweight virtual-FS resolver over the project's `files` table. No server compute — fits Cloudflare Workers constraints. For unknown/Node-only packages we surface a clear error and fall back to pushing/publishing the source as-is (current behavior).
+## How it will work
+1. **New agent tool "browser"**. The agent sends a short list of steps, for example:
+   open page, then click "Sign in", then type an email, then take a screenshot, then read the errors.
+   It gets back each step's result, the page text, the errors and the screenshots.
+2. **Fast after the first use.** Today the browser installs itself again on every call, which takes 1–2 minutes. The new browser stays open for the whole task: the first use takes about a minute, every next use takes a few seconds. It shuts down when the task ends or after 10 quiet minutes.
+3. **Tests your newest edits.** If the agent changed files that aren't published yet, the browser opens a private one-time preview link of the current files (the same private link the screenshot camera uses). Otherwise it opens the published site.
+4. **Who looks at the screenshots:**
+   - 🦙 Ollama on: the pictures go straight to your Ollama model on your PC.
+   - OpenRouter: the pictures go to the build model if it can see images, otherwise to your selected OpenRouter image reader, which writes back what it sees.
+5. **Never cut off.** Long browser runs keep the work alive, so the task isn't restarted halfway.
+6. **No looping.** The existing "same failure twice, change approach" rule also covers the browser.
 
-### Pieces to build
+## What stays the same
+- Plan = Cloudflare only. Build and Image build = OpenRouter, or Ollama when 🦙 is on.
+- The official "visual check" before saying "done" still uses your ScreenshotOne key that's turned on in Admin → Brain. The new browser's screenshots are for the agent's own testing in between.
+- The agent still can't delete saved keys, and it never sees key values.
 
-1. **`src/lib/browser-build.ts`** — new client module:
-   - Loads `esbuild-wasm` lazily (dynamic import + `initialize({ wasmURL })` from CDN).
-   - Virtual FS built from the project's files (path → content map).
-   - Resolver plugin:
-     - Relative/absolute paths → look up in virtual FS (with `.ts/.tsx/.jsx/.js/index.*` resolution).
-     - Bare imports (`react`, `react-dom`, `@tanstack/*`, etc.) → rewrite to `https://esm.sh/<pkg>@<version>?bundle` using versions from the project's `package.json`.
-     - CSS/`@import` handled by esbuild's `css` loader; Tailwind detected via `tailwindcss` in deps → run Tailwind in-browser via `@tailwindcss/browser` CDN script injected into the built `index.html` (pragmatic: avoids running the PostCSS pipeline in-browser).
-   - Entry detection: read `index.html`, find `<script type="module" src="...">`, bundle that entry to `dist/assets/index-[hash].js` + `dist/assets/index-[hash].css`, rewrite `index.html` to point at the built assets, copy `public/*` verbatim.
-   - Returns `{ ok: true, files: {path, content}[] }` or `{ ok: false, error }`.
+## Cost and limits
+- The browser runs on your E2B account (the key already saved in Admin → Integrations). Each task uses one browser for a few minutes of E2B time.
+- Each browser call is limited to about 3 minutes and 40 steps, so one bad step can't hang a task. There's no limit on how many times the agent uses it in one task.
+- Only public https addresses and the project's own private preview can be opened. Nothing inside Code Haven's own servers.
 
-2. **`src/components/BuildDialog.tsx`** — new UI:
-   - Progress log (reuses same NDJSON-style event shape as `push-stream`).
-   - "Build" / "Skip build & publish source" buttons.
-   - On failure: show error + option to publish source anyway.
-
-3. **Wire into Publish flow** (`src/routes/_authenticated/p.$projectId.tsx` — the publish button):
-   - Detect "buildable" project: presence of `package.json` with a `build` script AND either `vite`, `react`, `vue`, or `svelte` in deps.
-   - If buildable → open BuildDialog → on success, upload the produced `dist/*` files to a new `project_build_artifacts` table (or reuse `files` with a `kind: 'build'` column).
-   - `/s/$slug` route: prefer built artifacts when present, else current behavior.
-
-4. **Wire into Push-to-GitHub flow** (`GithubPushDialog.tsx` + `push-stream.ts`):
-   - Before calling `push-stream`, run the same browser build.
-   - If build succeeds, include `dist/` files in the push payload (send as `extraFiles` alongside `priorBlobs`).
-   - Server route accepts optional `extraFiles: {path, content}[]` and adds them to the tree.
-   - Skippable via checkbox "Push source only (no build)".
-
-5. **DB migration** — add `kind text default 'source'` to `files` table, or add `project_build_artifacts` table with same shape as `files`. Simpler: add `kind` column; `/s/$slug` reads `kind='build'` if any exist, else `kind='source'`.
-
-### Failure handling (per your "one that wouldn't fail" choice)
-
-The build **will** fail on Node-only deps (sharp, fs, native modules). We handle it by:
-- Catching the error, showing exactly which import failed.
-- Offering a "publish/push source anyway" button that falls back to today's behavior.
-- Never silently shipping a broken build.
-
-### What's out of scope
-
-- SSR frameworks (Next.js, Remix, TanStack Start source) — will fail-and-fallback. Detected up front with a warning: "This looks like an SSR app; in-browser build can't handle it. Publish source instead?"
-- Custom Vite plugins that need Node APIs.
-
-### Files touched
-
-- **New:** `src/lib/browser-build.ts`, `src/components/BuildDialog.tsx`, migration for `files.kind`.
-- **Edited:** `src/routes/_authenticated/p.$projectId.tsx` (publish button), `src/components/GithubPushDialog.tsx`, `src/routes/api/public/push-stream.ts` (accept extraFiles), `src/routes/s.$slug.tsx` (prefer built artifacts).
-- **Package:** `bun add esbuild-wasm`.
-
-### Estimated size
-
-Medium-large — ~600 lines across 3 new files + edits to 4 existing files. One migration.
-
-Approve and I'll build it in one pass.
+## Technical details
+- `src/lib/integration-keys.server.ts`: split `e2bRunCode` into `e2bCreateSandbox` / `e2bExecute` / `e2bKill` so one sandbox can be reused; keep `e2bRunCode` unchanged for existing callers.
+- New `src/lib/browser-session.server.ts`: per-job sandbox cache (job id → sandbox id + access token, stored on the job row so resumed jobs reuse it), lazy Playwright install once, idle kill after 10 min, killed at job finish.
+- New pure `src/lib/browser-steps.ts`: zod schema for steps (`goto`, `click`, `fill`, `press`, `select`, `scroll`, `wait_for`, `viewport`, `screenshot`, `read_text`, `read_logs`), URL safety (reuse `isBlockedUrl`), step/size caps, and the Python step-runner generator. Unit tests for schema, caps, URL blocking and the generator.
+- `src/lib/agent-tools.server.ts`: add `browser` tool (Build/Image build/Ollama only; excluded from `readOnly`), using `withKeepAlive`. Screenshots uploaded to the private `browser-checks` bucket and logged as trace phases with thumbnails.
+- Preview target: mint a hashed short-lived preview token from current project files (existing `preview_tokens` flow) when files changed since last publish.
+- `src/routes/api/public/chat.ts`: pass job id to the tools; feed screenshot images back as image parts to vision-capable models (Ollama in 🦙 mode), otherwise through the existing OpenRouter vision reader.
+- `src/lib/chat-agent.server.ts`: prompt tells the agent when to use `browser` (reproduce a bug, test a flow after edits) and to fix what it finds.
+- `read_site_logs` becomes a thin wrapper over the same session so it's fast too.
+- AGENTS.md: one rule for the reusable per-job browser sandbox.

@@ -1,0 +1,5 @@
+ALTER TABLE public.chat_jobs
+  ADD COLUMN IF NOT EXISTS outcome text,
+  ADD COLUMN IF NOT EXISTS steps_done integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS files_changed integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS rounds integer NOT NULL DEFAULT 1;
