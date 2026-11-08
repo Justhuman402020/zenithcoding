@@ -1,0 +1,195 @@
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
+import type { Database } from "@/integrations/supabase/types";
+import {
+  parseWorkLog,
+  safeLogText,
+  sanitizeDetail,
+  type WorkStep,
+  type FileEvidence,
+} from "./work-log";
+type Job = Pick<
+  Database["public"]["Tables"]["chat_jobs"]["Row"],
+  | "id"
+  | "prompt"
+  | "status"
+  | "progress"
+  | "error"
+  | "outcome"
+  | "steps_done"
+  | "files_changed"
+  | "created_at"
+  | "completed_at"
+  | "trace_id"
+  | "work_started_at"
+  | "work_paused_at"
+  | "work_paused_ms"
+>;
+type Edit = Database["public"]["Tables"]["assistant_edit_requests"]["Row"];
+type SavedMessage = { content: string; parts?: { editId?: string; log?: string[] } };
+type Event = {
+  phase: string;
+  status: string;
+  message: string | null;
+  detail: { path?: string; change?: FileEvidence };
+  duration_ms: number | null;
+  created_at: string;
+};
+
+export const getWorkDetails = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        projectId: z.string().uuid(),
+        runId: z.string().max(100),
+        chatId: z.string().uuid().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const db = context.supabase;
+    const { data: project, error: projectError } = await db
+      .from("projects")
+      .select("id")
+      .eq("id", data.projectId)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (projectError || !project) throw new Error("Work log not available.");
+    const [kind, ...rest] = data.runId.split("-");
+    const id = rest.join("-");
+    let job: Job | null = null;
+    let message: SavedMessage | null = null;
+    let edit: Edit | null = null;
+    if (data.chatId) {
+      const { data: chat } = await db
+        .from("assistant_chats")
+        .select("id")
+        .eq("id", data.chatId)
+        .eq("user_id", context.userId)
+        .maybeSingle();
+      if (!chat) throw new Error("Chat not available.");
+    }
+    if (kind === "e") {
+      const { data: row, error } = await db
+        .from("assistant_edit_requests")
+        .select("*")
+        .eq("id", id)
+        .eq("project_id", data.projectId)
+        .eq("user_id", context.userId)
+        .maybeSingle();
+      if (error || !row || row.chat_id !== data.chatId) throw new Error("Work log not available.");
+      edit = row;
+    }
+    if (kind === "m" || kind === "a") {
+      if (kind === "a" && !data.chatId) throw new Error("Chat not available.");
+      const { data: row, error } =
+        kind === "a"
+          ? await db
+              .from("assistant_messages")
+              .select("content,parts")
+              .eq("id", id)
+              .eq("user_id", context.userId)
+              .eq("chat_id", data.chatId ?? "")
+              .maybeSingle()
+          : await db
+              .from("chat_messages")
+              .select("content")
+              .eq("id", id)
+              .eq("user_id", context.userId)
+              .eq("project_id", data.projectId)
+              .maybeSingle();
+      if (error || !row) throw new Error("Work log not available.");
+      message = row as SavedMessage;
+    }
+    if (kind === "a" && message?.parts?.editId) {
+      const { data: row } = await db
+        .from("assistant_edit_requests")
+        .select("*")
+        .eq("id", message.parts.editId)
+        .eq("project_id", data.projectId)
+        .eq("chat_id", data.chatId ?? "")
+        .eq("user_id", context.userId)
+        .maybeSingle();
+      edit = row;
+    }
+    const linkedId = message?.content?.match(/<!-- run:([\w-]+) -->/)?.[1];
+    if (kind === "j" || kind === "k" || edit?.request_key || linkedId) {
+      let q = db
+        .from("chat_jobs")
+        .select(
+          "id,prompt,status,progress,error,outcome,steps_done,files_changed,created_at,completed_at,trace_id,work_started_at,work_paused_at,work_paused_ms",
+        )
+        .eq("project_id", data.projectId)
+        .eq("user_id", context.userId);
+      q = q.eq(
+        kind === "k" || edit?.request_key ? "request_key" : "id",
+        edit?.request_key ?? linkedId ?? id,
+      );
+      const { data: row, error } = await q.maybeSingle();
+      if (error) throw new Error("Could not load this work log.");
+      job = row;
+    }
+    let events: Event[] = [];
+    if (job?.trace_id) {
+      const { data: rows, error } = await db
+        .from("chat_traces")
+        .select("id,phase,status,message,detail,duration_ms,created_at,seq")
+        .eq("project_id", data.projectId)
+        .eq("user_id", context.userId)
+        .eq("trace_id", job.trace_id)
+        .order("created_at")
+        .order("seq")
+        .limit(2000);
+      if (error) throw new Error("Could not load recorded steps.");
+      events = (rows ?? []) as unknown as Event[];
+    }
+    const legacy = parseWorkLog(
+      message?.content?.split("\n\n<!-- worklog -->\n")[1] ??
+        (message?.parts?.log ?? (edit?.report as { log?: string[] } | null)?.log ?? []).join("\n"),
+    );
+    const steps: WorkStep[] = events
+      .filter(
+        (t) =>
+          t.phase !== "file.change" && !/^(request\.|credits\.|project\.|snapshot\.)/.test(t.phase),
+      )
+      .map((t) => ({
+        time: String(t.created_at).slice(11, 19),
+        text: safeLogText(
+          t.phase === "work.progress"
+            ? (t.message ?? "Working")
+            : `${t.phase.replace(/^tool\./, "").replace(/[._]/g, " ")}${t.detail?.path ? ` · ${t.detail.path}` : ""}${t.message ? ` — ${t.message}` : ""}`,
+        ),
+        status: String(t.status),
+        durationMs: t.duration_ms == null ? null : Number(t.duration_ms),
+        detail: JSON.stringify(sanitizeDetail(t.detail)),
+      }));
+    const changes = events
+      .filter((t) => t.phase === "file.change" && t.detail?.change)
+      .map((t) => sanitizeDetail(t.detail.change) as FileEvidence);
+    const files = [...new Set<string>([...legacy.files, ...changes.map((c) => c.path)])];
+    const { data: checks } = job ? await db.from("browser_checks").select("id,visual_status,visual_report,screenshots,created_at,visual_phase,capture_status,inspection_status").eq("job_id", job.id).eq("user_id", context.userId).order("created_at") : { data: [] };
+    const visualChecks = await Promise.all((checks ?? []).map(async (check) => {
+      const shots = Array.isArray(check.screenshots) ? check.screenshots as Array<{ label: string; url: string }> : [];
+      return { id: check.id, phase:check.visual_phase, captureStatus:check.capture_status, inspectionStatus:check.inspection_status, status: check.visual_status, report: check.visual_report, shots: await Promise.all(shots.map(async (shot) => {
+        const { data: link } = await db.storage.from("browser-checks").createSignedUrl(shot.url, 3600);
+        return { label: shot.label, url: link?.signedUrl ?? "" };
+      })) };
+    }));
+    return {
+      visualChecks,
+      title: safeLogText(job?.prompt ?? edit?.prompt ?? "Work log"),
+      status: String(job?.status ?? edit?.status ?? (kind === "k" ? "queued" : "completed")),
+      progress: safeLogText(job?.progress ?? ""),
+      error: safeLogText(job?.error ?? ""),
+      startedAt: job?.work_started_at ?? null,
+      clock: { status: job?.status ?? edit?.status, outcome: job?.outcome, work_started_at: job?.work_started_at, completed_at: job?.completed_at, work_paused_at: job?.work_paused_at, work_paused_ms: job?.work_paused_ms },
+      completedAt: job?.completed_at ?? null,
+      steps: steps.length ? steps : legacy.steps,
+      changes,
+      files,
+      stepCount: Number(job?.steps_done ?? steps.length),
+      fileCount: Number(job?.files_changed ?? files.length),
+    };
+  });

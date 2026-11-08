@@ -1,0 +1,2 @@
+ALTER TABLE public.chat_jobs ADD COLUMN IF NOT EXISTS visual_reader_provider text, ADD COLUMN IF NOT EXISTS visual_reader_model text;
+COMMENT ON COLUMN public.chat_jobs.visual_reader_model IS 'Selected image reader snapshot for an approved visual workflow; never reselect on resume.';

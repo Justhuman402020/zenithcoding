@@ -1,0 +1,2 @@
+ALTER TABLE public.ollama_keys ADD COLUMN IF NOT EXISTS activated_at timestamptz;
+UPDATE public.ollama_keys SET activated_at = created_at WHERE active = true AND active_model IS NOT NULL AND activated_at IS NULL;
