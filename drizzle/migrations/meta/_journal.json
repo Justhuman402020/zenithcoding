@@ -225,6 +225,13 @@
       "when": 1793957831748,
       "tag": "0031_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794101686063,
+      "tag": "0032_ollama_keys_activated_at",
+      "breakpoints": true
     }
   ]
 }

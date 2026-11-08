@@ -217,7 +217,7 @@ export const setKeyActive = createServerFn({ method: "POST" }).middleware([requi
     const { data: k } = await (context.supabase as any).from("ollama_keys").select("base_url").eq("id", data.id).maybeSingle();
     if (!k) throw new Error("Key not found");
     if (data.model) assertChatUrlAllowed(k.base_url);
-    const { error } = await (context.supabase as any).from("ollama_keys").update({ active: !!data.model, active_model: data.model }).eq("id", data.id);
+    const { error } = await (context.supabase as any).from("ollama_keys").update({ active: !!data.model, active_model: data.model, activated_at: data.model ? new Date().toISOString() : null }).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

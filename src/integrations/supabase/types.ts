@@ -953,6 +953,7 @@ export type Database = {
       }
       ollama_keys: {
         Row: {
+          activated_at: string | null
           active: boolean
           active_model: string | null
           base_url: string
@@ -963,6 +964,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          activated_at?: string | null
           active?: boolean
           active_model?: string | null
           base_url?: string
@@ -973,6 +975,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          activated_at?: string | null
           active?: boolean
           active_model?: string | null
           base_url?: string
