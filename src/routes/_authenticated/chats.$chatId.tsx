@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronLog } from "@/components/NeuronLog";
+import { ChosenModelPicker } from "@/components/ChosenModelPicker";
 import { WorkLogCard } from "@/components/WorkLogCard";
 import { AttachedProjectPreview } from "@/components/AttachedProjectPreview";
 import { attachedPreviewProject } from "@/lib/project-preview";
@@ -199,7 +200,7 @@ function ChatPage() {
         <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/chats" })} aria-label="Back"><ArrowLeft className="h-5 w-5" /></Button>
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{data.chat.title}</div>
-          <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
+          <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "chosen" ? data.chat.chosenModel ?? "Pick a chosen model" : ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
         {data.chat.projectId && <Button variant={previewProject ? "secondary" : "ghost"} size="icon" aria-label="Preview attached project" title="Preview attached project" disabled={changingProject} onClick={() => setOpenedPreview(previewProject ? null : data.chat.projectId)}><Eye className="h-4 w-4" /></Button>}
@@ -231,7 +232,7 @@ function ChatPage() {
                 </div>
               : <div key={it.m.id} className="max-w-full">
                   <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{it.m.content}</ReactMarkdown></div>
-                  {replyTime(index) && <div className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Replied in {replyTime(index)}</div>}
+                  {replyTime(index) && <div className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Replied in {replyTime(index)}{it.kind === "msg" && it.m.parts?.model ? ` · ${String(it.m.parts.model)}` : ""}</div>}
                   {it.m.parts?.planning && <div className="mt-3 border rounded-md p-3 text-xs"><NeuronLog><span className="ml-1">Planning · {it.m.parts.planning.used} Neurons</span></NeuronLog>{it.m.parts.planning.steps.map((step: any, i: number) => <div key={i} className="flex justify-between gap-2 border-b py-1"><span>Step {step.step} · Key #{step.key_number}</span><span>{step.neurons} Neurons</span></div>)}</div>}
                   {Array.isArray(it.m.parts?.log) && it.m.parts.log.length > 0 && (
                     data.chat.projectId && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`a-${it.m.id}`} title="Saved work" log={it.m.parts.log.join("\n")} />
@@ -299,6 +300,7 @@ function ChatPage() {
               const files = Array.from(e.clipboardData.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null && isChatImage(file));
               if (files.length) { e.preventDefault(); const caption = e.clipboardData.getData("text/plain"); if (caption) setText((current) => current + caption); void addImages(files); }
             }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask about your project…" className="min-h-10 min-w-0 max-h-40 w-0 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
+            {ai?.chatEngine === "chosen" && <ChosenModelPicker chatId={chatId} currentId={data.chat.chosenModelId} onChanged={() => void reload()} />}
             {(() => { const queueing = busy || running.length > 0; return <Button size="icon" className="rounded-full shrink-0" disabled={readingImages || !canSendChat(text, images, attachments.length)} onClick={submit} aria-label={queueing ? "Add to queue" : "Send"} title={queueing ? "Add to queue" : "Send"}>{readingImages ? <Loader2 className="h-4 w-4 animate-spin" /> : queueing ? <ListPlus className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}</Button>; })()}
           </div>
         </div>

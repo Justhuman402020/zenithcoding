@@ -14,7 +14,7 @@ export const getWorkspaceAI = createServerFn({ method: "GET" }).middleware([requ
   return readWorkspaceAI();
 });
 export const saveWorkspaceAI = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ engine: z.enum(["openrouter", "cloudflare"]), chatEngine: z.enum(["openrouter", "ollama"]).optional(), text: z.object({ provider: z.string(), model: z.string() }).nullable(), image: z.object({ provider: z.string(), model: z.string() }).nullable() }).parse(d))
+  .inputValidator((d) => z.object({ engine: z.enum(["openrouter", "cloudflare"]), chatEngine: z.enum(["openrouter", "ollama", "chosen"]).optional(), text: z.object({ provider: z.string(), model: z.string() }).nullable(), image: z.object({ provider: z.string(), model: z.string() }).nullable() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: user } = await context.supabase.auth.getUser();
     if (!isOwner(user.user)) throw new Error("Not available");

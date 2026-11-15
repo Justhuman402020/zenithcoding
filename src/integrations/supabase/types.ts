@@ -208,6 +208,7 @@ export type Database = {
       }
       assistant_chats: {
         Row: {
+          chosen_model_id: string | null
           created_at: string
           id: string
           initialized_at: string | null
@@ -219,6 +220,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          chosen_model_id?: string | null
           created_at?: string
           id?: string
           initialized_at?: string | null
@@ -230,6 +232,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          chosen_model_id?: string | null
           created_at?: string
           id?: string
           initialized_at?: string | null
@@ -241,6 +244,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "assistant_chats_chosen_model_id_fkey"
+            columns: ["chosen_model_id"]
+            isOneToOne: false
+            referencedRelation: "chat_chosen_models"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "assistant_chats_ollama_key_id_fkey"
             columns: ["ollama_key_id"]
@@ -431,6 +441,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      chat_chosen_models: {
+        Row: {
+          created_at: string
+          id: string
+          key_label: string
+          key_ref: string
+          last_status: string
+          model: string
+          provider: string
+          tested_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key_label?: string
+          key_ref: string
+          last_status?: string
+          model: string
+          provider: string
+          tested_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key_label?: string
+          key_ref?: string
+          last_status?: string
+          model?: string
+          provider?: string
+          tested_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       chat_jobs: {
         Row: {

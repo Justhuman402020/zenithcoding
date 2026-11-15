@@ -6,6 +6,7 @@ import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
 import type { RunClock } from "./run-clock";
+import { requireChosen, sortModelsAZ, type ChosenRef } from "./chosen-models";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -61,14 +62,15 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
   }
 }
 
-async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false, look?: Look) {
+async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false, look?: Look, chosen?: ChosenRef | null) {
   const { readWorkspaceAI, recordModelCall } = await import("./workspace-ai.server");
   const settings = await readWorkspaceAI();
   const ollama = settings.chatEngine === "ollama" && !images;
-  const ref = ollama ? { provider: "ollama", model: model ?? "unknown" } : (images ? settings.image : settings.text) ?? { provider: "openrouter", model: "unknown" };
+  const isChosen = settings.chatEngine === "chosen";
+  const ref = isChosen ? { provider: chosen?.provider ?? "chosen", model: chosen?.model ?? "unknown" } : ollama ? { provider: "ollama", model: model ?? "unknown" } : (images ? settings.image : settings.text) ?? { provider: "openrouter", model: "unknown" };
   const started = Date.now();
   try {
-    const out = await helperChatInner(ctx, keyId, model, messages, images, settings, look);
+    const out = isChosen ? await chosenChat(ctx, requireChosen(chosen), messages, look) : await helperChatInner(ctx, keyId, model, messages, images, settings, look);
     await recordModelCall({ user_id: ctx.userId, provider: ref.provider, model: ref.model, section: "assistant", started_at: started, status: "ok" });
     return out;
   } catch (e: any) {
@@ -84,6 +86,16 @@ async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | n
   }
   const ref = images ? settings.image : settings.text;
   if (!ref) throw new Error("Select your OpenRouter model in Admin → AI Models");
+  return openrouterChat(ref, messages, look);
+}
+
+/** A saved Chosen model answers; no fallback to any other model. */
+async function chosenChat(ctx: Ctx, chosen: ChosenRef, messages: Array<{ role: string; content: any }>, look?: Look) {
+  if (chosen.provider === "ollama") return ollamaChat(ctx, chosen.keyRef, chosen.model, messages, look);
+  return openrouterChat({ provider: chosen.keyRef, model: chosen.model }, messages, look);
+}
+
+async function openrouterChat(ref: { provider: string; model: string }, messages: Array<{ role: string; content: any }>, look?: Look) {
   const { loadProviderRegistry } = await import("./model-router.server");
   const { providers, keys } = await loadProviderRegistry();
   const provider = providers.find((p) => p.id === ref.provider && /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL));
@@ -265,7 +277,7 @@ export const renameChat = createServerFn({ method: "POST" }).middleware([require
 export const getChat = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,ollama_key_id,model,initialized_at,projects(name)").eq("id", data.id).maybeSingle();
+    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,ollama_key_id,model,chosen_model_id,initialized_at,projects(name),chat_chosen_models(model)").eq("id", data.id).maybeSingle();
     if (!chat) throw new Error("Chat not found");
     const { data: messages } = await (context.supabase as any).from("assistant_messages").select("id,role,content,parts,created_at").eq("chat_id", data.id).order("created_at");
     const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at,kind").eq("chat_id", data.id).order("created_at");
@@ -277,7 +289,7 @@ export const getChat = createServerFn({ method: "POST" }).middleware([requireSup
     const clocks = new Map<string, RunClock>(((jobs ?? []) as any[]).map((j) => [j.request_key, { status: j.status, outcome: j.outcome, work_started_at: j.work_started_at, work_paused_at: j.work_paused_at, work_paused_ms: j.work_paused_ms, completed_at: j.completed_at }]));
     for (const e of (edits ?? []) as any[]) e.clock = e.request_key ? clocks.get(e.request_key) ?? null : null;
     return {
-      chat: { id: chat.id as string, title: chat.title as string, projectId: chat.project_id as string | null, projectName: ((chat as any).projects?.name ?? null) as string | null, keyId: chat.ollama_key_id as string | null, model: chat.model as string | null, initialized: !!chat.initialized_at },
+      chat: { id: chat.id as string, title: chat.title as string, projectId: chat.project_id as string | null, projectName: ((chat as any).projects?.name ?? null) as string | null, keyId: chat.ollama_key_id as string | null, model: chat.model as string | null, chosenModelId: (chat.chosen_model_id ?? null) as string | null, chosenModel: ((chat as any).chat_chosen_models?.model ?? null) as string | null, initialized: !!chat.initialized_at },
       messages: (messages ?? []) as Array<{ id: string; role: string; content: string; parts: any; created_at: string }>,
       edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; kind: string; request_key: string | null; report: any; created_at: string; clock: RunClock | null }>,
     };
@@ -305,7 +317,7 @@ export const setupChat = createServerFn({ method: "POST" }).middleware([requireS
 export const sendChatMessage = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), text: z.string().min(1).max(20000), attachments: z.array(z.object({ name: z.string().max(200), text: z.string().max(20000) })).max(5).optional(), images: z.array(z.object({ type: z.literal("file"), mediaType: z.string().regex(/^image\/(png|jpeg|webp|gif)$/), url: z.string().max(8000000) })).max(3).optional(), plan: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model").eq("id", data.id).single();
+    const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model,chosen_model_id").eq("id", data.id).single();
     if (!chat) throw new Error("Chat not found");
     if (data.plan) {
       if (!chat.project_id) throw new Error("Select a project first");
@@ -319,19 +331,23 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
     if (saveError) throw new Error("Could not save your message. Please try again.");
     const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at", { ascending: false }).limit(60);
     const { readWorkspaceAI } = await import("./workspace-ai.server");
-    const engine = (await readWorkspaceAI()).chatEngine === "ollama" && !data.images?.length ? "ollama" : "openrouter";
+    const chatEngine = (await readWorkspaceAI()).chatEngine;
+    const chosen = chatEngine === "chosen" ? await chosenForChat(context as Ctx, data.id, chat.chosen_model_id) : null;
+    const engine = chatEngine === "chosen" ? (chosen?.provider === "ollama" ? "ollama" : "openrouter") : chatEngine === "ollama" && !data.images?.length ? "ollama" : "openrouter";
     const look = chat.project_id ? await loadProjectLook(context as Ctx, chat.project_id) : null;
     const ctxText = await buildContext(context as Ctx, chat.project_id, engine, look);
     let reply: string;
     const askedAt = Date.now();
     try {
       const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
-      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look ?? undefined);
+      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look ?? undefined, chosen);
     } catch (e) {
-      reply = `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
+      reply = chatEngine === "chosen"
+        ? `⚠️ ${e instanceof Error ? e.message : "The chosen model failed"}. This model is not working right now — choose another model from the model list.`
+        : `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
     const { text, edit } = parseEditProposal(reply);
-    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send.", parts: { reply_ms: Date.now() - askedAt } });
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send.", parts: { reply_ms: Date.now() - askedAt, ...(chosen ? { model: chosen.model } : {}) } });
     if (edit && chat.project_id) {
       await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit, images: data.images ?? [] });
     }
@@ -438,4 +454,97 @@ export const listProjectFiles = createServerFn({ method: "POST" }).middleware([r
     }
     all.sort((a, b) => String(a.path).localeCompare(String(b.path), undefined, { sensitivity: "base" }));
     return all.map((f) => ({ path: f.path as string, text: String(f.content) }));
+  });
+
+
+// ---------- Chosen models (side chat) ----------
+
+type ChosenRow = { id: string; provider: "ollama" | "openrouter"; key_ref: string; key_label: string; model: string; last_status: string; tested_at: string };
+
+/** The chat's chosen model; a new chat starts on the model used last. */
+async function chosenForChat(ctx: Ctx, chatId: string, chosenId: string | null): Promise<ChosenRef | null> {
+  let row: ChosenRow | null = null;
+  if (chosenId) row = (await ctx.supabase.from("chat_chosen_models").select("*").eq("id", chosenId).maybeSingle()).data;
+  if (!row) {
+    const { data: last } = await ctx.supabase.from("assistant_chats").select("chosen_model_id").not("chosen_model_id", "is", null).order("updated_at", { ascending: false }).limit(1).maybeSingle();
+    if (last?.chosen_model_id) row = (await ctx.supabase.from("chat_chosen_models").select("*").eq("id", last.chosen_model_id).maybeSingle()).data;
+    if (row) await ctx.supabase.from("assistant_chats").update({ chosen_model_id: row.id }).eq("id", chatId);
+  }
+  return row ? { provider: row.provider, keyRef: row.key_ref, model: row.model } : null;
+}
+
+async function openrouterKeys() {
+  const { loadProviderRegistry } = await import("./model-router.server");
+  const { providers, keys } = await loadProviderRegistry();
+  return providers.filter((p) => /^https:\/\/openrouter\.ai\/api\/v1/.test(p.baseURL) && keys[p.id]).map((p) => ({ id: p.id, label: p.label, baseURL: p.baseURL, apiKey: keys[p.id] }));
+}
+
+/** Every saved key that can power the chat (labels only, never values). */
+export const listChatKeys = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+  if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can manage chosen models");
+  const { data: ollama } = await (context.supabase as any).from("ollama_keys").select("id,label").order("created_at");
+  const routers = await openrouterKeys();
+  return [
+    ...((ollama ?? []) as any[]).map((k) => ({ provider: "ollama" as const, keyRef: String(k.id), label: `Ollama · ${k.label}` })),
+    ...routers.map((r) => ({ provider: "openrouter" as const, keyRef: r.id, label: r.label })),
+  ];
+});
+
+export const listKeyModels = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ provider: z.enum(["ollama", "openrouter"]), keyRef: z.string().min(1).max(200) }).parse(d))
+  .handler(async ({ data, context }) => {
+    if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can manage chosen models");
+    try {
+      let base: string, apiKey: string;
+      if (data.provider === "ollama") ({ base, apiKey } = await keyFor(context as Ctx, data.keyRef));
+      else { const k = (await openrouterKeys()).find((r) => r.id === data.keyRef); if (!k) throw new Error("Key not active"); base = k.baseURL.replace(/\/v1$/, ""); apiKey = k.apiKey; }
+      const res = await fetch(`${base}/v1/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
+      if (!res.ok) return { models: [] as string[], error: res.status === 530 ? "This Ollama tunnel is offline or expired." : `Could not list models (${res.status})` };
+      const json: any = await res.json();
+      return { models: sortModelsAZ(((json?.data ?? []) as any[]).map((m) => String(m.id))), error: null as string | null };
+    } catch (e: any) { return { models: [] as string[], error: String(e?.message ?? "Could not list models").slice(0, 200) }; }
+  });
+
+export const testChatModel = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ provider: z.enum(["ollama", "openrouter"]), keyRef: z.string().min(1).max(200), model: z.string().min(1).max(300) }).parse(d))
+  .handler(async ({ data, context }) => {
+    if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can manage chosen models");
+    try {
+      const out = await chosenChat(context as Ctx, { provider: data.provider, keyRef: data.keyRef, model: data.model }, [{ role: "user", content: "Reply with the single word OK." }]);
+      if (!out.trim()) return { ok: false, error: "The model sent an empty answer. Choose another model." };
+      return { ok: true, error: null as string | null };
+    } catch (e: any) { return { ok: false, error: `${String(e?.message ?? "Not working").slice(0, 200)}. Choose another model.` }; }
+  });
+
+export const listChosenModels = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+  const { data } = await (context.supabase as any).from("chat_chosen_models").select("id,provider,key_ref,key_label,model,last_status,tested_at").order("model");
+  return (data ?? []) as ChosenRow[];
+});
+
+export const saveChosenModel = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ provider: z.enum(["ollama", "openrouter"]), keyRef: z.string().min(1).max(200), keyLabel: z.string().max(200), model: z.string().min(1).max(300) }).parse(d))
+  .handler(async ({ data, context }) => {
+    if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can manage chosen models");
+    const { error } = await (context.supabase as any).from("chat_chosen_models").upsert({ user_id: context.userId, provider: data.provider, key_ref: data.keyRef, key_label: data.keyLabel, model: data.model, last_status: "good", tested_at: new Date().toISOString() }, { onConflict: "user_id,provider,key_ref,model" });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const deleteChosenModel = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await (context.supabase as any).from("chat_chosen_models").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const setChatChosenModel = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ chatId: z.string().uuid(), chosenId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: row } = await (context.supabase as any).from("chat_chosen_models").select("model").eq("id", data.chosenId).maybeSingle();
+    if (!row) throw new Error("Chosen model not found");
+    const { error } = await (context.supabase as any).from("assistant_chats").update({ chosen_model_id: data.chosenId, updated_at: new Date().toISOString() }).eq("id", data.chatId);
+    if (error) throw new Error(error.message);
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.chatId, user_id: context.userId, role: "assistant", content: `Now using ${row.model}. Ask me anything.`, parts: { model: row.model } });
+    return { ok: true };
   });
