@@ -6,7 +6,7 @@ import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
 import type { RunClock } from "./run-clock";
-import { requireChosen, sortModelsAZ, type ChosenRef } from "./chosen-models";
+import { orderChosenBySavedKey, requireChosen, sortModelsAZ, type ChosenRef } from "./chosen-models";
 
 type Ctx = { supabase: any; userId: string };
 

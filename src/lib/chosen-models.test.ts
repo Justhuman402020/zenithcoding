@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { requireChosen, sortModelsAZ, sortRowsAZ } from "./chosen-models";
+import { orderChosenBySavedKey, requireChosen, sortModelsAZ, sortRowsAZ } from "./chosen-models";
 
 describe("chosen models", () => {
   it("lists models of a key A to Z, ignoring case and duplicates", () => {
