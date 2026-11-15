@@ -486,8 +486,7 @@ function AdminModelsPage() {
           ) : null}
           {[...groups.entries()].map(([providerId, rows]) => {
             const summary = summaries.get(providerId);
-            const expanded = open[providerId] ?? false;
-            const visible = expanded || query ? rows : rows.slice(0, 6);
+            const visible = rows; // every model on the key, always shown
             return (
             <div key={providerId} className="rounded-xl border overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 gap-3">
@@ -596,14 +595,6 @@ function AdminModelsPage() {
                   </div>
                 ))}
               </div>
-              {rows.length > visible.length || (expanded && !query) ? (
-                <button
-                  className="w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t"
-                  onClick={() => setOpen((prev) => ({ ...prev, [providerId]: !expanded }))}
-                >
-                  {expanded ? "Show fewer models" : `Show all ${rows.length} models`}
-                </button>
-              ) : null}
             </div>
             );
           })}
