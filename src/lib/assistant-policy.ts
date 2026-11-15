@@ -18,7 +18,7 @@ export function assertChatUrlAllowed(url: string): void {
 }
 
 /** Everything the chat helper can do. Reading only — no write/delete. */
-export const ASSISTANT_CAPABILITIES = ["read_projects", "read_files", "read_brain", "read_vault_names", "read_recent_jobs", "propose_edit"] as const;
+export const ASSISTANT_CAPABILITIES = ["read_projects", "read_files", "read_brain", "read_vault_names", "read_recent_jobs", "see_images", "plan_projects", "send_to_build"] as const;
 
 /** Pulls an edit proposal out of the model reply: <edit>...</edit>. */
 export function parseEditProposal(reply: string): { text: string; edit: string | null } {
@@ -75,9 +75,11 @@ export function redactEnv(text: string): string {
 
 export type HelperFile = { path: string; content: string };
 export type HelperErrors = { build: string; jobs: string[]; preview: string[] };
+/** Brain rules, saved key NAMES (never values) and project names the helper may read. */
+export type HelperInfo = { brain: string; keys: string; projects: string };
 
 /** Every tool the chat helper may call. None of them write anything. */
-export const HELPER_TOOL_NAMES = ["list_files", "read_file", "search_files", "project_errors"] as const;
+export const HELPER_TOOL_NAMES = ["list_files", "read_file", "search_files", "project_errors", "read_brain", "list_saved_keys", "list_projects"] as const;
 export const HELPER_TOOL_ROUNDS = 6;
 /** Max characters of one tool answer per engine; PC models read slowly, so keep theirs short. */
 export const HELPER_TOOL_OUTPUT = { ollama: 3500, openrouter: 6000 } as const;
@@ -96,12 +98,15 @@ export const HELPER_TOOLS = [
   { type: "function", function: { name: "read_file", description: "Read the full text of one project file.", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } } },
   { type: "function", function: { name: "search_files", description: "Find lines containing some text across all project files.", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } } },
   { type: "function", function: { name: "project_errors", description: "Show current build problems, failed recent builds and preview screenshot findings.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "read_brain", description: "Read the owner's Admin Brain rules and instructions.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "list_saved_keys", description: "List the NAMES of every saved API key (Admin Brain vault, AI Models keys, the attached project's secrets) and the selected build models. Values are never shown.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "list_projects", description: "List the owner's projects.", parameters: { type: "object", properties: {} } } },
 ] as const;
 
 const show = (f: HelperFile) => (isEnvFile(f.path) ? redactEnv(f.content) : f.content);
 
 /** Runs one read-only helper tool over already-loaded project data. */
-export function runHelperTool(name: string, rawArgs: string, files: HelperFile[], errors: HelperErrors, maxChars = 12000): string {
+export function runHelperTool(name: string, rawArgs: string, files: HelperFile[], errors: HelperErrors, maxChars = 12000, info?: HelperInfo): string {
   let args: any = {};
   try { args = rawArgs ? JSON.parse(rawArgs) : {}; } catch { args = {}; }
   if (name === "list_files") return files.length ? files.map((f) => `${f.path} (${f.content.length} chars)`).join("\n") : "The project has no files.";
@@ -122,7 +127,10 @@ export function runHelperTool(name: string, rawArgs: string, files: HelperFile[]
     return hits.length ? hits.join("\n") : `No lines contain "${args.query}".`;
   }
   if (name === "project_errors") return formatHelperErrors(errors);
-  return `Unknown tool "${name}". You can only read: ${HELPER_TOOL_NAMES.join(", ")}. You cannot edit; put changes in <edit>…</edit> for the build model.`;
+  if (name === "read_brain") return (info?.brain || "The Brain has no notes.").slice(0, maxChars);
+  if (name === "list_saved_keys") return (info?.keys || "No saved keys found.").slice(0, maxChars);
+  if (name === "list_projects") return (info?.projects || "No projects yet.").slice(0, maxChars);
+  return `Unknown tool "${name}". You can only read: ${HELPER_TOOL_NAMES.join(", ")}. You cannot edit files or change/delete keys; put fixes in <send-to-build>…</send-to-build> for the build screen.`;
 }
 
 export function formatHelperErrors(e: HelperErrors): string {

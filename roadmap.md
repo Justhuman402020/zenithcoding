@@ -80,3 +80,6 @@
 - [x] Agent real Playwright browser for Build / Image build / Ollama build
 - [x] Side chat: show model reply time and work time
 - [x] Side chat: message queue (edit/remove queued, auto-send when previous finishes)
+
+- [x] Side chat (Ollama / OpenRouter / Chosen models): read-only tools incl. Brain rules and saved key names, images to the in-charge model, plans new projects, Yes opens the build screen where Cloudflare plans before the OpenRouter build; 338 tests and typecheck pass.
+- [ ] Verify a real chat plan → Yes → Cloudflare plan → OpenRouter build in the app: needs the owner's signed-in device and live model calls.

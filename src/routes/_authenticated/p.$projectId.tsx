@@ -6,6 +6,7 @@ import { buildStoragePath } from "@/lib/publish-files";
 import { ScrolltideTemplates } from "@/components/ScrolltideTemplates";
 import { isScrolltideLookup } from "@/lib/runtime-mcp/scrolltide-policy";
 import { editorRequestChoice, type EditorBuildMode } from "@/lib/image-delivery";
+import { handoffPlanPrompt } from "@/lib/chat-handoff";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { NeuronLog } from "@/components/NeuronLog";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -136,7 +137,8 @@ type PreviewErrorCtx = {
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({ meta: [{ title: "Project editor — Code Haven" }, { name: "description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:title", content: "Project editor — Code Haven" }, { property: "og:description", content: "Plan, build, preview, and publish your web project in Code Haven." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
-  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview"; zipcheck?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { prompt?: string; scrolltide?: string; tab?: "preview"; zipcheck?: string; handoff?: string } => ({
+    ...(typeof search.handoff === "string" && /^[0-9a-f-]{36}$/i.test(search.handoff) ? { handoff: search.handoff } : {}),
     ...(search.tab === "preview" ? { tab: "preview" as const } : {}),
     ...(typeof search.prompt === "string" ? { prompt: search.prompt } : {}),
     ...(typeof search.scrolltide === "string" ? { scrolltide: search.scrolltide } : {}),
@@ -380,7 +382,7 @@ function resolveProjectPath(path: string, fromPath = "index.html"): string {
 
 function ProjectEditor() {
   const { projectId } = Route.useParams();
-  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam, zipcheck: zipcheckParam } = Route.useSearch();
+  const { prompt: initialPrompt, scrolltide: scrolltideParam, tab: tabParam, zipcheck: zipcheckParam, handoff: handoffParam } = Route.useSearch();
   const navigate = useNavigate();
 
   const [projectName, setProjectName] = useState("");
@@ -459,6 +461,8 @@ function ProjectEditor() {
   const requestModeRef = useRef<EditorBuildMode | null>(null);
   // One-shot pre-approval for the automatic ZIP error fix (OpenRouter build model only).
   const zipAutoApproveRef = useRef(false);
+  // One-shot: the owner already said Yes in the side chat to Cloudflare planning this work.
+  const handoffApproveRef = useRef(false);
   const requestImagesRef = useRef(false);
   // Set when a build started on another device (or before a reload) is running.
   const [remoteWorking, setRemoteWorking] = useState<string | null>(null);
@@ -934,7 +938,10 @@ function ProjectEditor() {
           if (useOllama) headers["x-forge-build-provider"] = "ollama";
           const zipAutoApproved = zipAutoApproveRef.current && choice.engine === "openrouter" && !choice.imageBuild;
           zipAutoApproveRef.current = false;
-          if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
+          const handoffApproved = handoffApproveRef.current && choice.engine === "cloudflare";
+          handoffApproveRef.current = false;
+          if (handoffApproved) { /* Yes was given in the side chat for this Cloudflare plan. */ }
+          else if (scrolltideDraftRef.current) headers["x-forge-scrolltide-draft"] = scrolltideDraftRef.current;
           else if (zipAutoApproved) { /* Owner asked ZIP errors to be fixed immediately with the OpenRouter build model. */ }
           else if (!(await requestApproval(choice.engine === "cloudflare" ? "cloudflare" : choice.imageBuild ? "openrouter-image" : "openrouter", choice.engine === "cloudflare" ? "Use Cloudflare for this request? Yes approves Neuron usage." : useOllama ? (choice.imageBuild ? "Send the image and text to your Ollama model?" : "Send this build to your Ollama model?") : choice.imageBuild ? "Send the image and text to your selected OpenRouter image model?" : "Send this build to your selected OpenRouter model?"))) throw new Error("Request not approved");
           headers["x-forge-approved"] = "yes";
@@ -1471,6 +1478,27 @@ function ProjectEditor() {
 
 
 
+
+  // Work sent from the side chat (?handoff=): Cloudflare plans it first, then the owner approves the OpenRouter build.
+  const handoffSentRef = useRef(false);
+  useEffect(() => {
+    if (handoffSentRef.current || !handoffParam || !chatReady || !token || isStreaming || remoteWorking) return;
+    handoffSentRef.current = true;
+    (async () => {
+      navigate({ to: "/p/$projectId", params: { projectId }, search: {}, replace: true });
+      const { data: req } = await supabase.from("assistant_edit_requests").select("prompt,kind,report,project_id").eq("id", handoffParam).maybeSingle();
+      const report = (req?.report ?? {}) as Record<string, any>;
+      if (!req || req.project_id !== projectId || !report.handoff || report.handoff.consumed) return;
+      await supabase.from("assistant_edit_requests").update({ report: { ...report, handoff: { ...report.handoff, consumed: true } } }).eq("id", handoffParam);
+      setTab("chat");
+      setMode("plan");
+      modeRef.current = "plan";
+      handoffApproveRef.current = true;
+      try { await deliverMessage(handoffPlanPrompt(req.kind, req.prompt, report.name), [], "plan"); }
+      catch (e) { handoffApproveRef.current = false; toast.error(e instanceof Error ? e.message : "Could not start planning"); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffParam, chatReady, token, isStreaming, remoteWorking, projectId]);
 
   // Auto-send a prompt passed in via ?prompt= (from the home composer)
   const autoSentRef = useRef(false);
@@ -2501,7 +2529,7 @@ function ProjectEditor() {
                         });
                       }}
                     >
-                      <HammerIcon className="h-4 w-4" /> Approve &amp; build
+                      <HammerIcon className="h-4 w-4" /> Approve &amp; build with {ollamaBuild ? "Ollama" : "OpenRouter"}
                     </Button>
                     <Button
                       type="button"

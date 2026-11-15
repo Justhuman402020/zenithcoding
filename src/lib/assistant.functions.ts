@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, parseEditProposal, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, HELPER_TOOLS, HELPER_TOOL_ROUNDS, HELPER_TOOL_OUTPUT, shouldRetryTunnel, runHelperTool, formatHelperErrors, type EditStatus, type HelperFile, type HelperErrors } from "./assistant-policy";
+import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, HELPER_TOOLS, HELPER_TOOL_ROUNDS, HELPER_TOOL_OUTPUT, shouldRetryTunnel, runHelperTool, formatHelperErrors, type EditStatus, type HelperFile, type HelperErrors, type HelperInfo } from "./assistant-policy";
+import { chatRoute, parseChatProposal } from "./chat-handoff";
 
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
@@ -19,7 +20,12 @@ async function keyFor(ctx: Ctx, keyId: string) {
   return { base, apiKey: await decryptSecret(data.key_encrypted) };
 }
 
-type Look = { files: HelperFile[]; errors: HelperErrors };
+type Look = { files: HelperFile[]; errors: HelperErrors; info?: HelperInfo };
+
+/** Runs one read-only helper tool. */
+function lookTool(look: Look, name: string, args: string, maxChars?: number) {
+  return runHelperTool(name, args, look.files, look.errors, maxChars, look.info);
+}
 
 async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Array<{ role: string; content: any }>, look?: Look) {
   const { base, apiKey } = await keyFor(ctx, keyId);
@@ -54,7 +60,7 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
     const { text, complete, toolCalls } = await readChatStream(res.body);
     if (withTools && look && toolCalls.length) {
       convo.push({ role: "assistant", content: text || "", tool_calls: toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) });
-      for (const c of toolCalls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(c.name, c.arguments, look.files, look.errors, HELPER_TOOL_OUTPUT.ollama) });
+      for (const c of toolCalls) convo.push({ role: "tool", tool_call_id: c.id, content: lookTool(look, c.name, c.arguments, HELPER_TOOL_OUTPUT.ollama) });
       continue;
     }
     if (!text && !complete) throw new Error("Your Ollama model stopped before answering. Make sure the laptop is awake and the tunnel window is open");
@@ -65,8 +71,10 @@ async function ollamaChat(ctx: Ctx, keyId: string, model: string, messages: Arra
 async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images = false, look?: Look, chosen?: ChosenRef | null) {
   const { readWorkspaceAI, recordModelCall } = await import("./workspace-ai.server");
   const settings = await readWorkspaceAI();
-  const ollama = settings.chatEngine === "ollama" && !images;
-  const isChosen = settings.chatEngine === "chosen";
+  // Images go to the model in charge of chat; only an OpenRouter-run chat uses OpenRouter.
+  const route = chatRoute(settings.chatEngine, images);
+  const ollama = route === "ollama";
+  const isChosen = route === "chosen";
   const ref = isChosen ? { provider: chosen?.provider ?? "chosen", model: chosen?.model ?? "unknown" } : ollama ? { provider: "ollama", model: model ?? "unknown" } : (images ? settings.image : settings.text) ?? { provider: "openrouter", model: "unknown" };
   const started = Date.now();
   try {
@@ -80,8 +88,8 @@ async function helperChat(ctx: Ctx, keyId: string | null, model: string | null, 
 }
 
 async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | null, messages: Array<{ role: string; content: any }>, images: boolean, settings: Awaited<ReturnType<typeof import("./workspace-ai.server").readWorkspaceAI>>, look?: Look) {
-  if (settings.chatEngine === "ollama" && !images) {
-    if (!keyId || !model) throw new Error("Select your previous Ollama model");
+  if (chatRoute(settings.chatEngine, images) === "ollama") {
+    if (!keyId || !model) throw new Error("Select an activated Ollama model in the Models list");
     return ollamaChat(ctx, keyId, model, messages, look);
   }
   const ref = images ? settings.image : settings.text;
@@ -177,7 +185,7 @@ async function registryChat(ctx: Ctx, ref: { provider: string; model: string }, 
     const calls: any[] = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
     if (withTools && look && calls.length) {
       convo.push({ role: "assistant", content: msg?.content ?? "", tool_calls: calls });
-      for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(String(c.function?.name ?? ""), String(c.function?.arguments ?? ""), look.files, look.errors) });
+      for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: lookTool(look, String(c.function?.name ?? ""), String(c.function?.arguments ?? "")) });
       continue;
     }
     return replyText(msg);
@@ -203,7 +211,7 @@ async function openrouterChat(ref: { provider: string; model: string }, messages
     const calls: any[] = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
     if (withTools && look && calls.length) {
       convo.push({ role: "assistant", content: msg?.content ?? "", tool_calls: calls });
-      for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(String(c.function?.name ?? ""), String(c.function?.arguments ?? ""), look.files, look.errors) });
+      for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: lookTool(look, String(c.function?.name ?? ""), String(c.function?.arguments ?? "")) });
       continue;
     }
     return replyText(msg);
@@ -241,14 +249,42 @@ async function loadProjectLook(ctx: Ctx, projectId: string): Promise<Look> {
   return { files, errors: { build, jobs, preview } };
 }
 
+/** Brain rules, saved key names (never values) and project names, for the read-only tools. */
+async function loadHelperInfo(ctx: Ctx, projectId: string | null): Promise<HelperInfo> {
+  const keys: string[] = [];
+  let brain = "Only the owner's admin account can read the Brain.";
+  if (await isAdmin(ctx)) {
+    const { loadAdminBrain, listVault } = await import("./admin-vault.server");
+    brain = (await loadAdminBrain()).trim() || "The Brain has no notes yet.";
+    const vault = await listVault();
+    keys.push(`Admin Brain vault: ${vault.map((v: any) => `${v.label}${v.kind ? ` (${v.kind})` : ""}`).join(", ") || "none"}`);
+    try {
+      const { loadProviderRegistry } = await import("./model-router.server");
+      const { providers, keys: providerKeys } = await loadProviderRegistry();
+      keys.push(`Admin AI Models keys: ${providers.filter((p) => providerKeys[p.id]).map((p) => p.label).join(", ") || "none"}`);
+    } catch { keys.push("Admin AI Models keys: could not be read"); }
+    const { readWorkspaceAI } = await import("./workspace-ai.server");
+    const ai = await readWorkspaceAI();
+    keys.push(`Build: planning = Cloudflare (build screen only); build = OpenRouter key "${ai.text?.provider ?? "not selected"}" model ${ai.text?.model ?? "not selected"}; image build model ${ai.image?.model ?? "not selected"}.`);
+  }
+  if (projectId) {
+    const { data: secrets } = await ctx.supabase.from("project_secrets").select("key").eq("project_id", projectId);
+    keys.push(`Attached project secrets: ${((secrets ?? []) as any[]).map((r) => r.key).join(", ") || "none"}`);
+  }
+  const { data: projects } = await ctx.supabase.from("projects").select("name,description").eq("user_id", ctx.userId).order("updated_at", { ascending: false }).limit(60);
+  return { brain, keys: keys.join("\n") || "No saved keys found.", projects: ((projects ?? []) as any[]).map((p) => `${p.name}${p.description ? ` — ${String(p.description).slice(0, 80)}` : ""}`).join("\n") };
+}
+
 /** Read-only context about Code Haven + the selected project. */
 async function buildContext(ctx: Ctx, projectId: string | null, engine: "ollama" | "openrouter", look: Look | null) {
   const core: string[] = [
-    "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable): projects with files, a live preview, Cloudflare for approved planning, and a separate build model that edits files after approval.",
-    "You can LOOK AT EVERYTHING in the attached project: every file, build problems, failed builds and preview screenshot findings. Project files are given to you as plain text below and through your tools; read them, never say you cannot see them or that they are images.",
-    "Tools (read only): list_files, read_file(path), search_files(query), project_errors. Use them whenever you need a file or error that is not shown below. Help the owner understand problems, find the cause, and explain the fix.",
-    "You can NEVER edit, create or delete files, change Admin, or run builds yourself. When something should change, explain briefly, then put ONE precise instruction for the build model inside <edit>...</edit> (name the files, the problem and the exact fix). The owner taps Yes and the build model does the work. Never claim the change is done yourself.",
-    "Be concise and friendly; the owner is not technical.",
+    "You are the Code Haven chat helper. Code Haven is the owner's personal AI website builder (like Lovable). You PLAN and LOOK; the build screen builds: Cloudflare plans there first, then the owner approves an OpenRouter build.",
+    "You can see images the owner sends in this chat: describe and use them.",
+    "Read-only tools: list_files, read_file(path), search_files(query), project_errors (attached project), read_brain (Admin Brain rules), list_saved_keys (names of saved API keys and the selected build models; values are never shown), list_projects. Use them whenever you need something not shown below.",
+    "You can NEVER edit, create or delete files, change or delete any saved key or secret, change Admin settings, or build yourself.",
+    "NEW PROJECT: when the owner wants a new site/app, ask what to build, its name, pages, features and look (at most 3 short questions at a time). When you have enough, check list_saved_keys and read_brain, then reply with a step-by-step plan: what will be built, 'Keys this will use' (already saved), keys still needed and where to get them, and which OpenRouter build model to use. Put the full plan inside <new-project name=\"Project name\">…</new-project> and end with: \"Proceed with build? Yes / No\".",
+    "ATTACHED PROJECT: scan files and errors, explain problems simply, and when something should be fixed put ONE precise instruction (files, problem, exact fix) inside <send-to-build>…</send-to-build> and end with: \"Send this to your build engine? Yes / No\". Never claim the change is done.",
+    "Only one tag per reply. Be concise and friendly; the owner is not technical.",
   ];
   const project: string[] = [];
   const extra: string[] = [];
@@ -273,26 +309,18 @@ async function buildContext(ctx: Ctx, projectId: string | null, engine: "ollama"
       const { brainZipContext } = await import("./brain-zip");
       const references = await listBrainZips(ctx.supabase, projectId);
       extra.push(brainZipContext(references));
-      if (references.length) extra.push("You cannot call reference tools yourself. Include the requested ZIP name and referenceId in the <edit> instruction so the approved coding agent reads it. Preserve existing navigation and functionality during a redesign.");
+      if (references.length) extra.push("You cannot call reference tools yourself. Include the requested ZIP name and referenceId in the <send-to-build> instruction so the build screen reads it. Preserve existing navigation and functionality during a redesign.");
     }
   } else {
-    core.push("No project is attached to this chat. If the owner asks about a project, tell them to tap the project button at the top of this chat to attach it.");
+    core.push("No project is attached to this chat. You can plan a new project, or the owner can attach an existing one with the + button.");
   }
-  const { data: projects } = await ctx.supabase.from("projects").select("id,name,description").eq("user_id", ctx.userId).order("updated_at", { ascending: false }).limit(40);
-  extra.push(`Owner's other projects (not attached): ${(projects ?? []).map((p: any) => p.name).join(", ")}`);
-  if (await isAdmin(ctx)) {
-    const { loadAdminBrain, listVault } = await import("./admin-vault.server");
-    const brain = await loadAdminBrain();
-    if (brain) extra.push(`Brain rules:\n${brain.slice(0, 3000)}`);
-    const vault = await listVault();
-    extra.push(`Saved key names in the Admin vault (values hidden): ${vault.map((v) => v.label).join(", ") || "none"}`);
-    const { readWorkspaceAI } = await import("./workspace-ai.server");
-    const ai = await readWorkspaceAI();
-    extra.push(`Admin AI Models (read only): planning=Cloudflare; build engine=${ai.engine}; text=${ai.text?.model ?? "not selected"}; image=${ai.image?.model ?? "not selected"}; chat=${ai.chatEngine}. Never change these settings.`);
+  if (look?.info) {
+    extra.push(`Saved keys (names only):\n${look.info.keys.slice(0, 2000)}`);
+    extra.push(`Brain rules:\n${look.info.brain.slice(0, 3000)}`);
+    extra.push(`Owner's projects: ${look.info.projects.split("\n").map((l) => l.split(" — ")[0]).join(", ").slice(0, 1500)}`);
   }
   return fitHelperContext({ core, project, extra }, HELPER_CONTEXT_LIMIT[engine]);
 }
-
 
 export const listOllamaKeys = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
   const { data } = await (context.supabase as any).from("ollama_keys").select("id,label,base_url,created_at,active,active_model").order("created_at");
@@ -369,7 +397,7 @@ export const getChat = createServerFn({ method: "POST" }).middleware([requireSup
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("id,title,project_id,ollama_key_id,model,chosen_model_id,initialized_at,projects(name),chat_chosen_models(model)").eq("id", data.id).maybeSingle();
     if (!chat) throw new Error("Chat not found");
     const { data: messages } = await (context.supabase as any).from("assistant_messages").select("id,role,content,parts,created_at").eq("chat_id", data.id).order("created_at");
-    const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at,kind").eq("chat_id", data.id).order("created_at");
+    const { data: edits } = await (context.supabase as any).from("assistant_edit_requests").select("id,prompt,status,request_key,report,created_at,kind,project_id").eq("chat_id", data.id).order("created_at");
     // Saved work clocks so finished jobs keep showing how long they worked.
     const keys = ((edits ?? []) as any[]).map((e) => e.request_key).filter(Boolean);
     const { data: jobs } = keys.length
@@ -380,7 +408,7 @@ export const getChat = createServerFn({ method: "POST" }).middleware([requireSup
     return {
       chat: { id: chat.id as string, title: chat.title as string, projectId: chat.project_id as string | null, projectName: ((chat as any).projects?.name ?? null) as string | null, keyId: chat.ollama_key_id as string | null, model: chat.model as string | null, chosenModelId: (chat.chosen_model_id ?? null) as string | null, chosenModel: ((chat as any).chat_chosen_models?.model ?? null) as string | null, initialized: !!chat.initialized_at },
       messages: (messages ?? []) as Array<{ id: string; role: string; content: string; parts: any; created_at: string }>,
-      edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; kind: string; request_key: string | null; report: any; created_at: string; clock: RunClock | null }>,
+      edits: (edits ?? []) as Array<{ id: string; prompt: string; status: EditStatus; kind: string; project_id: string | null; request_key: string | null; report: any; created_at: string; clock: RunClock | null }>,
     };
   });
 
@@ -408,13 +436,7 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
   .handler(async ({ data, context }) => {
     const { data: chat } = await (context.supabase as any).from("assistant_chats").select("project_id,ollama_key_id,model,chosen_model_id").eq("id", data.id).single();
     if (!chat) throw new Error("Chat not found");
-    if (data.plan) {
-      if (!chat.project_id) throw new Error("Select a project first");
-      await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text });
-      const { error } = await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: data.text, kind: "plan" });
-      if (error) throw new Error("Could not save planning request");
-      return { ok: true };
-    }
+    // Cloudflare planning lives on the build screen only; the chat model plans here itself.
     const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
     const { error: saveError } = await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText, parts: { images: data.images ?? [] } });
     if (saveError) throw new Error("Could not save your message. Please try again.");
@@ -422,50 +444,69 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
     const { readWorkspaceAI } = await import("./workspace-ai.server");
     const chatEngine = (await readWorkspaceAI()).chatEngine;
     const chosen = chatEngine === "chosen" ? await chosenForChat(context as Ctx, data.id, chat.chosen_model_id) : null;
-    const engine = chatEngine === "chosen" ? (chosen?.provider === "ollama" ? "ollama" : "openrouter") : chatEngine === "ollama" && !data.images?.length ? "ollama" : "openrouter";
-    const look = chat.project_id ? await loadProjectLook(context as Ctx, chat.project_id) : null;
+    const engine = chatEngine === "chosen" ? (chosen?.provider === "ollama" ? "ollama" : "openrouter") : chatEngine === "ollama" ? "ollama" : "openrouter";
+    const look: Look = chat.project_id ? await loadProjectLook(context as Ctx, chat.project_id) : { files: [], errors: { build: "no project attached", jobs: [], preview: [] } };
+    look.info = await loadHelperInfo(context as Ctx, chat.project_id);
     const ctxText = await buildContext(context as Ctx, chat.project_id, engine, look);
     let reply: string;
     const askedAt = Date.now();
     try {
       const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
-      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look ?? undefined, chosen);
+      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look, chosen);
     } catch (e) {
       reply = chatEngine === "chosen"
         ? `⚠️ ${e instanceof Error ? e.message : "The chosen model failed"}. This model is not working right now — choose another model from the model list.`
         : `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
     }
-    const { text, edit } = parseEditProposal(reply);
-    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the edit I'd send.", parts: { reply_ms: Date.now() - askedAt, ...(chosen ? { model: chosen.model } : {}) } });
-    if (edit && chat.project_id) {
-      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: edit, images: data.images ?? [] });
+    const { text, proposal } = parseChatProposal(reply);
+    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the plan.", parts: { reply_ms: Date.now() - askedAt, ...(chosen ? { model: chosen.model } : {}) } });
+    if (proposal?.kind === "new_project") {
+      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: null, prompt: proposal.prompt, kind: "new_project", report: { name: proposal.name } });
+    } else if (proposal?.kind === "handoff" && chat.project_id) {
+      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: proposal.prompt, kind: "handoff", images: data.images ?? [] });
     }
     await (context.supabase as any).from("assistant_chats").update({ updated_at: new Date().toISOString() }).eq("id", data.id);
     return { ok: true };
   });
 
+/**
+ * Yes never builds from the chat. It sends the work to the project's build screen,
+ * where Cloudflare plans it first and the owner then approves the OpenRouter build.
+ * A planned new project is created here with the planned name.
+ */
 export const decideEdit = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid(), answer: z.enum(["yes", "no"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: req } = await (context.supabase as any).from("assistant_edit_requests").select("status,chat_id,project_id,prompt,kind").eq("id", data.id).single();
+    const db = context.supabase as any;
+    const { data: req } = await db.from("assistant_edit_requests").select("status,chat_id,project_id,prompt,kind,report").eq("id", data.id).maybeSingle();
+    if (!req) throw new Error("Request not found");
     const next = decide(req.status as EditStatus, data.answer);
-    const requestKey = next === "approved" ? crypto.randomUUID() : null;
-    const { data: claimed, error: claimError } = await (context.supabase as any).from("assistant_edit_requests").update({ status: next === "approved" ? "running" : next, request_key: requestKey, updated_at: new Date().toISOString() }).eq("id", data.id).eq("status", "pending").select("id");
+    const report = { ...(req.report ?? {}), ...(next === "approved" ? { handoff: { at: new Date().toISOString(), consumed: false } } : {}) };
+    const { data: claimed, error: claimError } = await db.from("assistant_edit_requests").update({ status: next === "approved" ? "done" : next, report, updated_at: new Date().toISOString() }).eq("id", data.id).eq("status", "pending").select("id");
     if (claimError || !claimed?.length) throw new Error("This request was already answered");
-    let started = true;
-    if (next === "approved" && requestKey) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { error } = await supabaseAdmin.rpc("start_approved_workspace_job", { _edit: data.id });
-      if (error) {
-        started = false;
-        await (context.supabase as any).from("assistant_edit_requests").update({ status: "failed", report: { error: error.message } }).eq("id", data.id);
-      }
+    if (next !== "approved") {
+      await db.from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: "Okay, I won't send that." });
+      return { status: next, projectId: null as string | null, newProject: false };
     }
-    await (context.supabase as any).from("assistant_messages").insert({
-      chat_id: req.chat_id, user_id: context.userId, role: "assistant",
-      content: next !== "approved" ? "Okay, I won't send that edit." : started ? (req.kind === "plan" ? "Planning with Cloudflare." : "I’m on it.") : "Could not start. Check the pool and selected OpenRouter models in AI Models.",
-    });
-    return { status: next, requestKey, started };
+    let projectId: string | null = req.project_id;
+    let name = "your project";
+    if (req.kind === "new_project" || !projectId) {
+      name = String(req.report?.name ?? "New project").slice(0, 60) || "New project";
+      const { data: project, error } = await db.from("projects").insert({ name, description: String(req.prompt).replace(/\s+/g, " ").slice(0, 200), user_id: context.userId }).select("id").single();
+      if (error || !project) {
+        await db.from("assistant_edit_requests").update({ status: "pending", report: req.report ?? null }).eq("id", data.id);
+        throw new Error("Could not create the project. Please try again.");
+      }
+      projectId = project.id as string;
+      await db.from("files").insert({ project_id: projectId, user_id: context.userId, path: "index.html", content: `<!doctype html><html><head><meta charset="utf-8"/><title>${name.replace(/[<>&"]/g, "")}</title></head><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0"><p>Planning…</p></body></html>` });
+      await db.from("assistant_edit_requests").update({ project_id: projectId }).eq("id", data.id);
+      await db.from("assistant_chats").update({ project_id: projectId, updated_at: new Date().toISOString() }).eq("id", req.chat_id);
+    } else {
+      const { data: proj } = await db.from("projects").select("name").eq("id", projectId).maybeSingle();
+      name = proj?.name ?? name;
+    }
+    await db.from("assistant_messages").insert({ chat_id: req.chat_id, user_id: context.userId, role: "assistant", content: `Opening the build screen for ${name}. Cloudflare plans it first, then you approve the OpenRouter build there.` });
+    return { status: "done" as EditStatus, projectId, newProject: req.kind === "new_project" };
   });
 
 /** Stops a running chat edit straight away. */

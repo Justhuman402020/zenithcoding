@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X, Zap, ImagePlus, ClipboardList, BookOpen, Eye, Rocket, Clock, ListPlus, Pencil, Trash2, Layers, PanelRightClose } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X, ImagePlus, BookOpen, Eye, Rocket, Clock, ListPlus, Pencil, Trash2, Layers, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { editQueued, loadQueue, mustQueue, nextToSend, removeQueued, saveQueue, 
 import { durationLabel } from "@/lib/work-log";
 import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
+import { applyPlatformBackend } from "@/lib/admin-supabase.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
 import { canSendChat, chatMessageText, isChatImage, type ChatImage } from "@/lib/assistant-images";
 import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
@@ -42,11 +43,11 @@ function ChatPage() {
   const decide = useServerFn(decideEdit);
   const check = useServerFn(checkEdit);
   const stopFn = useServerFn(stopEdit);
+  const applyBackend = useServerFn(applyPlatformBackend);
   const [liveLog, setLiveLog] = useState<Record<string, string[]>>({});
   const [runStats, setRunStats] = useState<Record<string, { clock: RunClock; stepCount: number; fileCount: number }>>({});
   const [data, setData] = useState<Data | null>(null);
   const [text, setText] = useState("");
-  const [plan, setPlan] = useState(false);
   const [images, setImages] = useState<ChatImage[]>([]);
   const [readingImages, setReadingImages] = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -112,7 +113,7 @@ function ChatPage() {
     sendingRef.current = true; setBusy(true);
     setData((d) => d ? { ...d, messages: [...d.messages, { id: "tmp", role: "user", content: msg, parts: { images: item.images }, created_at: new Date().toISOString() }] } : d);
     let ok = true;
-    try { await send({ data: { id: chatId, text: msg, attachments: item.attachments, images: item.images, plan: item.plan } }); }
+    try { await send({ data: { id: chatId, text: msg, attachments: item.attachments, images: item.images } }); }
     catch (e: any) { ok = false; toast.error(e?.message ?? "Send failed"); }
     await reload(); setBusy(false); sendingRef.current = false;
     return ok;
@@ -120,7 +121,7 @@ function ChatPage() {
 
   async function submit() {
     if (!canSendChat(text, images, attachments.length) || readingImages) return;
-    const item: QueuedMessage = { id: crypto.randomUUID(), text, images, attachments, plan };
+    const item: QueuedMessage = { id: crypto.randomUUID(), text, images, attachments };
     setText(""); setImages([]); setAttachments([]);
     if (mustQueue({ busy: busy || sendingRef.current, runningWork: running.length })) {
       setQueue((q) => [...q, item]);
@@ -142,7 +143,7 @@ function ChatPage() {
   }, [queue, busy, running.length, editingQueued]);
 
   async function addImages(files: File[]) {
-    setPlan(false); setReadingImages(true);
+    setReadingImages(true);
     try {
       const added: ChatImage[] = [];
       for (const file of files.filter(isChatImage).slice(0, 3)) {
@@ -160,11 +161,20 @@ function ChatPage() {
     finally { setReadingImages(false); }
   }
 
-  async function approve(editId: string, prompt: string) {
-    try { if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission(); } catch { /* ignore */ }
-    const r = await decide({ data: { id: editId, answer: "yes" } });
-    await reload();
-    if (!r.started) toast.error("Could not start. Check AI Models settings.");
+  // Yes opens the project's build screen, where Cloudflare plans the work before the OpenRouter build.
+  const [handingOff, setHandingOff] = useState<string | null>(null);
+  async function approve(editId: string) {
+    if (handingOff) return;
+    setHandingOff(editId);
+    try {
+      const r = await decide({ data: { id: editId, answer: "yes" } });
+      if (!r.projectId) { await reload(); return; }
+      if (r.newProject) await applyBackend({ data: { projectId: r.projectId } }).catch(() => {});
+      navigate({ to: "/p/$projectId", params: { projectId: r.projectId }, search: { handoff: editId } });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open the build screen");
+      await reload();
+    } finally { setHandingOff(null); }
   }
 
   async function stopRunning(editId: string) {
@@ -230,7 +240,7 @@ function ChatPage() {
       <div className={`${previewProject ? "hidden lg:flex lg:w-[42%] lg:max-w-xl lg:border-r" : "flex flex-1"} min-h-0 min-w-0 flex-col`}>
       <main data-work-chat-scroll className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5">
         <div className="mx-auto max-w-2xl space-y-4">
-          {items.length === 0 && <p className="text-center text-sm text-muted-foreground mt-10">Select a project to start.</p>}
+          {items.length === 0 && <p className="text-center text-sm text-muted-foreground mt-10">Tell me what you want to build, or attach a project with + to check it.</p>}
           {items.map((it, index) => it.kind === "msg" ? (
             it.m.role === "user"
               ? <div key={it.m.id + it.at} className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-primary px-4 py-2 text-primary-foreground">
@@ -247,12 +257,13 @@ function ChatPage() {
                 </div>
           ) : (
             <div key={it.e.id} className="rounded-xl border bg-card p-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">{it.e.kind === "plan" ? "Plan with Cloudflare" : "Approved build"}</div>
-              <div className="mt-1 whitespace-pre-wrap text-sm">{it.e.prompt}</div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">{it.e.kind === "new_project" ? `New project plan · ${String(it.e.report?.name ?? "New project")}` : it.e.report?.handoff || it.e.status === "pending" ? "Send to build" : it.e.kind === "plan" ? "Plan with Cloudflare" : "Approved build"}</div>
+              <div className="mt-1 max-h-80 overflow-y-auto break-words text-sm prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{it.e.prompt}</ReactMarkdown></div>
               {it.e.status === "pending" && <>
-                <div className="mt-3 text-sm font-medium">{it.e.kind === "plan" ? "Use Cloudflare Neurons to prepare this plan?" : `Build with ${ai?.engine === "cloudflare" ? "Cloudflare pool" : "OpenRouter"}?`}</div>
+                <div className="mt-3 text-sm font-medium">{it.e.kind === "new_project" ? "Proceed with build?" : "Send this to your build engine?"}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{it.e.kind === "new_project" ? "Yes creates the project and opens its build screen. Cloudflare plans it first, then you approve the OpenRouter build." : "Yes opens this project's build screen. Cloudflare plans the fix first, then you approve the OpenRouter build."}</div>
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" onClick={() => approve(it.e.id, it.e.prompt)}><Check className="h-4 w-4 mr-1" />Yes</Button>
+                  <Button size="sm" disabled={!!handingOff} onClick={() => approve(it.e.id)}>{handingOff === it.e.id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}Yes</Button>
                   <Button size="sm" variant="outline" onClick={async () => { await decide({ data: { id: it.e.id, answer: "no" } }); void reload(); }}><X className="h-4 w-4 mr-1" />No</Button>
                 </div>
               </>}
@@ -264,9 +275,10 @@ function ChatPage() {
                 </div>
               </>}
               {it.e.status === "declined" && <div className="mt-2 text-sm text-muted-foreground">Not sent.</div>}
-              {it.e.status === "done" && <div className="mt-2 text-sm text-primary">Finished{workedTime(it.e.clock) ? ` in ${workedTime(it.e.clock)}` : ""} — summary below.</div>}
+              {it.e.status === "done" && it.e.report?.handoff && <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-primary">Sent to the build screen.{it.e.project_id && <Button asChild size="sm" variant="outline"><Link to="/p/$projectId" params={{ projectId: it.e.project_id }}><Rocket className="h-4 w-4 mr-1" />Open build screen</Link></Button>}</div>}
+              {it.e.status === "done" && !it.e.report?.handoff && <div className="mt-2 text-sm text-primary">Finished{workedTime(it.e.clock) ? ` in ${workedTime(it.e.clock)}` : ""} — summary below.</div>}
               {it.e.status === "failed" && <div className="mt-2 text-sm text-destructive">Stopped{workedTime(it.e.clock) ? ` after ${workedTime(it.e.clock)}` : ""} — see summary below.</div>}
-              {data.chat.projectId && ["running", "done", "failed"].includes(it.e.status) && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`e-${it.e.id}`} title={it.e.prompt} running={it.e.status === "running"} progress={progress[it.e.id]} clock={runStats[it.e.id]?.clock ?? it.e.clock ?? undefined} stepCount={runStats[it.e.id]?.stepCount} fileCount={runStats[it.e.id]?.fileCount} log={(liveLog[it.e.id] ?? it.e.report?.log ?? []).join("\n")} />}
+              {data.chat.projectId && !it.e.report?.handoff && ["running", "done", "failed"].includes(it.e.status) && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`e-${it.e.id}`} title={it.e.prompt} running={it.e.status === "running"} progress={progress[it.e.id]} clock={runStats[it.e.id]?.clock ?? it.e.clock ?? undefined} stepCount={runStats[it.e.id]?.stepCount} fileCount={runStats[it.e.id]?.fileCount} log={(liveLog[it.e.id] ?? it.e.report?.log ?? []).join("\n")} />}
             </div>
           ))}
           {busy && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Thinking…</div>}
@@ -275,8 +287,7 @@ function ChatPage() {
       </main>
       <footer className="shrink-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-2xl flex flex-wrap gap-2 mb-2">
-          <Button size="sm" variant={plan ? "default" : "outline"} onClick={() => { setPlan(!plan); setImages([]); }} aria-pressed={plan}><ClipboardList className="h-4 w-4 mr-1" />Plan</Button>
-          <Button size="sm" variant="outline" title="Image message · selected OpenRouter VL model" aria-label="Attach image with OpenRouter" onClick={() => { setPlan(false); imageRef.current?.click(); }}><Zap className="h-4 w-4" /><ImagePlus className="h-4 w-4" /></Button>
+          <Button size="sm" variant="outline" title={`Image goes to your chat model (${ai?.chatEngine === "ollama" ? "Ollama" : ai?.chatEngine === "chosen" ? "Chosen model" : "OpenRouter"})`} aria-label="Attach image" onClick={() => imageRef.current?.click()}><ImagePlus className="h-4 w-4" /></Button>
           {images.length > 0 && <Button size="sm" variant="ghost" onClick={() => setImages([])}>{images.length} image(s) <X className="h-3 w-3 ml-1" /></Button>}
           <input ref={imageRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={async (e) => {
             await addImages(Array.from(e.target.files ?? [])); e.target.value = "";
@@ -289,7 +300,7 @@ function ChatPage() {
               <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">{i + 1}.</span>
               {editingQueued === q.id
                 ? <Textarea autoFocus rows={2} value={q.text} onChange={(e) => setQueue((list) => editQueued(list, q.id, e.target.value))} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); setEditingQueued(null); } }} className="min-h-10 min-w-0 flex-1 resize-none text-sm" aria-label={`Edit queued message ${i + 1}`} />
-                : <span className="min-w-0 flex-1 break-words"><span className="line-clamp-2">{q.plan ? "Plan: " : ""}{q.text || (q.images.length ? `${q.images.length} image(s)` : `${q.attachments.length} file(s)`)}</span>{q.failed && <button type="button" className="mt-0.5 block text-xs text-destructive underline" onClick={() => setQueue((list) => list.map((m) => m.id === q.id ? { ...m, failed: false } : m))}>Didn't send · tap to retry</button>}</span>}
+                : <span className="min-w-0 flex-1 break-words"><span className="line-clamp-2">{q.text || (q.images.length ? `${q.images.length} image(s)` : `${q.attachments.length} file(s)`)}</span>{q.failed && <button type="button" className="mt-0.5 block text-xs text-destructive underline" onClick={() => setQueue((list) => list.map((m) => m.id === q.id ? { ...m, failed: false } : m))}>Didn't send · tap to retry</button>}</span>}
               {editingQueued === q.id
                 ? <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label="Done editing" onClick={() => { if (!q.text.trim() && !q.images.length && !q.attachments.length) setQueue((list) => removeQueued(list, q.id)); setEditingQueued(null); }}><Check className="h-3.5 w-3.5" /></Button>
                 : <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label={`Edit queued message ${i + 1}`} onClick={() => setEditingQueued(q.id)}><Pencil className="h-3.5 w-3.5" /></Button>}
@@ -306,7 +317,7 @@ function ChatPage() {
             <Textarea ref={inputRef} rows={1} value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => {
               const files = Array.from(e.clipboardData.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null && isChatImage(file));
               if (files.length) { e.preventDefault(); const caption = e.clipboardData.getData("text/plain"); if (caption) setText((current) => current + caption); void addImages(files); }
-            }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask about your project…" className="min-h-10 min-w-0 max-h-40 w-0 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
+            }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask, plan a new site, or check a project…" className="min-h-10 min-w-0 max-h-40 w-0 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
             {panelEngine && <Button size="icon" variant="ghost" className="rounded-full shrink-0" aria-label="Choose model" title="Choose model" onClick={() => showModels()}><Layers className="h-4 w-4" /></Button>}
             {(() => { const queueing = busy || running.length > 0; return <Button size="icon" className="rounded-full shrink-0" disabled={readingImages || !canSendChat(text, images, attachments.length)} onClick={submit} aria-label={queueing ? "Add to queue" : "Send"} title={queueing ? "Add to queue" : "Send"}>{readingImages ? <Loader2 className="h-4 w-4 animate-spin" /> : queueing ? <ListPlus className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}</Button>; })()}
           </div>

@@ -275,7 +275,7 @@ export type Database = {
           id: string
           images: Json
           kind: string
-          project_id: string
+          project_id: string | null
           prompt: string
           report: Json | null
           request_key: string | null
@@ -290,7 +290,7 @@ export type Database = {
           id?: string
           images?: Json
           kind?: string
-          project_id: string
+          project_id?: string | null
           prompt: string
           report?: Json | null
           request_key?: string | null
@@ -305,7 +305,7 @@ export type Database = {
           id?: string
           images?: Json
           kind?: string
-          project_id?: string
+          project_id?: string | null
           prompt?: string
           report?: Json | null
           request_key?: string | null

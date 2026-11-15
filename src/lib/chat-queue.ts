@@ -7,7 +7,8 @@ export type QueuedMessage = {
   text: string;
   images: ChatImage[];
   attachments: Array<{ name: string; text: string }>;
-  plan: boolean;
+  /** Old saved queues may still carry this; the chat no longer plans with Cloudflare. */
+  plan?: boolean;
   /** Set when sending failed; it waits until you tap retry. */
   failed?: boolean;
 };

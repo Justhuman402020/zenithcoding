@@ -5,3 +5,4 @@
 - Site AI chat can run on the owner's Cloudflare pool via a per-project token (src/lib/project-ai-policy.ts rules, /api/public/sites/ai/chat); pool keys never leave Code Haven and the switch stops access instantly.
 - Finished React/Vite edits pass build-check.ts links then real tsc in E2B (agent-tools.server.ts), max 3 repairs.
 - Ollama builds go through src/lib/ollama-native.ts (native /api/chat with num_ctx and sliced prompt warm-up); Ollama's /v1 cannot raise its 4k default context and tunnels drop silent waits after ~100s.
+- Side chat (assistant.functions.ts) only reads and plans; Yes hands work to the build screen via ?handoff=, where Cloudflare Plan runs before the OpenRouter build, so chat never starts build jobs. Chat images go to the in-charge chat engine (chat-handoff.ts).

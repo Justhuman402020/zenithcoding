@@ -253,6 +253,13 @@
       "when": 1794722848111,
       "tag": "0035_allow_chosen_chat_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794725514417,
+      "tag": "0036_chat_new_project_handoffs",
+      "breakpoints": true
     }
   ]
 }
