@@ -1,0 +1,2 @@
+ALTER TABLE public.workspace_ai_settings DROP CONSTRAINT IF EXISTS workspace_ai_settings_chat_engine_check;
+ALTER TABLE public.workspace_ai_settings ADD CONSTRAINT workspace_ai_settings_chat_engine_check CHECK (chat_engine = ANY (ARRAY['openrouter'::text, 'ollama'::text, 'chosen'::text]));
