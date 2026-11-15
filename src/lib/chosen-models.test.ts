@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSettingsComplaint, orderChosenBySavedKey, replyText, requireChosen, sortKeysBySavedAt, sortModelsAZ, sortRowsAZ, testFailureMessage, testReplyWorks } from "./chosen-models";
+import { isSettingsComplaint, orderChosenBySavedKey, replyText, requireChosen, sortKeysBySavedAt, sortModelsAZ, sortRowsAZ, testFailureMessage, testReplyWorks, panelModelsFor, isCurrentPanelModel } from "./chosen-models";
 
 describe("chosen models", () => {
   it("lists models of a key A to Z, ignoring case and duplicates", () => {
@@ -48,5 +48,31 @@ describe("chosen models", () => {
     expect(testFailureMessage(429, "rate limit")).toMatch(/try again in a minute/);
     expect(testFailureMessage(429, "rate limit")).not.toMatch(/Choose another model/);
     expect(testFailureMessage(404, "")).toMatch(/Choose another model/);
+  });
+});
+
+describe("side chat Models panel", () => {
+  const chosen = [{ id: "c1", key_ref: "google", key_label: "Google ai studio #1", model: "gemini-2.5-flash" }];
+  const ollama = [
+    { id: "k1", label: "mine", active: true, active_model: "qwen3:8b" },
+    { id: "k2", label: "off", active: false, active_model: null },
+  ];
+  it("Chosen models mode shows only chosen models, never Ollama activated ones", () => {
+    const rows = panelModelsFor("chosen", chosen, ollama);
+    expect(rows.map((r) => r.model)).toEqual(["gemini-2.5-flash"]);
+    expect(rows.every((r) => r.source === "chosen")).toBe(true);
+  });
+  it("Ollama mode shows only activated Ollama models, never chosen ones", () => {
+    const rows = panelModelsFor("ollama", chosen, ollama);
+    expect(rows.map((r) => r.model)).toEqual(["qwen3:8b"]);
+    expect(rows.every((r) => r.source === "ollama")).toBe(true);
+  });
+  it("OpenRouter mode shows no list", () => {
+    expect(panelModelsFor("openrouter", chosen, ollama)).toEqual([]);
+  });
+  it("marks the chat's current model", () => {
+    const [o] = panelModelsFor("ollama", chosen, ollama);
+    expect(isCurrentPanelModel(o, { chosenModelId: null, keyId: "k1", model: "qwen3:8b" })).toBe(true);
+    expect(isCurrentPanelModel(o, { chosenModelId: null, keyId: "k1", model: "other" })).toBe(false);
   });
 });

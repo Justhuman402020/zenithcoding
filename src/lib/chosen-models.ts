@@ -79,3 +79,27 @@ export function testFailureMessage(status: number, text: string): string {
   if (status >= 500) return `The provider had a problem (${status}). Try again in a minute.`;
   return `The provider answered ${status}. Choose another model.`;
 }
+
+/** One row in the side chat's right-hand Models panel. */
+export type PanelModel = { id: string; source: "chosen" | "ollama"; groupId: string; groupLabel: string; model: string; keyId?: string };
+export type ChatEngine = "openrouter" | "ollama" | "chosen";
+
+/**
+ * Which models the right-hand panel lists: only the mode in charge.
+ * Chosen models mode lists saved chosen models (never Ollama activated ones);
+ * Ollama mode lists activated Ollama models (never chosen ones); OpenRouter lists none.
+ */
+export function panelModelsFor(
+  engine: ChatEngine | null | undefined,
+  chosen: Array<{ id: string; key_ref: string; key_label: string; model: string }>,
+  ollamaKeys: Array<{ id: string; label: string; active: boolean; active_model: string | null }>,
+): PanelModel[] {
+  if (engine === "chosen") return chosen.map((r) => ({ id: r.id, source: "chosen", groupId: r.key_ref, groupLabel: r.key_label, model: r.model }));
+  if (engine === "ollama") return ollamaKeys.filter((k) => k.active && k.active_model).map((k) => ({ id: `${k.id}|${k.active_model}`, source: "ollama", groupId: k.id, groupLabel: k.label, model: k.active_model as string, keyId: k.id }));
+  return [];
+}
+
+/** True when this panel row is the model the chat is using now. */
+export function isCurrentPanelModel(row: PanelModel, chat: { chosenModelId: string | null; keyId: string | null; model: string | null }): boolean {
+  return row.source === "chosen" ? row.id === chat.chosenModelId : row.keyId === chat.keyId && row.model === chat.model;
+}

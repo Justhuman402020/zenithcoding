@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X, Zap, ImagePlus, ClipboardList, BookOpen, Eye, Rocket, Clock, ListPlus, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowUp, Check, ChevronRight, FileText, FolderKanban, KeyRound, Loader2, MessageSquare, Download, Paperclip, Plus, Search, Square, X, Zap, ImagePlus, ClipboardList, BookOpen, Eye, Rocket, Clock, ListPlus, Pencil, Trash2, Layers, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { NeuronLog } from "@/components/NeuronLog";
-import { ChosenModelPicker } from "@/components/ChosenModelPicker";
+import { ChatModelsPanel } from "@/components/ChatModelsPanel";
 import { WorkLogCard } from "@/components/WorkLogCard";
 import { AttachedProjectPreview } from "@/components/AttachedProjectPreview";
 import { attachedPreviewProject } from "@/lib/project-preview";
@@ -23,7 +23,7 @@ import { NeuronsBar } from "@/components/CloudflarePoolPanel";
 import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
 import { canSendChat, chatMessageText, isChatImage, type ChatImage } from "@/lib/assistant-images";
-import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listOllamaKeys, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
+import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
   head: () => ({ meta: [{ title: "Chat — Code Haven" }, { name: "description", content: "Chat with your Code Haven helper." }, { property: "og:title", content: "Chat — Code Haven" }, { property: "og:description", content: "Chat with your Code Haven helper." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
@@ -56,7 +56,8 @@ function ChatPage() {
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState<Attach[]>([]);
   const [progress, setProgress] = useState<Record<string, string>>({});
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const [dockHidden, setDockHidden] = useState(false);
   const [openedPreview, setOpenedPreview] = useState<string | null>(null);
   const [changingProject, setChangingProject] = useState(false);
   const [queue, setQueue] = useState<QueuedMessage[]>([]);
@@ -76,7 +77,12 @@ function ChatPage() {
     const saved = sessionStorage.getItem(`work-scroll:${chatId}`);
     if (saved != null && data) requestAnimationFrame(() => { const el = document.querySelector('[data-work-chat-scroll]'); if (el) el.scrollTop = Number(saved); });
   }, [chatId, data?.chat.id]);
-  useEffect(() => { if (data && !data.chat.initialized && ai?.chatEngine === "ollama") setSettingsOpen(true); }, [data?.chat.initialized, ai?.chatEngine]);
+  const panelEngine = ai?.chatEngine === "chosen" || ai?.chatEngine === "ollama" ? ai.chatEngine : null;
+  const wide = () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+  const docked = !!panelEngine && !previewProject && !dockHidden;
+  // Desktop without the preview: the docked list; phone or preview open: the slide-in list.
+  const showModels = (toggle = false) => { if (wide() && !previewProject) setDockHidden((h) => (toggle ? !h : false)); else setModelsOpen(true); };
+  useEffect(() => { if (data && !data.chat.initialized && ai?.chatEngine === "ollama") showModels(); }, [data?.chat.initialized, ai?.chatEngine]);
 
   // Watch running Cloudflare edits: live log + alert when finished.
   const running = data?.edits.filter((e) => e.status === "running") ?? [];
@@ -203,6 +209,7 @@ function ChatPage() {
           <div className="truncate text-xs text-muted-foreground">{data.chat.projectName ?? "No project"} · {ai?.chatEngine === "chosen" ? data.chat.chosenModel ?? "Pick a chosen model" : ai?.chatEngine === "openrouter" ? ai.text?.model ?? "Select OpenRouter model in Admin" : data.chat.model ?? "no model"}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+        {panelEngine && <Button variant="ghost" size="icon" className={docked ? "lg:bg-secondary" : ""} aria-label="Models" title="Models" onClick={() => showModels(true)}><Layers className="h-4 w-4" /></Button>}
         {data.chat.projectId && <Button variant={previewProject ? "secondary" : "ghost"} size="icon" aria-label="Preview attached project" title="Preview attached project" disabled={changingProject} onClick={() => setOpenedPreview(previewProject ? null : data.chat.projectId)}><Eye className="h-4 w-4" /></Button>}
         <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" aria-label="Chat settings" title="Chat settings"><KeyRound className="h-4 w-4" /></Button></PopoverTrigger>
         <PopoverContent align="end" className="w-64 space-y-3">
@@ -210,7 +217,7 @@ function ChatPage() {
           <Button asChild variant="outline" size="sm" title="Scrolltide templates"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }} search={{ scrolltide: "1" }}><BookOpen className="h-4 w-4" /></Link></Button>
           <Button asChild variant="outline" size="sm" title="Build and publish"><Link to="/p/$projectId" params={{ projectId: data.chat.projectId }}><Rocket className="h-4 w-4" /></Link></Button>
         </div>}
-        <NeuronLog />{ai?.chatEngine === "ollama" ? <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
+        <NeuronLog />{panelEngine ? <Button variant="outline" size="sm" onClick={() => showModels()}><KeyRound className="h-4 w-4 mr-1" />Model</Button> : <Button variant="outline" size="sm" onClick={() => navigate({ to: "/admin/models" })}><KeyRound className="h-4 w-4 mr-1" />Model</Button>}
         <NeuronsBar />
         </PopoverContent></Popover>
         </div>
@@ -300,15 +307,24 @@ function ChatPage() {
               const files = Array.from(e.clipboardData.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null && isChatImage(file));
               if (files.length) { e.preventDefault(); const caption = e.clipboardData.getData("text/plain"); if (caption) setText((current) => current + caption); void addImages(files); }
             }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Ask about your project…" className="min-h-10 min-w-0 max-h-40 w-0 flex-1 resize-none border-0 bg-transparent focus-visible:ring-0" />
-            {ai?.chatEngine === "chosen" && <ChosenModelPicker chatId={chatId} currentId={data.chat.chosenModelId} onChanged={() => void reload()} />}
+            {panelEngine && <Button size="icon" variant="ghost" className="rounded-full shrink-0" aria-label="Choose model" title="Choose model" onClick={() => showModels()}><Layers className="h-4 w-4" /></Button>}
             {(() => { const queueing = busy || running.length > 0; return <Button size="icon" className="rounded-full shrink-0" disabled={readingImages || !canSendChat(text, images, attachments.length)} onClick={submit} aria-label={queueing ? "Add to queue" : "Send"} title={queueing ? "Add to queue" : "Send"}>{readingImages ? <Loader2 className="h-4 w-4 animate-spin" /> : queueing ? <ListPlus className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}</Button>; })()}
           </div>
         </div>
       </footer>
       </div>
       {previewProject && <AttachedProjectPreview key={`${chatId}:${previewProject}`} projectId={previewProject} name={data.chat.projectName ?? "Project"} onClose={() => setOpenedPreview(null)} />}
+      {docked && panelEngine && <aside aria-label="Models" className="hidden w-72 shrink-0 flex-col border-l bg-card lg:flex">
+        <div className="flex shrink-0 justify-end px-1 pt-1"><Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Hide models" title="Hide models" onClick={() => setDockHidden(true)}><PanelRightClose className="h-4 w-4" /></Button></div>
+        <ChatModelsPanel key={panelEngine} engine={panelEngine} chat={data.chat} onChanged={() => void reload()} />
+      </aside>}
       </div>
-      <OllamaSheet open={settingsOpen} onOpenChange={setSettingsOpen} chat={data.chat} onDone={reload} />
+      {panelEngine && <Sheet open={modelsOpen} onOpenChange={setModelsOpen}>
+        <SheetContent side="right" className="flex w-[85vw] max-w-sm flex-col gap-0 bg-popover p-0">
+          <SheetHeader className="border-b px-4 py-3"><SheetTitle>Models</SheetTitle></SheetHeader>
+          {modelsOpen && <ChatModelsPanel key={panelEngine} engine={panelEngine} chat={data.chat} onChanged={() => void reload()} onPicked={() => setModelsOpen(false)} />}
+        </SheetContent>
+      </Sheet>}
     </div>
   );
 }
@@ -388,30 +404,3 @@ function PlusMenu({ chatId, projectId, onProject, onAttach, onImages }: { chatId
   );
 }
 
-function OllamaSheet({ open, onOpenChange, chat, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; chat: Data["chat"]; onDone: () => void }) {
-  const keysFn = useServerFn(listOllamaKeys);
-  const setup = useServerFn(setupChat);
-  const [keys, setKeys] = useState<Awaited<ReturnType<typeof keysFn>>>([]);
-  const [pick, setPick] = useState(chat.keyId && chat.model ? `${chat.keyId}|${chat.model}` : "");
-  const [loading, setLoading] = useState(false);
-  useEffect(() => { if (open) keysFn().then(setKeys).catch(() => {}); }, [open]);
-  const active = keys.filter((k) => k.active && k.active_model);
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto bg-popover">
-        <SheetHeader><SheetTitle>Chat model</SheetTitle></SheetHeader>
-        <div className="mt-4 space-y-4">
-          <div className="space-y-2">
-            {active.length === 0 && <p className="text-sm text-muted-foreground">No active model yet. Add a key and tap Activate in <Link to="/admin/models" className="text-primary underline">Admin → AI Models</Link>.</p>}
-            {active.map((k) => { const v = `${k.id}|${k.active_model}`; return <button key={k.id} onClick={() => setPick(v)} className={`w-full rounded-md px-3 py-2 text-left text-sm ${pick === v ? "bg-primary text-primary-foreground" : "border hover:bg-muted"}`}>{k.active_model} <span className="opacity-70">· {k.label}</span></button>; })}
-          </div>
-          <Button className="w-full" disabled={!pick || loading} onClick={async () => {
-            const [keyId, ...rest] = pick.split("|"); if (!keyId) return; const m = rest.join("|");
-            setLoading(true);
-            try { await setup({ data: { id: chat.id, keyId, model: m, initialize: true } }); toast.success("Model saved"); onOpenChange(false); onDone(); } catch (e: any) { toast.error(e.message); } finally { setLoading(false); }
-          }}>{loading ? "Saving…" : "Use this model"}</Button>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
