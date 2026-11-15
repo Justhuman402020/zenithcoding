@@ -28,9 +28,9 @@ export function ChooseForChatButton({ provider, keyLabel, model, disabled }: { p
       try {
         const r = await choose({ data: { provider, keyLabel, model } });
         if (r.ok) { setSaved(true); savedPromise = null; toast.success(`${model} saved for chat`); }
-        else { setFailed(r.error); toast.error(r.error ?? "Not working: choose another model"); }
+        else { setFailed(r.error ?? "Not working. Choose another model."); toast.error(r.error ?? "Not working. Choose another model."); }
       } catch (e: any) { setFailed(e?.message ?? "Not working"); } finally { setBusy(false); }
-    }}>{busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <MessageSquarePlus className="h-3 w-3 mr-1" />}Choose for chat</Button>
-    {failed && <span className="inline-flex max-w-56 items-start gap-1 text-right text-[11px] text-destructive"><XCircle className="h-3 w-3 shrink-0 mt-0.5" />Not working: choose another model. {failed.replace(/\. Choose another model\.$/, "")}</span>}
+    }}>{busy ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <MessageSquarePlus className="h-3 w-3 mr-1" />}{busy ? "Testing…" : "Choose for chat"}</Button>
+    {failed && <span className="inline-flex max-w-56 items-start gap-1 text-right text-[11px] text-destructive"><XCircle className="h-3 w-3 shrink-0 mt-0.5" />{failed}</span>}
   </div>;
 }

@@ -6,7 +6,7 @@ import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
 import type { RunClock } from "./run-clock";
-import { orderChosenBySavedKey, requireChosen, sortModelsAZ, type ChosenRef } from "./chosen-models";
+import { isSettingsComplaint, orderChosenBySavedKey, replyText, requireChosen, sortModelsAZ, testBodies, testFailureMessage, testReplyWorks, type ChosenRef } from "./chosen-models";
 
 type Ctx = { supabase: any; userId: string };
 
@@ -100,12 +100,53 @@ async function chosenChat(ctx: Ctx, chosen: ChosenRef, messages: Array<{ role: s
 function providerFailure(status: number, text: string) {
   if (status === 401 || status === 403) return "The key was rejected";
   if (status === 402 || /credit|quota|billing|insufficient/i.test(text)) return "No credit or quota left on this key";
-  if (status === 404 || /not.?found|does not exist|unsupported/i.test(text)) return "This model is unavailable on this key";
+  if (status === 404 || /model.{0,40}(not found|does not exist|unknown|invalid)|no such model/i.test(text)) return "This model is unavailable on this key";
   if (status === 429) return "This key is rate limited right now";
   return `The provider answered ${status}`;
 }
 
 /** A model on any saved Admin → AI Models key (Google AI Studio, Mistral, …). No fallback. */
+/** Base URL and key of a saved AI Models key (values never leave the server). */
+async function registryEndpoint(ctx: Ctx, providerId: string) {
+  const { loadProviderRegistry } = await import("./model-router.server");
+  const { providers, keys } = await loadProviderRegistry();
+  const provider = providers.find((p) => p.id === providerId);
+  if (!provider) throw new Error("This saved key is no longer in AI Models");
+  let apiKey = keys[providerId];
+  if (!apiKey) {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: saved } = await supabaseAdmin.from("project_secrets").select("value_encrypted").eq("user_id", ctx.userId).eq("key", provider.envKey).limit(1).maybeSingle();
+    if (saved) { try { apiKey = (await decryptSecret(saved.value_encrypted)).trim(); } catch { /* never surface secret details */ } }
+  }
+  if (!apiKey) throw new Error("No API key saved for this provider");
+  return { base: provider.baseURL.replace(/\/$/, ""), apiKey };
+}
+
+/** One tiny real call. Working = the provider answered 200 with a reply, even an empty one from a thinking model. */
+async function probeRegistryModel(ctx: Ctx, ref: { provider: string; model: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  let endpoint: { base: string; apiKey: string };
+  try { endpoint = await registryEndpoint(ctx, ref.provider); } catch (e: any) { return { ok: false, error: String(e?.message ?? "Key not found") }; }
+  let last = { status: 0, text: "" };
+  for (const body of testBodies(ref.model)) {
+    let response: Response;
+    try {
+      response = await fetch(`${endpoint.base}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${endpoint.apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(90_000) });
+    } catch (e: any) {
+      return { ok: false, error: /timeout|abort/i.test(String(e?.name ?? e?.message)) ? "The model took longer than 90 seconds to answer. Try again." : "Could not reach the provider. Try again." };
+    }
+    const text = response.ok ? "" : await response.text().catch(() => "");
+    if (response.ok) {
+      const json: any = await response.json().catch(() => null);
+      if (testReplyWorks(json)) return { ok: true };
+      return { ok: false, error: "The provider answered without a reply. Choose another model." };
+    }
+    last = { status: response.status, text };
+    if (!isSettingsComplaint(response.status, text)) break;
+  }
+  return { ok: false, error: testFailureMessage(last.status, last.text) };
+}
+
 async function registryChat(ctx: Ctx, ref: { provider: string; model: string }, messages: Array<{ role: string; content: any }>, look?: Look) {
   const { loadProviderRegistry } = await import("./model-router.server");
   const { providers, keys } = await loadProviderRegistry();
@@ -139,7 +180,7 @@ async function registryChat(ctx: Ctx, ref: { provider: string; model: string }, 
       for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(String(c.function?.name ?? ""), String(c.function?.arguments ?? ""), look.files, look.errors) });
       continue;
     }
-    return String(msg?.content ?? "");
+    return replyText(msg);
   }
 }
 
@@ -165,7 +206,7 @@ async function openrouterChat(ref: { provider: string; model: string }, messages
       for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(String(c.function?.name ?? ""), String(c.function?.arguments ?? ""), look.files, look.errors) });
       continue;
     }
-    return String(msg?.content ?? "");
+    return replyText(msg);
   }
 }
 
@@ -558,8 +599,8 @@ export const testChatModel = createServerFn({ method: "POST" }).middleware([requ
   .handler(async ({ data, context }) => {
     if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can manage chosen models");
     try {
-      const out = await chosenChat(context as Ctx, { provider: data.provider, keyRef: data.keyRef, model: data.model }, [{ role: "user", content: "Reply with the single word OK." }]);
-      if (!out.trim()) return { ok: false, error: "The model sent an empty answer. Choose another model." };
+      // No error from the provider means it answered; a thinking model may leave the visible text empty.
+      await chosenChat(context as Ctx, { provider: data.provider, keyRef: data.keyRef, model: data.model }, [{ role: "user", content: "Reply with the single word OK." }]);
       return { ok: true, error: null as string | null };
     } catch (e: any) { return { ok: false, error: `${String(e?.message ?? "Not working").slice(0, 200)}. Choose another model.` }; }
   });
@@ -607,13 +648,13 @@ export const testAndChooseModel = createServerFn({ method: "POST" }).middleware(
   .inputValidator((d) => z.object({ provider: z.string().min(1).max(200), keyLabel: z.string().max(200), model: z.string().min(1).max(300) }).parse(d))
   .handler(async ({ data, context }) => {
     if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can choose chat models");
-    let out = "";
+    const result = await probeRegistryModel(context as Ctx, { provider: data.provider, model: data.model });
+    if (!result.ok) return { ok: false, error: result.error };
+    // It answered: mark it Working on the board too, so a passing model never shows as an error.
     try {
-      out = await registryChat(context as Ctx, { provider: data.provider, model: data.model }, [{ role: "user", content: "Reply with the single word OK." }]);
-    } catch (e: any) {
-      return { ok: false, error: `${String(e?.message ?? "Not working").slice(0, 160)}. Choose another model.` };
-    }
-    if (!out.trim()) return { ok: false, error: "The model sent an empty answer. Choose another model." };
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await (supabaseAdmin as any).from("ai_model_status").upsert({ provider: data.provider, model: data.model, last_status: "ok", last_error: null, last_used_at: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: "provider,model" });
+    } catch { /* the save below is what matters */ }
     const { error } = await (context.supabase as any).from("chat_chosen_models").upsert({ user_id: context.userId, provider: "registry", key_ref: data.provider, key_label: data.keyLabel, model: data.model, last_status: "good", tested_at: new Date().toISOString() }, { onConflict: "user_id,provider,key_ref,model" });
     if (error) return { ok: false, error: "The model works, but saving it failed. Try again." };
     return { ok: true, error: null as string | null };

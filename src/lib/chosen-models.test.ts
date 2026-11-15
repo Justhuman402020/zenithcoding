@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderChosenBySavedKey, requireChosen, sortKeysBySavedAt, sortModelsAZ, sortRowsAZ } from "./chosen-models";
+import { isSettingsComplaint, orderChosenBySavedKey, replyText, requireChosen, sortKeysBySavedAt, sortModelsAZ, sortRowsAZ, testFailureMessage, testReplyWorks } from "./chosen-models";
 
 describe("chosen models", () => {
   it("lists models of a key A to Z, ignoring case and duplicates", () => {
@@ -29,5 +29,24 @@ describe("chosen models", () => {
       { provider: "registry", key_ref: "oldest", model: "Beta" },
     ];
     expect(orderChosenBySavedKey(rows, ["oldest", "newest"]).map((r) => `${r.key_ref}:${r.model}`)).toEqual(["oldest:Beta", "oldest:zeta", "newest:a-model"]);
+  });
+  it("counts a thinking model with no visible text as working", () => {
+    expect(testReplyWorks({ choices: [{ message: { content: "" }, finish_reason: "length" }] })).toBe(true);
+    expect(testReplyWorks({ choices: [{ message: { content: "OK" } }] })).toBe(true);
+    expect(testReplyWorks({ error: { message: "bad" } })).toBe(false);
+    expect(testReplyWorks({ choices: [] })).toBe(false);
+  });
+  it("reads replies sent as text parts or reasoning", () => {
+    expect(replyText({ content: [{ type: "text", text: "O" }, { type: "text", text: "K" }] })).toBe("OK");
+    expect(replyText({ content: null, reasoning_content: "thinking" })).toBe("thinking");
+  });
+  it("retries with other settings instead of calling a working model broken", () => {
+    expect(isSettingsComplaint(400, "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.")).toBe(true);
+    expect(isSettingsComplaint(400, "The model `foo` does not exist")).toBe(false);
+  });
+  it("a busy key is not reported as a broken model", () => {
+    expect(testFailureMessage(429, "rate limit")).toMatch(/try again in a minute/);
+    expect(testFailureMessage(429, "rate limit")).not.toMatch(/Choose another model/);
+    expect(testFailureMessage(404, "")).toMatch(/Choose another model/);
   });
 });

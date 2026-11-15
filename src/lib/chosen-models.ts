@@ -36,3 +36,46 @@ export function orderChosenBySavedKey<T extends { provider: string; key_ref: str
   const at = (id: string) => rank.get(id) ?? Number.MAX_SAFE_INTEGER;
   return [...groups.entries()].sort((a, b) => at(a[0]) - at(b[0])).flatMap(([, group]) => sortRowsAZ(group));
 }
+
+/** Text of a chat reply: plain string, a list of text parts, or (for thinking models) the reasoning text. */
+export function replyText(msg: any): string {
+  const c = msg?.content;
+  if (typeof c === "string" && c.trim()) return c;
+  if (Array.isArray(c)) {
+    const joined = c.map((p: any) => (typeof p === "string" ? p : typeof p?.text === "string" ? p.text : "")).join("");
+    if (joined.trim()) return joined;
+  }
+  for (const k of ["reasoning_content", "reasoning"]) if (typeof msg?.[k] === "string" && msg[k].trim()) return msg[k];
+  return "";
+}
+
+/** A test call works when the provider answered 200 with a reply choice, even if a thinking model used its whole budget and wrote no visible text. */
+export function testReplyWorks(json: any): boolean {
+  const choice = json?.choices?.[0];
+  return !!choice && (choice.message != null || choice.delta != null || typeof choice.text === "string" || choice.finish_reason != null);
+}
+
+/** Request bodies to try for a test: some models reject max_tokens and want max_completion_tokens, some want neither. */
+export function testBodies(model: string) {
+  const messages = [{ role: "user", content: "Reply with the single word OK." }];
+  return [
+    { model, messages, stream: false, max_tokens: 256 },
+    { model, messages, stream: false, max_completion_tokens: 256 },
+    { model, messages, stream: false },
+  ];
+}
+
+/** A 400/422 about request settings (not about the model itself): try the next body instead of failing. */
+export function isSettingsComplaint(status: number, text: string): boolean {
+  return (status === 400 || status === 422) && /max_tokens|max_completion_tokens|unsupported (parameter|value)|not supported with this model|temperature|stream/i.test(text) && !/model.{0,40}(not found|does not exist|unknown|invalid)/i.test(text);
+}
+
+/** Owner-facing result of a failed test, telling a busy key apart from a broken model. */
+export function testFailureMessage(status: number, text: string): string {
+  if (status === 401 || status === 403) return "The key was rejected. Check this key in AI Models.";
+  if (status === 429) return "This key is busy or at its limit right now. The model may still work: try again in a minute.";
+  if (status === 402 || /credit|quota|billing|insufficient/i.test(text)) return "No credit or quota left on this key. Choose another model.";
+  if (status === 404 || /model.{0,40}(not found|does not exist|unknown|invalid)|no such model/i.test(text)) return "This model is not available on this key. Choose another model.";
+  if (status >= 500) return `The provider had a problem (${status}). Try again in a minute.`;
+  return `The provider answered ${status}. Choose another model.`;
+}
