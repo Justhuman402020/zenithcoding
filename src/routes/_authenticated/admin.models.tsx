@@ -21,7 +21,8 @@ import { CloudflarePoolPanel, NeuronsBar } from "@/components/CloudflarePoolPane
 import { CloudflareModelSettings } from "@/components/CloudflareModelSettings";
 import { CloudflarePoolToggle } from "@/components/CloudflarePoolToggle";
 import { BuildEngineSettings } from "@/components/BuildEngineSettings";
-import { ChosenModelsAdmin } from "@/components/ChosenModelsAdmin";
+import { ChooseForChatButton } from "@/components/ChooseForChatButton";
+import { sortRowsAZ } from "@/lib/chosen-models";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -252,6 +253,7 @@ function AdminModelsPage() {
     list.push(row);
     groups.set(row.provider, list);
   }
+  for (const [id, list] of groups) groups.set(id, sortRowsAZ(list));
   const summaries = new Map((data?.providers ?? []).map((p) => [p.provider, p]));
 
 
@@ -268,7 +270,6 @@ function AdminModelsPage() {
       <CloudflarePoolPanel />
       <CloudflareModelSettings />
       <BuildEngineSettings rows={data?.rows ?? []} providers={data?.providers ?? []} />
-      <ChosenModelsAdmin />
 
       <div className="flex items-start gap-3">
         <Cpu className="h-6 w-6 text-primary mt-1" />
@@ -526,7 +527,7 @@ function AdminModelsPage() {
               <div className="divide-y">
                 {visible.map((row) => (
 
-                  <div key={`${row.provider}:${row.model}`} className="p-4 flex items-center gap-3">
+                  <div key={`${row.provider}:${row.model}`} className="p-4 flex flex-wrap items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium truncate">{row.label}</span>
@@ -589,6 +590,7 @@ function AdminModelsPage() {
                     >
                       {row.active ? "In use" : row.access === "paid" ? "Paid only" : row.access === "unavailable" ? "Unavailable" : "Use this"}
                     </Button>
+                    <ChooseForChatButton provider={row.provider} keyLabel={summary?.providerLabel ?? row.provider} model={row.model} disabled={!row.keyConfigured} />
                   </div>
                 ))}
               </div>

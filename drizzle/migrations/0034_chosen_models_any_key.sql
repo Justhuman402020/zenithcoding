@@ -1,0 +1,2 @@
+ALTER TABLE public.chat_chosen_models DROP CONSTRAINT IF EXISTS chat_chosen_models_provider_check;
+ALTER TABLE public.chat_chosen_models ADD CONSTRAINT chat_chosen_models_provider_check CHECK (provider IN ('ollama','openrouter','registry'));

@@ -74,4 +74,4 @@ docker compose -f docker-compose.base44.yml ps  # should show healthy
 - Site AI alone uses atomic shared reservations, database-leased attempts and wake-on-enqueue recovery with four safe retries then ordered handoff; ledger settlement is single-path and ambiguous inference is never blindly replayed, preserving workspace engine rules.
 - App install: manifest + root install provider + home-menu control; no service workers.
 - Visual checks: ScreenshotOne Brain key only; agent browser: one warm E2B Playwright per task.
-- Side chat 'Chosen models' mode: owner-saved key+model rows (chat_chosen_models) pinned per chat; routing in assistant.functions.ts never falls back so a failing model is reported, not swapped.
+- Side chat 'Chosen models' mode: owner-saved key+model rows (chat_chosen_models, incl. any Admin AI Models registry key) pinned per chat; a row is saved only after a passing test and routing never falls back.

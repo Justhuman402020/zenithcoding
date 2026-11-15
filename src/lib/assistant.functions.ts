@@ -92,7 +92,55 @@ async function helperChatInner(ctx: Ctx, keyId: string | null, model: string | n
 /** A saved Chosen model answers; no fallback to any other model. */
 async function chosenChat(ctx: Ctx, chosen: ChosenRef, messages: Array<{ role: string; content: any }>, look?: Look) {
   if (chosen.provider === "ollama") return ollamaChat(ctx, chosen.keyRef, chosen.model, messages, look);
+  if (chosen.provider === "registry") return registryChat(ctx, { provider: chosen.keyRef, model: chosen.model }, messages, look);
   return openrouterChat({ provider: chosen.keyRef, model: chosen.model }, messages, look);
+}
+
+/** Short, key-free reason a saved AI Models key could not answer. */
+function providerFailure(status: number, text: string) {
+  if (status === 401 || status === 403) return "The key was rejected";
+  if (status === 402 || /credit|quota|billing|insufficient/i.test(text)) return "No credit or quota left on this key";
+  if (status === 404 || /not.?found|does not exist|unsupported/i.test(text)) return "This model is unavailable on this key";
+  if (status === 429) return "This key is rate limited right now";
+  return `The provider answered ${status}`;
+}
+
+/** A model on any saved Admin → AI Models key (Google AI Studio, Mistral, …). No fallback. */
+async function registryChat(ctx: Ctx, ref: { provider: string; model: string }, messages: Array<{ role: string; content: any }>, look?: Look) {
+  const { loadProviderRegistry } = await import("./model-router.server");
+  const { providers, keys } = await loadProviderRegistry();
+  const provider = providers.find((p) => p.id === ref.provider);
+  if (!provider) throw new Error("This saved key is no longer in AI Models");
+  let apiKey = keys[ref.provider];
+  if (!apiKey) {
+    // Same owner-saved keys the AI Models board reads.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { decryptSecret } = await import("./secrets-crypto.server");
+    const { data: saved } = await supabaseAdmin.from("project_secrets").select("value_encrypted").eq("user_id", ctx.userId).eq("key", provider.envKey).limit(1).maybeSingle();
+    if (saved) { try { apiKey = (await decryptSecret(saved.value_encrypted)).trim(); } catch { /* never surface secret details */ } }
+  }
+  if (!apiKey) throw new Error("No API key saved for this provider");
+  const base = provider.baseURL.replace(/\/$/, "");
+  const convo: any[] = [...messages];
+  let useTools = !!look;
+  for (let round = 0; ; round++) {
+    const withTools = useTools && round < HELPER_TOOL_ROUNDS;
+    const response = await fetch(`${base}/chat/completions`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: ref.model, messages: convo, stream: false, max_tokens: 2000, ...(withTools ? { tools: HELPER_TOOLS } : {}) }) });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      if (withTools && (response.status === 400 || response.status === 404 || response.status === 422)) { useTools = false; continue; }
+      throw new Error(providerFailure(response.status, text));
+    }
+    const json: any = await response.json();
+    const msg = json?.choices?.[0]?.message;
+    const calls: any[] = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+    if (withTools && look && calls.length) {
+      convo.push({ role: "assistant", content: msg?.content ?? "", tool_calls: calls });
+      for (const c of calls) convo.push({ role: "tool", tool_call_id: c.id, content: runHelperTool(String(c.function?.name ?? ""), String(c.function?.arguments ?? ""), look.files, look.errors) });
+      continue;
+    }
+    return String(msg?.content ?? "");
+  }
 }
 
 async function openrouterChat(ref: { provider: string; model: string }, messages: Array<{ role: string; content: any }>, look?: Look) {
@@ -459,7 +507,7 @@ export const listProjectFiles = createServerFn({ method: "POST" }).middleware([r
 
 // ---------- Chosen models (side chat) ----------
 
-type ChosenRow = { id: string; provider: "ollama" | "openrouter"; key_ref: string; key_label: string; model: string; last_status: string; tested_at: string };
+type ChosenRow = { id: string; provider: "ollama" | "openrouter" | "registry"; key_ref: string; key_label: string; model: string; last_status: string; tested_at: string };
 
 /** The chat's chosen model; a new chat starts on the model used last. */
 async function chosenForChat(ctx: Ctx, chatId: string, chosenId: string | null): Promise<ChosenRef | null> {
@@ -547,4 +595,21 @@ export const setChatChosenModel = createServerFn({ method: "POST" }).middleware(
     if (error) throw new Error(error.message);
     await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.chatId, user_id: context.userId, role: "assistant", content: `Now using ${row.model}. Ask me anything.`, parts: { model: row.model } });
     return { ok: true };
+  });
+
+/** AI Models board: test one model on a saved key; save it for chat only when it answers. */
+export const testAndChooseModel = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ provider: z.string().min(1).max(200), keyLabel: z.string().max(200), model: z.string().min(1).max(300) }).parse(d))
+  .handler(async ({ data, context }) => {
+    if (!(await isAdmin(context as Ctx))) throw new Error("Only an admin can choose chat models");
+    let out = "";
+    try {
+      out = await registryChat(context as Ctx, { provider: data.provider, model: data.model }, [{ role: "user", content: "Reply with the single word OK." }]);
+    } catch (e: any) {
+      return { ok: false, error: `${String(e?.message ?? "Not working").slice(0, 160)}. Choose another model.` };
+    }
+    if (!out.trim()) return { ok: false, error: "The model sent an empty answer. Choose another model." };
+    const { error } = await (context.supabase as any).from("chat_chosen_models").upsert({ user_id: context.userId, provider: "registry", key_ref: data.provider, key_label: data.keyLabel, model: data.model, last_status: "good", tested_at: new Date().toISOString() }, { onConflict: "user_id,provider,key_ref,model" });
+    if (error) return { ok: false, error: "The model works, but saving it failed. Try again." };
+    return { ok: true, error: null as string | null };
   });
