@@ -31,6 +31,16 @@ export async function readBuildRouterKey() {
   const { getIntegrationKey } = await import("./integration-keys.server");
   return getIntegrationKey("build_openrouter", "apiKey");
 }
+/** When the Build key was last saved, so it sits among the other keys in saved order. */
+export async function readBuildRouterSavedAt(): Promise<string | null> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin.from("platform_integration_keys" as any).select("updated_at").eq("service", "build_openrouter").eq("field", "apiKey").maybeSingle();
+    return ((data as any)?.updated_at as string | null) ?? null;
+  } catch {
+    return null;
+  }
+}
 export async function saveBuildRouterKey(apiKey: string, userId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { encryptSecret } = await import("./secrets-crypto.server");

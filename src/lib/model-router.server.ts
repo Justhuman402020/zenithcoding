@@ -21,17 +21,21 @@ export async function loadProviderRegistry(): Promise<{ providers: ProviderOptio
   const keys = loadProviderKeys();
   const providers: ProviderOption[] = [...PROVIDERS];
   const { loadCustomProviders } = await import("./custom-providers.server");
+  const saved: Array<ProviderOption & { savedAt: string | null }> = [];
   for (const custom of await loadCustomProviders()) {
-    const { apiKey, ...option } = custom;
-    providers.push(option);
+    const { apiKey, savedAt, ...option } = custom;
+    saved.push({ ...option, savedAt });
     keys[option.id] = apiKey;
   }
-  const { readBuildRouterKey, BUILD_ROUTER_ID } = await import("./workspace-ai.server");
+  const { readBuildRouterKey, readBuildRouterSavedAt, BUILD_ROUTER_ID } = await import("./workspace-ai.server");
   const buildKey = await readBuildRouterKey();
   if (buildKey) {
-    providers.push({ id: BUILD_ROUTER_ID, label: "OpenRouter (Build key)", envKey: "BUILD_OPENROUTER", baseURL: "https://openrouter.ai/api/v1", docs: "https://openrouter.ai", models: [] } as ProviderOption);
+    saved.push({ id: BUILD_ROUTER_ID, label: "OpenRouter (Build key)", envKey: "BUILD_OPENROUTER", baseURL: "https://openrouter.ai/api/v1", docs: "https://openrouter.ai", models: [], savedAt: await readBuildRouterSavedAt() } as ProviderOption & { savedAt: string | null });
     keys[BUILD_ROUTER_ID] = buildKey;
   }
+  // Saved keys keep their names and the order they were saved in: newest key at the bottom.
+  const { sortKeysBySavedAt } = await import("./chosen-models");
+  for (const { savedAt: _savedAt, ...option } of sortKeysBySavedAt(saved)) providers.push(option);
   return { providers, keys };
 }
 

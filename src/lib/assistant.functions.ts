@@ -565,8 +565,13 @@ export const testChatModel = createServerFn({ method: "POST" }).middleware([requ
   });
 
 export const listChosenModels = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
-  const { data } = await (context.supabase as any).from("chat_chosen_models").select("id,provider,key_ref,key_label,model,last_status,tested_at").order("model");
-  return (data ?? []) as ChosenRow[];
+  const { data } = await (context.supabase as any).from("chat_chosen_models").select("id,provider,key_ref,key_label,model,last_status,tested_at");
+  // Same key order as Admin → AI Models (saved order, newest key last), then Chat helper keys; models A to Z inside each key.
+  const { loadProviderRegistry } = await import("./model-router.server");
+  const { providers } = await loadProviderRegistry();
+  const { data: ollama } = await (context.supabase as any).from("ollama_keys").select("id").order("created_at");
+  const keyOrder = [...providers.map((p) => p.id), ...((ollama ?? []) as any[]).map((k) => String(k.id))];
+  return orderChosenBySavedKey((data ?? []) as ChosenRow[], keyOrder);
 });
 
 export const saveChosenModel = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])

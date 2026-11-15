@@ -18,14 +18,21 @@ export function sortRowsAZ<T extends { model: string }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => a.model.localeCompare(b.model, undefined, { sensitivity: "base", numeric: true }));
 }
 
-/** Keep keys in their saved order and names; sort only the models inside each key. */
-export function orderChosenBySavedKey<T extends { provider: string; key_ref: string; key_label: string; model: string }>(rows: T[]): T[] {
+/** Saved keys oldest first, so the newest saved key sits at the bottom. Keys without a date keep their place at the top. */
+export function sortKeysBySavedAt<T extends { savedAt?: string | null }>(keys: T[]): T[] {
+  const time = (k: T) => (k.savedAt ? Date.parse(k.savedAt) : Number.NEGATIVE_INFINITY);
+  return keys.map((k, i) => ({ k, i })).sort((a, b) => time(a.k) - time(b.k) || a.i - b.i).map((x) => x.k);
+}
+
+/** Chat picker: keys in the same saved order as the AI Models page (newest key last); only the models inside each key go A to Z. */
+export function orderChosenBySavedKey<T extends { provider: string; key_ref: string; model: string }>(rows: T[], keyOrder: string[]): T[] {
+  const rank = new Map(keyOrder.map((id, i) => [id, i]));
   const groups = new Map<string, T[]>();
   for (const row of rows) {
-    const id = `${row.provider}\u0000${row.key_ref}`;
-    const group = groups.get(id) ?? [];
+    const group = groups.get(row.key_ref) ?? [];
     group.push(row);
-    groups.set(id, group);
+    groups.set(row.key_ref, group);
   }
-  return [...groups.values()].flatMap((group) => sortRowsAZ(group));
+  const at = (id: string) => rank.get(id) ?? Number.MAX_SAFE_INTEGER;
+  return [...groups.entries()].sort((a, b) => at(a[0]) - at(b[0])).flatMap(([, group]) => sortRowsAZ(group));
 }

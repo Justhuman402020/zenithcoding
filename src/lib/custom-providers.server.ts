@@ -27,15 +27,15 @@ export function normalizeBaseUrl(input: string) {
   return url;
 }
 
-export async function loadCustomProviders(): Promise<Array<ProviderOption & { apiKey: string }>> {
+export async function loadCustomProviders(): Promise<Array<ProviderOption & { apiKey: string; savedAt: string | null }>> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { decryptSecret } = await import("./secrets-crypto.server");
     const { data } = await supabaseAdmin
       .from("custom_ai_providers")
-      .select("id, label, base_url, key_encrypted")
+      .select("id, label, base_url, key_encrypted, created_at")
       .order("created_at", { ascending: true });
-    const out: Array<ProviderOption & { apiKey: string }> = [];
+    const out: Array<ProviderOption & { apiKey: string; savedAt: string | null }> = [];
     for (const row of data ?? []) {
       let apiKey = "";
       try {
@@ -51,6 +51,7 @@ export async function loadCustomProviders(): Promise<Array<ProviderOption & { ap
         docs: row.base_url as string,
         models: [],
         apiKey: apiKey.trim(),
+        savedAt: (row.created_at as string | null) ?? null,
       });
     }
     return out;
