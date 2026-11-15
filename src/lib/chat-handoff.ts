@@ -39,3 +39,15 @@ export function handoffPlanPrompt(kind: string, prompt: string, name?: string | 
     : "My side chat found this work for this project. Read the current files, then replan it the best way";
   return `${intro}: list every step, name each API key it will use from the Admin Brain and AI Models (names only), say which keys are missing and where to get them, and recommend which OpenRouter build key/model should build it. Do not change any files — end with the approval line so I can approve the OpenRouter build.\n\n${prompt}`;
 }
+
+const CANT_SEE_IMAGE = /\b(can(?:not|'?t|’t)|unable to|do(?:es)? not|don'?t|doesn'?t|am not able to)\s+(?:be able to\s+)?(see|view|read|process|access|open|analy[sz]e|look at|interpret)\s+(?:the\s+|this\s+|that\s+|your\s+|any\s+|attached\s+)*(image|picture|photo|screenshot)s?\b/i;
+
+/**
+ * Offer "Retry with OpenRouter" only when Ollama or a Chosen model was in charge,
+ * an image was sent, and that model failed or said it cannot see images.
+ * OpenRouter is never used unless the owner taps that retry.
+ */
+export function shouldOfferOpenRouterImageRetry(chatEngine: string, hasImages: boolean, failed: boolean, reply: string): boolean {
+  if (chatEngine === "openrouter" || !hasImages) return false;
+  return failed || CANT_SEE_IMAGE.test(reply);
+}

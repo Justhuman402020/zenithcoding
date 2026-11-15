@@ -24,7 +24,7 @@ import { getWorkspaceAI } from "@/lib/workspace.functions";
 import { applyPlatformBackend } from "@/lib/admin-supabase.functions";
 import { isEnvFile, redactEnv } from "@/lib/assistant-policy";
 import { canSendChat, chatMessageText, isChatImage, type ChatImage } from "@/lib/assistant-images";
-import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listProjectFiles, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
+import { checkEdit, decideEdit, getChat, listChatProjects, listChats, listProjectFiles, retryImageWithOpenRouter, sendChatMessage, setupChat, stopEdit } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_authenticated/chats/$chatId")({
   head: () => ({ meta: [{ title: "Chat — Code Haven" }, { name: "description", content: "Chat with your Code Haven helper." }, { property: "og:title", content: "Chat — Code Haven" }, { property: "og:description", content: "Chat with your Code Haven helper." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }),
@@ -44,6 +44,15 @@ function ChatPage() {
   const check = useServerFn(checkEdit);
   const stopFn = useServerFn(stopEdit);
   const applyBackend = useServerFn(applyPlatformBackend);
+  const retryImageFn = useServerFn(retryImageWithOpenRouter);
+  // Only this tap ever sends a chat image to OpenRouter.
+  async function retryWithOpenRouter(messageId: string) {
+    if (busy || sendingRef.current) return;
+    sendingRef.current = true; setBusy(true);
+    try { await retryImageFn({ data: { chatId, messageId } }); }
+    catch (e: any) { toast.error(e?.message ?? "Retry failed"); }
+    await reload(); setBusy(false); sendingRef.current = false;
+  }
   const [liveLog, setLiveLog] = useState<Record<string, string[]>>({});
   const [runStats, setRunStats] = useState<Record<string, { clock: RunClock; stepCount: number; fileCount: number }>>({});
   const [data, setData] = useState<Data | null>(null);
@@ -250,6 +259,7 @@ function ChatPage() {
               : <div key={it.m.id} className="max-w-full">
                   <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{it.m.content}</ReactMarkdown></div>
                   {replyTime(index) && <div className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />Replied in {replyTime(index)}{it.kind === "msg" && it.m.parts?.model ? ` · ${String(it.m.parts.model)}` : ""}</div>}
+                  {it.m.parts?.imageRetry && !it.m.parts.imageRetry.used && <Button size="sm" variant="outline" className="mt-2" disabled={busy} onClick={() => void retryWithOpenRouter(it.m.id)}><ImagePlus className="h-4 w-4 mr-1" />Retry with OpenRouter</Button>}
                   {it.m.parts?.planning && <div className="mt-3 border rounded-md p-3 text-xs"><NeuronLog><span className="ml-1">Planning · {it.m.parts.planning.used} Neurons</span></NeuronLog>{it.m.parts.planning.steps.map((step: any, i: number) => <div key={i} className="flex justify-between gap-2 border-b py-1"><span>Step {step.step} · Key #{step.key_number}</span><span>{step.neurons} Neurons</span></div>)}</div>}
                   {Array.isArray(it.m.parts?.log) && it.m.parts.log.length > 0 && (
                     data.chat.projectId && <WorkLogCard projectId={data.chat.projectId} chatId={chatId} runId={`a-${it.m.id}`} title="Saved work" log={it.m.parts.log.join("\n")} />

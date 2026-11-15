@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isEnvFile, redactEnv, isCloudflareUrl, assertChatUrlAllowed, ollamaBase, decide, fitHelperContext, HELPER_CONTEXT_LIMIT, HELPER_FILE_BUDGET, HELPER_TOOLS, HELPER_TOOL_ROUNDS, HELPER_TOOL_OUTPUT, shouldRetryTunnel, runHelperTool, formatHelperErrors, type EditStatus, type HelperFile, type HelperErrors, type HelperInfo } from "./assistant-policy";
-import { chatRoute, parseChatProposal } from "./chat-handoff";
+import { chatRoute, parseChatProposal, shouldOfferOpenRouterImageRetry } from "./chat-handoff";
 
 import { successfulEdit } from "./owner-policy";
 import { imageMessageContent } from "./assistant-images";
@@ -438,36 +438,81 @@ export const sendChatMessage = createServerFn({ method: "POST" }).middleware([re
     if (!chat) throw new Error("Chat not found");
     // Cloudflare planning lives on the build screen only; the chat model plans here itself.
     const attachText = (data.attachments ?? []).map((a) => `\n\n[Attached ${a.name}]\n${isEnvFile(a.name) ? redactEnv(a.text) : a.text}`).join("");
-    const { error: saveError } = await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText, parts: { images: data.images ?? [] } });
-    if (saveError) throw new Error("Could not save your message. Please try again.");
-    const { data: history } = await (context.supabase as any).from("assistant_messages").select("role,content").eq("chat_id", data.id).order("created_at", { ascending: false }).limit(60);
-    const { readWorkspaceAI } = await import("./workspace-ai.server");
-    const chatEngine = (await readWorkspaceAI()).chatEngine;
-    const chosen = chatEngine === "chosen" ? await chosenForChat(context as Ctx, data.id, chat.chosen_model_id) : null;
-    const engine = chatEngine === "chosen" ? (chosen?.provider === "ollama" ? "ollama" : "openrouter") : chatEngine === "ollama" ? "ollama" : "openrouter";
-    const look: Look = chat.project_id ? await loadProjectLook(context as Ctx, chat.project_id) : { files: [], errors: { build: "no project attached", jobs: [], preview: [] } };
-    look.info = await loadHelperInfo(context as Ctx, chat.project_id);
-    const ctxText = await buildContext(context as Ctx, chat.project_id, engine, look);
-    let reply: string;
-    const askedAt = Date.now();
-    try {
-      const previous = ((history ?? []).reverse() as any[]).slice(0, -1).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
-      reply = await helperChat(context as Ctx, chat.ollama_key_id, chat.model, [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(data.text + attachText, data.images ?? []) }], !!data.images?.length, look, chosen);
-    } catch (e) {
-      reply = chatEngine === "chosen"
-        ? `⚠️ ${e instanceof Error ? e.message : "The chosen model failed"}. This model is not working right now — choose another model from the model list.`
-        : `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
-    }
-    const { text, proposal } = parseChatProposal(reply);
-    await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "assistant", content: text || "Here's the plan.", parts: { reply_ms: Date.now() - askedAt, ...(chosen ? { model: chosen.model } : {}) } });
-    if (proposal?.kind === "new_project") {
-      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: null, prompt: proposal.prompt, kind: "new_project", report: { name: proposal.name } });
-    } else if (proposal?.kind === "handoff" && chat.project_id) {
-      await (context.supabase as any).from("assistant_edit_requests").insert({ chat_id: data.id, user_id: context.userId, project_id: chat.project_id, prompt: proposal.prompt, kind: "handoff", images: data.images ?? [] });
-    }
-    await (context.supabase as any).from("assistant_chats").update({ updated_at: new Date().toISOString() }).eq("id", data.id);
+    const { data: saved, error: saveError } = await (context.supabase as any).from("assistant_messages").insert({ chat_id: data.id, user_id: context.userId, role: "user", content: data.text + attachText, parts: { images: data.images ?? [] } }).select("id,created_at").single();
+    if (saveError || !saved) throw new Error("Could not save your message. Please try again.");
+    await answerChat(context as Ctx, data.id, chat, { id: saved.id, content: data.text + attachText, created_at: saved.created_at, images: data.images ?? [] }, false);
     return { ok: true };
   });
+
+/** Tapped "Retry with OpenRouter" after the chat model could not read an image. Only this tap involves OpenRouter. */
+export const retryImageWithOpenRouter = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ chatId: z.string().uuid(), messageId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const db = context.supabase as any;
+    const { data: failed } = await db.from("assistant_messages").select("id,parts").eq("id", data.messageId).eq("chat_id", data.chatId).eq("role", "assistant").maybeSingle();
+    const offer = failed?.parts?.imageRetry;
+    if (!offer?.userMessageId || offer.used) throw new Error("This retry is no longer available");
+    const { data: question } = await db.from("assistant_messages").select("id,content,parts,created_at").eq("id", offer.userMessageId).eq("chat_id", data.chatId).maybeSingle();
+    if (!question) throw new Error("The original image message was not found");
+    const { data: chat } = await db.from("assistant_chats").select("project_id,ollama_key_id,model,chosen_model_id").eq("id", data.chatId).single();
+    await db.from("assistant_messages").update({ parts: { ...failed.parts, imageRetry: { ...offer, used: true } } }).eq("id", failed.id);
+    const images = Array.isArray(question.parts?.images) ? question.parts.images : [];
+    await answerChat(context as Ctx, data.chatId, chat, { id: question.id, content: question.content, created_at: question.created_at, images }, true);
+    return { ok: true };
+  });
+
+type AskedMessage = { id: string; content: string; created_at: string; images: Array<{ type: "file"; mediaType: string; url: string }> };
+
+/** Answers one user message with the model in charge (or OpenRouter's image model only when retrying on request). */
+async function answerChat(ctx: Ctx, chatId: string, chat: any, asked: AskedMessage, withOpenRouter: boolean) {
+  const db = ctx.supabase as any;
+  const { data: history } = await db.from("assistant_messages").select("role,content").eq("chat_id", chatId).lt("created_at", asked.created_at).order("created_at", { ascending: false }).limit(59);
+  const { readWorkspaceAI, recordModelCall } = await import("./workspace-ai.server");
+  const settings = await readWorkspaceAI();
+  const chatEngine = settings.chatEngine;
+  const chosen = !withOpenRouter && chatEngine === "chosen" ? await chosenForChat(ctx, chatId, chat.chosen_model_id) : null;
+  const engine = withOpenRouter ? "openrouter" : chatEngine === "chosen" ? (chosen?.provider === "ollama" ? "ollama" : "openrouter") : chatEngine === "ollama" ? "ollama" : "openrouter";
+  const look: Look = chat.project_id ? await loadProjectLook(ctx, chat.project_id) : { files: [], errors: { build: "no project attached", jobs: [], preview: [] } };
+  look.info = await loadHelperInfo(ctx, chat.project_id);
+  const ctxText = await buildContext(ctx, chat.project_id, engine, look);
+  const previous = ((history ?? []).reverse() as any[]).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
+  const messages = [{ role: "system", content: ctxText }, ...previous, { role: "user", content: imageMessageContent(asked.content, asked.images) }];
+  let reply: string;
+  let failedRun = false;
+  const askedAt = Date.now();
+  try {
+    if (withOpenRouter) {
+      if (!settings.image) throw new Error("Select an OpenRouter image model in Admin → AI Models");
+      const started = Date.now();
+      try {
+        reply = await openrouterChat(settings.image, messages, look);
+        await recordModelCall({ user_id: ctx.userId, provider: settings.image.provider, model: settings.image.model, section: "assistant", started_at: started, status: "ok" });
+      } catch (e: any) {
+        await recordModelCall({ user_id: ctx.userId, provider: settings.image.provider, model: settings.image.model, section: "assistant", started_at: started, status: "failed", error: e?.message });
+        throw e;
+      }
+    } else {
+      reply = await helperChat(ctx, chat.ollama_key_id, chat.model, messages, asked.images.length > 0, look, chosen);
+    }
+  } catch (e) {
+    failedRun = true;
+    reply = withOpenRouter
+      ? `⚠️ ${e instanceof Error ? e.message : "OpenRouter failed"}.`
+      : chatEngine === "chosen"
+        ? `⚠️ ${e instanceof Error ? e.message : "The chosen model failed"}. This model is not working right now — choose another model from the model list.`
+        : `⚠️ ${e instanceof Error ? e.message : "Ollama failed"}. Pick another key or model and try again.`;
+  }
+  const offerRetry = !withOpenRouter && shouldOfferOpenRouterImageRetry(chatEngine, asked.images.length > 0, failedRun, reply);
+  const { text, proposal } = parseChatProposal(reply);
+  const shown = offerRetry && !failedRun ? `⚠️ Your chat model could not read the image.\n\n${text}` : text;
+  await db.from("assistant_messages").insert({ chat_id: chatId, user_id: ctx.userId, role: "assistant", content: shown || "Here's the plan.", parts: { reply_ms: Date.now() - askedAt, ...(withOpenRouter && settings.image ? { model: settings.image.model } : chosen ? { model: chosen.model } : {}), ...(offerRetry ? { imageRetry: { userMessageId: asked.id } } : {}) } });
+  if (proposal?.kind === "new_project") {
+    await db.from("assistant_edit_requests").insert({ chat_id: chatId, user_id: ctx.userId, project_id: null, prompt: proposal.prompt, kind: "new_project", report: { name: proposal.name } });
+  } else if (proposal?.kind === "handoff" && chat.project_id) {
+    await db.from("assistant_edit_requests").insert({ chat_id: chatId, user_id: ctx.userId, project_id: chat.project_id, prompt: proposal.prompt, kind: "handoff", images: asked.images });
+  }
+  await db.from("assistant_chats").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
+}
 
 /**
  * Yes never builds from the chat. It sends the work to the project's build screen,

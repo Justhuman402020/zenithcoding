@@ -47,3 +47,20 @@ describe("chat can read the Brain and key names, never change them", () => {
     expect(HELPER_TOOLS.map((t) => t.function.name).some((n) => /write|edit|delete|remove|update|set_|sql|publish|build/i.test(n))).toBe(false);
   });
 });
+
+import { shouldOfferOpenRouterImageRetry } from "./chat-handoff";
+describe("Retry with OpenRouter for images", () => {
+  it("is offered when the Ollama or Chosen model fails on an image", () => {
+    expect(shouldOfferOpenRouterImageRetry("ollama", true, true, "⚠️ Ollama said 400")).toBe(true);
+    expect(shouldOfferOpenRouterImageRetry("chosen", true, true, "⚠️ failed")).toBe(true);
+  });
+  it("is offered when the model answers that it cannot see the image", () => {
+    expect(shouldOfferOpenRouterImageRetry("ollama", true, false, "Sorry, I can't see images.")).toBe(true);
+    expect(shouldOfferOpenRouterImageRetry("chosen", true, false, "I am unable to view the attached image.")).toBe(true);
+  });
+  it("is not offered when the model read the image, for text-only messages, or when OpenRouter runs the chat", () => {
+    expect(shouldOfferOpenRouterImageRetry("ollama", true, false, "The screenshot shows a blue header.")).toBe(false);
+    expect(shouldOfferOpenRouterImageRetry("ollama", false, true, "⚠️ failed")).toBe(false);
+    expect(shouldOfferOpenRouterImageRetry("openrouter", true, true, "⚠️ failed")).toBe(false);
+  });
+});
