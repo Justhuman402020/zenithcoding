@@ -23,11 +23,11 @@ export function ChosenModelPicker({ chatId, currentId, onChanged }: { chatId: st
         const previous = rows[index - 1];
         const newKey = !previous || previous.provider !== r.provider || previous.key_ref !== r.key_ref;
         return <div key={r.id}>
-          {newKey && <div className="border-t px-2 pb-1 pt-2 text-xs font-semibold first:border-t-0 first:pt-1">{r.key_label}</div>}
+          {newKey && <div className="border-t px-2 pb-1 pt-2 text-xs font-semibold break-words first:border-t-0 first:pt-1">{r.key_label}</div>}
           <div className="flex items-center gap-1">
             <button className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={async () => { try { await setModel({ data: { chatId, chosenId: r.id } }); setOpen(false); onChanged(); } catch (e: any) { toast.error(e.message); } }}>
               {r.id === currentId ? <Check className="h-4 w-4 shrink-0 text-primary" /> : <span className="w-4 shrink-0" />}
-              <span className="min-w-0 flex-1 truncate">{r.model}</span>
+              <span className="min-w-0 flex-1 break-all">{r.model}</span>
             </button>
             <Button size="icon" variant="ghost" aria-label={`Delete ${r.model}`} onClick={async () => { await del({ data: { id: r.id } }); setRows((x) => x.filter((y) => y.id !== r.id)); if (r.id === currentId) onChanged(); }}><Trash2 className="h-4 w-4" /></Button>
           </div>

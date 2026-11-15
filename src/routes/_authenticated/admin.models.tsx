@@ -527,10 +527,10 @@ function AdminModelsPage() {
               <div className="divide-y">
                 {visible.map((row) => (
 
-                  <div key={`${row.provider}:${row.model}`} className="p-4 flex flex-wrap items-center gap-3">
-                    <div className="min-w-0 flex-1">
+                  <div key={`${row.provider}:${row.model}`} className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="min-w-0 w-full flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium truncate">{row.label}</span>
+                        <span className="w-full text-sm font-medium break-all">{row.model}</span>
                         <span className="text-[10px] rounded px-1.5 py-0.5 border text-muted-foreground">
                           {row.role === "coding+images" ? "coding + understands images" : "coding only"}
                         </span>
@@ -567,7 +567,7 @@ function AdminModelsPage() {
                           </span>
                         ) : null}
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">{row.hint}</div>
+                      <div className="text-xs text-muted-foreground break-words">{row.hint}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
                         <span className={statusTone(row.lastStatus)}>{statusLabel(row.lastStatus)}</span>
                         <span className="text-muted-foreground">
@@ -582,6 +582,7 @@ function AdminModelsPage() {
                         ) : null}
                       </div>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant={row.active ? "secondary" : "outline"}
@@ -591,6 +592,7 @@ function AdminModelsPage() {
                       {row.active ? "In use" : row.access === "paid" ? "Paid only" : row.access === "unavailable" ? "Unavailable" : "Use this"}
                     </Button>
                     <ChooseForChatButton provider={row.provider} keyLabel={summary?.providerLabel ?? row.provider} model={row.model} disabled={!row.keyConfigured} />
+                    </div>
                   </div>
                 ))}
               </div>
