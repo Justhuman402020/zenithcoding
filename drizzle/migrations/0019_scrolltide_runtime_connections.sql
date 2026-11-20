@@ -1,0 +1,14 @@
+CREATE TABLE public.runtime_mcp_connections (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, provider text NOT NULL CHECK (provider = 'scrolltide'), state text NOT NULL DEFAULT 'authenticating', origin text NOT NULL, encrypted_auth text NOT NULL, oauth_state text UNIQUE, oauth_expires_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(user_id, provider));
+GRANT ALL ON public.runtime_mcp_connections TO service_role;
+ALTER TABLE public.runtime_mcp_connections ENABLE ROW LEVEL SECURITY;
+CREATE TABLE public.scrolltide_drafts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL, project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE, template_id text NOT NULL, title text NOT NULL, source text NOT NULL, brief text NOT NULL, requirements text NOT NULL DEFAULT '', state text NOT NULL DEFAULT 'draft' CHECK(state IN ('draft','approved','denied','dispatched')), request_key uuid UNIQUE, created_at timestamptz NOT NULL DEFAULT now());
+GRANT SELECT ON public.scrolltide_drafts TO authenticated;
+GRANT ALL ON public.scrolltide_drafts TO service_role;
+ALTER TABLE public.scrolltide_drafts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Owner reads own template drafts" ON public.scrolltide_drafts FOR SELECT TO authenticated USING (user_id = auth.uid() AND EXISTS (SELECT 1 FROM public.projects p WHERE p.id = project_id AND p.user_id = auth.uid()));
+CREATE FUNCTION public.claim_scrolltide_oauth(p_state text) RETURNS SETOF public.runtime_mcp_connections LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$ UPDATE public.runtime_mcp_connections SET oauth_state = NULL WHERE oauth_state = p_state AND oauth_expires_at > now() RETURNING * $$;
+REVOKE ALL ON FUNCTION public.claim_scrolltide_oauth(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_scrolltide_oauth(text) TO service_role;
+CREATE FUNCTION public.claim_scrolltide_draft(p_id uuid, p_user uuid, p_project uuid, p_key uuid) RETURNS SETOF public.scrolltide_drafts LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$ UPDATE public.scrolltide_drafts SET state = 'dispatched', request_key = p_key WHERE id = p_id AND user_id = p_user AND project_id = p_project AND state = 'approved' RETURNING * $$;
+REVOKE ALL ON FUNCTION public.claim_scrolltide_draft(uuid,uuid,uuid,uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_scrolltide_draft(uuid,uuid,uuid,uuid) TO service_role;

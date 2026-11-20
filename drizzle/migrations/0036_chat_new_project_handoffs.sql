@@ -1,0 +1,1 @@
+ALTER TABLE public.assistant_edit_requests ALTER COLUMN project_id DROP NOT NULL;

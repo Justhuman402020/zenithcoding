@@ -11,9 +11,11 @@ import {
   type ProviderOption,
 } from "./ai-providers";
 import type { ProviderKeys } from "./model-router.server";
+import { listModelIds } from "./custom-providers.server";
+import { catalogModels, type RouterModel } from "./openrouter-catalog";
 
 
-export type DiscoveredModel = ModelOption & { curated: boolean };
+export type DiscoveredModel = ModelOption & { curated: boolean; routerDetails?: RouterModel };
 
 type CacheEntry = { at: number; models: DiscoveredModel[] };
 const cache = new Map<string, CacheEntry>();
@@ -32,24 +34,29 @@ export async function listProviderModels(
   providerId: string,
   apiKey: string,
   option?: ProviderOption,
+  refresh = false,
 ): Promise<DiscoveredModel[]> {
   const provider = option ?? findProvider(providerId);
   if (!provider) return [];
 
   const cached = cache.get(providerId);
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.models;
+  if (!refresh && cached && Date.now() - cached.at < TTL_MS) return cached.models;
+
+  if (/^https:\/\/openrouter\.ai\/api\/v1\/?$/.test(provider.baseURL)) {
+    const response = await fetch(`${provider.baseURL.replace(/\/$/, "")}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!response.ok) return [];
+    const json = await response.json() as { data?: Array<Record<string, any>> };
+    const models = catalogModels(json.data ?? []).map((m) => ({ id: m.id, label: m.label, hint: m.description, vision: m.vision, tools: m.supportedParameters.includes("tools"), curated: false, routerDetails: m }));
+    cache.set(providerId, { at: Date.now(), models });
+    return models;
+  }
 
 
   const curated = new Map(provider.models.map((m) => [m.id, m]));
   let ids: string[] = [];
   try {
-    const res = await fetch(`${provider.baseURL}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (res.ok) {
-      const json = (await res.json()) as { data?: Array<{ id?: string }> };
-      ids = (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
-    }
+    const listed = await listModelIds(provider.baseURL, apiKey);
+    ids = listed.models;
   } catch {
     // fall back to the curated list below
   }
@@ -68,6 +75,10 @@ export async function listProviderModels(
   });
   cache.set(providerId, { at: Date.now(), models });
   return models;
+}
+
+export function clearModelDiscoveryCache() {
+  cache.clear();
 }
 
 /** OpenRouter exposes real credit usage for a key; others do not. */

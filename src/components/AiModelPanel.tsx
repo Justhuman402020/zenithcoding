@@ -30,7 +30,7 @@ export function AiModelPanel() {
         <h2 className="font-semibold">AI model</h2>
       </div>
       <p className="text-sm text-muted-foreground">
-        Pick which model builds this project. If it runs out of free credit or gets rate limited, Forge automatically
+        Pick which model builds this project. If it runs out of free credit or gets rate limited, Code Haven automatically
         switches to the next working model across all connected providers.
       </p>
 

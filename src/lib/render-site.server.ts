@@ -1,4 +1,5 @@
 // Shared HTML rendering used by both /s/$slug (published) and /share/$token (preview).
+import { publishedFilePath } from "./publish-files";
 
 function normalizeAssetPath(path: string): string {
   return path.trim().replace(/^\.{0,2}\/+/, "").replace(/\/+/g, "/");
@@ -59,7 +60,8 @@ export async function renderProjectHtml(opts: RenderOptions): Promise<Response> 
   const rows = ((files ?? []) as unknown) as Array<{ path: string; content: string; kind?: string }>;
   const built = rows.filter((r) => r.kind === "build");
   const source = rows.filter((r) => r.kind !== "build");
-  const serving = opts.preferBuilt !== false && built.length > 0 ? built : source;
+  const serving = (opts.preferBuilt !== false && built.length > 0 ? built : source)
+    .map((file) => ({ ...file, path: publishedFilePath(file) }));
   const map = new Map(serving.map((f) => [normalizeAssetPath(f.path), f.content]));
   const requestedPage = resolveProjectPath(new URL(opts.requestUrl).searchParams.get("page") ?? "index.html");
   const currentPath = map.has(requestedPage) ? requestedPage : "index.html";
@@ -85,10 +87,13 @@ export async function renderProjectHtml(opts: RenderOptions): Promise<Response> 
   });
 
   const navigationBridge = `<script>\n(() => {\n  document.addEventListener('click', (event) => {\n    const link = event.target.closest && event.target.closest('a[href]');\n    if (!link) return;\n    const href = link.getAttribute('href') || '';\n    if (!href || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(href)) return;\n    event.preventDefault();\n    window.location.href = '${escapeJs(opts.navLinkBase)}?page=' + encodeURIComponent(href);\n  });\n})();\n<\/script>`;
-  const forgeSdk = `<script src="/forge-sdk.js" defer></script>`;
-  const badge = opts.showBadge === false
-    ? ""
-    : `<a href="/" target="_blank" rel="noopener" style="position:fixed;bottom:14px;right:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;background:linear-gradient(135deg,#0a0a0a,#171717);color:#f0d78c;font:500 11px/1 'Work Sans',system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 24px -8px rgba(0,0,0,.6),0 0 0 1px rgba(201,168,76,.35),inset 0 1px 0 rgba(240,215,140,.12);backdrop-filter:blur(8px)" aria-label="Made with Forge"><span style="width:6px;height:6px;border-radius:999px;background:linear-gradient(135deg,#b8923a,#f0d78c);box-shadow:0 0 8px rgba(240,215,140,.7)"></span>Made with Forge</a>`;
+  const { loadProjectBackend } = await import("./project-backend.server");
+  const backend = await loadProjectBackend(opts.projectId);
+  const backendCfg = backend
+    ? `<script>window.FORGE_SUPABASE=${JSON.stringify({ url: backend.url, anonKey: backend.anonKey }).replace(/</g, "\\u003c")};<\/script>`
+    : "";
+  const forgeSdk = `${backendCfg}<script src="/forge-sdk.js" defer></script>`;
+  const badge = "";
   const banner = opts.banner ?? "";
   const injection = `${forgeSdk}${navigationBridge}${badge}`;
   html = html.includes("</body>") ? html.replace(/<\/body>/i, `${injection}</body>`) : `${html}${injection}`;

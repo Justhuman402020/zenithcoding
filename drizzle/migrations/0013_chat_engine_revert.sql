@@ -1,0 +1,1 @@
+ALTER TABLE public.workspace_ai_settings ADD COLUMN IF NOT EXISTS chat_engine text NOT NULL DEFAULT 'openrouter' CHECK (chat_engine IN ('openrouter','ollama'));

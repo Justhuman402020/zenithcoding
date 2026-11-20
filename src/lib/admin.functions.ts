@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { useSession } from "@tanstack/react-start/server";
 import { createHash, timingSafeEqual } from "node:crypto";
 
@@ -21,12 +22,13 @@ function keyMatches(input: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export const getAdminStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getAdminStatus = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async () => {
   const session = await useSession<AdminSession>(sessionConfig());
   return { unlocked: !!session.data.unlocked, unlockedAt: session.data.unlockedAt ?? null };
 });
 
 export const unlockAdmin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data: { key: string }) => {
     if (typeof data?.key !== "string" || data.key.length === 0 || data.key.length > 512) {
       throw new Error("Invalid key");
@@ -42,7 +44,7 @@ export const unlockAdmin = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-export const lockAdmin = createServerFn({ method: "POST" }).handler(async () => {
+export const lockAdmin = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth]).handler(async () => {
   const session = await useSession<AdminSession>(sessionConfig());
   await session.clear();
   return { ok: true as const };

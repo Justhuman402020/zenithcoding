@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS cloudflare_pages_url text, ADD COLUMN IF NOT EXISTS cloudflare_pages_project text;

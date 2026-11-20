@@ -1,0 +1,1 @@
+ALTER TABLE public.chat_jobs ADD COLUMN IF NOT EXISTS handoff jsonb;

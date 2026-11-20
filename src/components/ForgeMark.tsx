@@ -1,4 +1,4 @@
-import mark from "@/assets/forge-mark.png";
+import mark from "@/assets/code-haven-mark.png";
 
 export function ForgeMark({
   className = "h-8 w-8",
@@ -10,7 +10,7 @@ export function ForgeMark({
   return (
     <img
       src={mark}
-      alt="Forge"
+      alt="Code Haven"
       width={64}
       height={64}
       loading="lazy"
@@ -21,6 +21,6 @@ export function ForgeMark({
 
 export function ForgeWordmark({ className = "" }: { className?: string }) {
   return (
-    <span className={`font-display tracking-tight text-gold ${className}`}>Forge</span>
+    <span className={`font-display tracking-tight text-gold ${className}`}>Code Haven</span>
   );
 }

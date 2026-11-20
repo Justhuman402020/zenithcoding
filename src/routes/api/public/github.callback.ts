@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getCanonicalCallbackUrl } from "@/lib/github-shared";
+import { githubFetch } from "@/lib/github-shared";
+// Every GitHub request in this file carries the required User-Agent.
+const fetch = githubFetch;
 
 function decodeReturnOrigin(s: string): string | null {
   try {
@@ -37,6 +40,9 @@ export const Route = createFileRoute("/api/public/github/callback")({
           .eq("state", state)
           .maybeSingle();
         if (error || !row) return html("<h1>Invalid state</h1>", 400);
+        const { data: owner } = await supabaseAdmin.auth.admin.getUserById((row as any).user_id);
+        const { isOwner } = await import("@/lib/owner-policy");
+        if (!isOwner(owner.user)) return html("<h1>Not available</h1>", 403);
         if (new Date((row as any).expires_at).getTime() < Date.now())
           return html("<h1>State expired — try again</h1>", 400);
 

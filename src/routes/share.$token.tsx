@@ -32,7 +32,8 @@ export const Route = createFileRoute("/share/$token")({
         void supabaseAdmin
           .from("share_links")
           .update({ view_count: (link as any).view_count ? (link as any).view_count + 1 : 1 })
-          .eq("id", link.id);
+          .eq("id", link.id)
+          .then(() => undefined, () => undefined);
 
         const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483646;background:linear-gradient(90deg,#7c3aed,#ec4899);color:#fff;padding:6px 14px;font:500 12px/1.4 system-ui,-apple-system,sans-serif;text-align:center;letter-spacing:.02em;box-shadow:0 2px 8px rgba(0,0,0,.3)">Preview shared via Forge · expires ${new Date(link.expires_at).toLocaleDateString()}</div>`;
         return renderProjectHtml({

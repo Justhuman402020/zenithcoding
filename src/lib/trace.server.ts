@@ -4,6 +4,7 @@
 // can be diagnosed in production without reproducing it locally.
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { safeLogText, sanitizeDetail } from "./work-log";
 
 export type TraceStatus = "ok" | "error" | "warn";
 
@@ -65,7 +66,8 @@ export function createTrace(params: {
   let inFlight: Promise<void> = Promise.resolve();
 
   async function flush(): Promise<void> {
-    if (!persist || pending.length === 0) return;
+    if (!persist) return;
+    if (pending.length === 0) { await inFlight; return; }
     const batch = pending;
     pending = [];
     inFlight = inFlight.then(async () => {
@@ -84,12 +86,12 @@ export function createTrace(params: {
       seq: seq++,
       phase,
       status,
-      message: options.message ?? null,
-      detail: trim(options.detail),
+      message: options.message ? safeLogText(options.message) : null,
+      detail: (phase === "file.change" ? sanitizeDetail(options.detail ?? {}) : sanitizeDetail(trim(options.detail))) as Record<string, unknown>,
       duration_ms: options.durationMs ?? null,
     };
     const line = `[trace ${traceId}] ${phase} ${status}${options.durationMs != null ? ` ${options.durationMs}ms` : ""}`;
-    if (status === "error") console.error(line, options.message ?? "", row.detail);
+    if (status === "error") console.error(line, row.message ?? "", row.detail);
     else console.log(line, row.detail);
     pending.push(row);
     if (pending.length >= 10) void flush();
